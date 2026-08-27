@@ -14,6 +14,9 @@ sha256sums=('SKIP')
 build() {
   cd "$srcdir/$pkgname-$pkgver"
   npm ci --no-audit --no-fund
+  # Arch's npm policy blocks dependency lifecycle scripts; run Electron's
+  # official installer explicitly so node_modules/electron/dist is present.
+  node node_modules/electron/install.js
 }
 
 package() {
