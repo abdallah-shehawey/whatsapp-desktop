@@ -17,6 +17,14 @@ fi
 
 # The Makefile is the single source of truth for the installed application tree.
 make -C "$ROOT" DESTDIR="$STAGE/root" PREFIX=/usr install
+# Autostart is shipped system-wide rather than written into a home directory, so
+# the package can cleanly remove it again. It starts hidden, in the tray.
+sed 's|@BINDIR@|/usr/bin|g' \
+  "$ROOT/data/io.github.shehawey.whatsapp-desktop-autostart.desktop" \
+  > "$STAGE/autostart.desktop"
+install -Dm644 "$STAGE/autostart.desktop" \
+  "$STAGE/root/etc/xdg/autostart/io.github.shehawey.whatsapp-desktop.desktop"
+
 install -Dm644 "$ROOT/LICENSE" "$STAGE/root/usr/share/doc/whatsapp-desktop/LICENSE"
 install -Dm644 "$ROOT/README.md" "$STAGE/root/usr/share/doc/whatsapp-desktop/README.md"
 

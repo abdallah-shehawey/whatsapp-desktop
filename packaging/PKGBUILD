@@ -1,13 +1,13 @@
 # Maintainer: Abdallah Shehawey <shehawey9@gmail.com>
 pkgname=whatsapp-desktop
-pkgver=0.1.0
+pkgver=1.0.0
 pkgrel=1
 pkgdesc='WhatsApp Web desktop client for Linux with tray integration and Arabic text fixes'
 arch=('x86_64')
 url='https://github.com/abdallah-shehawey/whatsapp-desktop'
 license=('GPL-3.0-only')
 depends=('alsa-lib' 'at-spi2-core' 'cairo' 'cups' 'dbus' 'gtk3' 'libdrm' 'libx11' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxrandr' 'mesa' 'nspr' 'nss' 'pango' 'zlib')
-makedepends=('git' 'npm')
+makedepends=('git' 'npm' 'make')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/abdallah-shehawey/whatsapp-desktop/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
@@ -21,38 +21,22 @@ build() {
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
-  local appdir="$pkgdir/usr/lib/$pkgname"
 
-  install -dm755 "$appdir/resources/app" "$pkgdir/usr/bin"
-  cp -a node_modules/electron/dist/. "$appdir/"
-  rm -f "$appdir/electron"
-  install -m755 node_modules/electron/dist/electron "$appdir/$pkgname"
+  # One source of truth for what "installed" means: the Makefile. It renames the
+  # Electron binary -- the name becomes the Wayland app_id, and so the icon and
+  # the name in the switcher -- drops the 53 Chromium translations of a user
+  # interface this app never shows, and writes the launcher, which has to export
+  # FONTCONFIG_FILE because fontconfig is read before any of the app's own code
+  # runs and that is how the desktop font is imposed without a stylesheet.
+  make install DESTDIR="$pkgdir" PREFIX=/usr
 
-  for locale in "$appdir"/locales/*.pak; do
-    case "$(basename "$locale")" in
-      ar.pak|en-US.pak) ;;
-      *) rm -f "$locale" ;;
-    esac
-  done
+  # Autostart is shipped system-wide rather than written into a home directory,
+  # so the package can cleanly remove it again. It starts hidden, in the tray.
+  sed 's|@BINDIR@|/usr/bin|g' data/io.github.shehawey.whatsapp-desktop-autostart.desktop \
+    > "$srcdir/autostart.desktop"
+  install -Dm644 "$srcdir/autostart.desktop" \
+    "$pkgdir/etc/xdg/autostart/io.github.shehawey.whatsapp-desktop.desktop"
 
-  cp -a package.json src data "$appdir/resources/app/"
-  printf '#!/bin/sh\nunset ELECTRON_RUN_AS_NODE\nexec /usr/lib/%s/%s "$@"\n' "$pkgname" "$pkgname" > "$pkgdir/usr/bin/$pkgname"
-  chmod 755 "$pkgdir/usr/bin/$pkgname"
-
-  for size in 16 22 24 32 48 64 128 256; do
-    install -dm755 "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps"
-    install -dm755 "$pkgdir/usr/share/icons/hicolor/${size}x${size}/status"
-    install -m644 "data/icons/$size/apps/io.github.shehawey.whatsapp-desktop.png" \
-      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/"
-    install -m644 "data/icons/$size/status/io.github.shehawey.whatsapp-desktop-tray.png" \
-      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/status/"
-    install -m644 "data/icons/$size/status/io.github.shehawey.whatsapp-desktop-tray-attention.png" \
-      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/status/"
-  done
-
-  install -dm755 "$pkgdir/usr/share/applications"
-  sed 's|@BINDIR@|/usr/bin|g' data/io.github.shehawey.whatsapp-desktop.desktop \
-    > "$pkgdir/usr/share/applications/io.github.shehawey.whatsapp-desktop.desktop"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }
