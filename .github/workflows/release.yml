@@ -97,9 +97,21 @@ jobs:
         run: pacman -Syu --noconfirm --needed base-devel git nodejs npm alsa-lib at-spi2-core cairo cups dbus gtk3 libdrm libx11 libxcomposite libxdamage libxext libxfixes libxrandr mesa nspr nss pango zlib
       - name: Build package
         run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          # The PKGBUILD fetches the tagged tarball from GitHub, which is what
+          # the AUR needs and the wrong thing here: this repository is private,
+          # so the unauthenticated curl inside makepkg gets a 404 and the build
+          # dies before it starts. CI builds the tarball out of the checkout it
+          # already has and points the recipe at that instead.
+          git archive --prefix="whatsapp-desktop-$version/" \
+            -o "dist/whatsapp-desktop-$version.tar.gz" HEAD
+          cp packaging/PKGBUILD dist/PKGBUILD
+          sed -i "s/^pkgver=.*/pkgver=$version/" dist/PKGBUILD
+          sed -i 's|^source=.*|source=("$pkgname-$pkgver.tar.gz")|' dist/PKGBUILD
           useradd --create-home builder
           chown -R builder:builder "$GITHUB_WORKSPACE"
-          su builder -c "cd '$GITHUB_WORKSPACE' && mkdir -p dist && cp packaging/PKGBUILD dist/PKGBUILD && sed -i \"s/^pkgver=.*/pkgver=${GITHUB_REF_NAME#v}/\" dist/PKGBUILD && cd dist && makepkg --clean --cleanbuild --noconfirm"
+          su builder -c "cd '$GITHUB_WORKSPACE/dist' && makepkg --clean --cleanbuild --noconfirm"
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
