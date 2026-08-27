@@ -94,7 +94,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
       - name: Install build dependencies
-        run: pacman -Sy --noconfirm --needed base-devel git nodejs npm
+        run: pacman -Syu --noconfirm --needed base-devel git nodejs npm alsa-lib at-spi2-core cairo cups dbus gtk3 libdrm libx11 libxcomposite libxdamage libxext libxfixes libxrandr mesa nspr nss pango zlib
       - name: Build package
         run: |
           useradd --create-home builder
