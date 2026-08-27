@@ -65,20 +65,23 @@ const ARABIC_CLIP = `
 }`;
 
 /*
- * Chromium's own scrollbars are a wide grey slab that WhatsApp does not expect;
- * the page is quieter with the thin overlay the rest of the desktop draws.
+ * WhatsApp's conversation body is much heavier than the chat list: every wheel
+ * tick can expose message bubbles, media previews, reactions, and their shadows.
+ * Keep only that viewport on its own compositor layer. This is intentionally
+ * scoped to WhatsApp's stable data-tab marker; a page-wide transform would make
+ * the chat list and the whole app pay the same cost.
+ *
+ * `will-change` gives Chromium an explicit scroll-position hint, while the small
+ * 3D transform covers Linux/Electron builds that otherwise leave this nested
+ * overflow viewport on the main-thread paint path. No custom scrollbar rules are
+ * used because those disable Chromium's composited scrollbar path.
  */
-const SCROLLBARS = `
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: rgba(134, 150, 160, 0.35);
-  border-radius: 10px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-::-webkit-scrollbar-thumb:hover { background-color: rgba(134, 150, 160, 0.6); background-clip: content-box; }
-::-webkit-scrollbar-corner { background: transparent; }`;
+const CONVERSATION_SCROLL = `
+#main [data-tab="conversation-panel-body"] {
+  will-change: scroll-position;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}`;
 
 
 /*
@@ -146,7 +149,7 @@ const aliasSheet = (stack, family) => {
 };
 
 const build = ({ arabicFix, fontSize }) => {
-  const rules = [];
+  const rules = [CONVERSATION_SCROLL];
 
   /* There is no font rule here any more, and that is the point. Forcing the
      desktop font with `* { font-family: X !important }` at user origin works and

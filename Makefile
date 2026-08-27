@@ -114,6 +114,7 @@ icons:
 # account. Every notification bug this client has had lived in that file.
 test:
 	@node tools/test-inject.js
+	@node tools/test-style.js
 
 run:
 	@env -u ELECTRON_RUN_AS_NODE npm start

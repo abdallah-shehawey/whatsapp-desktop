@@ -103,14 +103,17 @@ if (fontConfigFile) {
 /* Wayland natively rather than through XWayland: it is the difference between
    crisp text on a fractional scale and a blurry upscale, and between smooth
    trackpad scrolling and stepped wheel events. */
+const chromiumFeatures = ['MemoryPurgeOnFreezeLimit', 'CanvasOopRasterization'];
 if (process.env.XDG_SESSION_TYPE === 'wayland') {
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
-  app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
+  chromiumFeatures.push('WaylandWindowDecorations');
 }
 /* WhatsApp Web is one page that stays open for days. Letting Chromium hand
    memory back when it is not being looked at is worth more here than the
-   milliseconds it costs to fault it in again. */
-app.commandLine.appendSwitch('enable-features', 'MemoryPurgeOnFreezeLimit');
+   milliseconds it costs to fault it in again. Electron accepts one
+   `enable-features` switch, so keep all requested features in one value instead
+   of allowing a later append to replace an earlier one. */
+app.commandLine.appendSwitch('enable-features', chromiumFeatures.join(','));
 
 /* Scrolling.
  *
@@ -128,7 +131,6 @@ app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('enable-smooth-scrolling');
-app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization');
 
 /* ------------------------------------------------------------ single copy */
 
