@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=WhatsApp
+Comment=WhatsApp Web
+Exec=@BINDIR@/whatsapp-desktop %u
+Icon=io.github.shehawey.whatsapp-desktop
+Terminal=false
+Categories=Network;InstantMessaging;
+Keywords=whatsapp;chat;messaging;
+StartupNotify=true
+StartupWMClass=whatsapp-desktop
+SingleMainWindow=true

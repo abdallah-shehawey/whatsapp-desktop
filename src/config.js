@@ -1,0 +1,128 @@
+/*
+ * The config file, kept in the same INI shape the GTK client used so the keys
+ * are familiar and can be edited by hand. Everything in it is optional.
+ *
+ *   ~/.config/whatsapp-desktop/whatsapp-desktop.conf
+ */
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const CONFIG_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'),
+                             'whatsapp-desktop');
+const CONFIG_PATH = path.join(CONFIG_DIR, 'whatsapp-desktop.conf');
+
+const DEFAULTS = {
+  'view.font': '',                 // empty: follow the desktop font
+  'view.font-size': 16,            // WhatsApp sizes in rem, so this scales the client
+  'view.zoom': 1.0,
+  'view.force-font': true,         // draw the page in one family, like a browser told to ignore page fonts
+  'view.arabic-fix': true,         // widen the clip Arabic descenders are cut against
+  'window.width': 1200,
+  'window.height': 800,
+  'behaviour.close-to-tray': true,
+  'behaviour.minimize-to-tray': false,
+  'behaviour.spellcheck': true,
+  'notifications.enabled': true,
+  'notifications.banner-seconds': 12,
+};
+
+/* A deliberately small INI reader: sections, key = value, # and ; comments.
+   Nothing here is worth a dependency, and a parser that silently accepts a
+   half-written file is what a hand-edited config needs. */
+const parse = text => {
+  const out = {};
+  let section = '';
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line || line[0] === '#' || line[0] === ';') continue;
+    const header = /^\[(.+)\]$/.exec(line);
+    if (header) { section = header[1].trim(); continue; }
+    const eq = line.indexOf('=');
+    if (eq < 0) continue;
+    const key = line.slice(0, eq).trim();
+    const value = line.slice(eq + 1).trim();
+    out[(section ? section + '.' : '') + key] = value;
+  }
+  return out;
+};
+
+const coerce = (value, fallback) => {
+  if (typeof fallback === 'boolean') return /^(1|true|yes|on)$/i.test(value);
+  if (typeof fallback === 'number') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  return value;
+};
+
+class Config {
+  constructor() {
+    this.values = { ...DEFAULTS };
+    this.reload();
+  }
+
+  reload() {
+    let text = '';
+    try { text = fs.readFileSync(CONFIG_PATH, 'utf8'); } catch (e) { return; }
+    const raw = parse(text);
+    for (const [key, fallback] of Object.entries(DEFAULTS)) {
+      if (raw[key] !== undefined) this.values[key] = coerce(raw[key], fallback);
+    }
+  }
+
+  get(key) { return this.values[key]; }
+
+  set(key, value) { this.values[key] = value; }
+
+  /* Only what the client itself decides is written back -- the window size and
+     the zoom level. A hand-written config keeps its comments and its layout,
+     because the file is rewritten from the values it already held plus these. */
+  save() {
+    const v = this.values;
+    const text = [
+      '# whatsapp-desktop -- every key is optional; delete one to get the default back.',
+      '',
+      '[view]',
+      '# Family for everything the client draws. Empty follows the desktop font.',
+      `font = ${v['view.font']}`,
+      '# Root font size in pixels. WhatsApp sizes in rem, so this scales the client.',
+      `font-size = ${v['view.font-size']}`,
+      `zoom = ${Number(v['view.zoom']).toFixed(2)}`,
+      '# Draw the whole page in one family, the way a browser told to ignore page fonts does.',
+      `force-font = ${v['view.force-font']}`,
+      '# Give Arabic descenders room in the boxes WhatsApp clips them against.',
+      `arabic-fix = ${v['view.arabic-fix']}`,
+      '',
+      '[window]',
+      `width = ${Math.round(v['window.width'])}`,
+      `height = ${Math.round(v['window.height'])}`,
+      '',
+      '[behaviour]',
+      '# Closing the window leaves the client running in the tray.',
+      `close-to-tray = ${v['behaviour.close-to-tray']}`,
+      '# Minimising does the same. Off by default: minimise is not close.',
+      `minimize-to-tray = ${v['behaviour.minimize-to-tray']}`,
+      `spellcheck = ${v['behaviour.spellcheck']}`,
+      '',
+      '[notifications]',
+      `enabled = ${v['notifications.enabled']}`,
+      '# Seconds before a banner is taken down and filed silently. GNOME parks a',
+      '# banner under an idle pointer for ever, and one parked banner swallows',
+      '# every message behind it.',
+      `banner-seconds = ${v['notifications.banner-seconds']}`,
+      '',
+    ].join('\n');
+
+    try {
+      fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(CONFIG_PATH, text);
+    } catch (e) {
+      console.warn('could not write %s: %s', CONFIG_PATH, e.message);
+    }
+  }
+}
+
+module.exports = { Config, CONFIG_PATH, CONFIG_DIR };
