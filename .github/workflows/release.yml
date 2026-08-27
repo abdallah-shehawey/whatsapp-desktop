@@ -104,8 +104,15 @@ jobs:
           # so the unauthenticated curl inside makepkg gets a 404 and the build
           # dies before it starts. CI builds the tarball out of the checkout it
           # already has and points the recipe at that instead.
-          git archive --prefix="whatsapp-desktop-$version/" \
-            -o "dist/whatsapp-desktop-$version.tar.gz" HEAD
+          # Not `git archive`: actions/checkout runs before pacman installs git
+          # in this container, so it falls back to its REST download and there
+          # is no .git to archive from.
+          mkdir -p "dist/whatsapp-desktop-$version"
+          tar -c --exclude=./dist --exclude=./.git --exclude=./node_modules \
+            -C "$GITHUB_WORKSPACE" . | tar -x -C "dist/whatsapp-desktop-$version"
+          tar -czf "dist/whatsapp-desktop-$version.tar.gz" \
+            -C dist "whatsapp-desktop-$version"
+          rm -rf "dist/whatsapp-desktop-$version"
           cp packaging/PKGBUILD dist/PKGBUILD
           sed -i "s/^pkgver=.*/pkgver=$version/" dist/PKGBUILD
           sed -i 's|^source=.*|source=("$pkgname-$pkgver.tar.gz")|' dist/PKGBUILD
