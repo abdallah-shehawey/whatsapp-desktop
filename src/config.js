@@ -19,13 +19,14 @@ const DEFAULTS = {
   'view.font-size': 16,            // WhatsApp sizes in rem, so this scales the client
   'view.zoom': 1.0,
   'view.force-font': true,         // draw the page in one family, like a browser told to ignore page fonts
-  'view.arabic-fix': true,         // widen the clip Arabic descenders are cut against
+  'view.arabic-fix': false,        // widen the clip Arabic descenders are cut against
   'window.width': 1200,
   'window.height': 800,
   'behaviour.close-to-tray': true,
   'behaviour.minimize-to-tray': false,
   'behaviour.spellcheck': true,
   'notifications.enabled': true,
+  'notifications.sound': true,     // a tone for the banners this client raises itself
   'notifications.banner-seconds': 12,
 };
 
@@ -94,6 +95,8 @@ class Config {
       '# Draw the whole page in one family, the way a browser told to ignore page fonts does.',
       `force-font = ${v['view.force-font']}`,
       '# Give Arabic descenders room in the boxes WhatsApp clips them against.',
+      '# Off by default: Chromium measures a line against every font in it, so',
+      '# the clipping WebKit caused does not happen here.',
       `arabic-fix = ${v['view.arabic-fix']}`,
       '',
       '[window]',
@@ -109,6 +112,9 @@ class Config {
       '',
       '[notifications]',
       `enabled = ${v['notifications.enabled']}`,
+      '# A tone for the banners this client raises itself. WhatsApp plays its own',
+      '# for the ones it raises, and two sounds for one message is worse than none.',
+      `sound = ${v['notifications.sound']}`,
       '# Seconds before a banner is taken down and filed silently. GNOME parks a',
       '# banner under an idle pointer for ever, and one parked banner swallows',
       '# every message behind it.',

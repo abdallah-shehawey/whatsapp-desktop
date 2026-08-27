@@ -46,6 +46,53 @@ const start = ({ send, on }) => {
     if (!focused) arrivals = [];
   });
 
+  /* ------------------------------------------------------------------- tone */
+
+  /* GNOME plays a sound for a notification only when the Notify call asks for
+     one by hint, and Electron cannot set hints -- so a banner this client raises
+     is silent while WhatsApp's own, which plays its tone through an <audio>
+     element on this page, is not. That was the whole of "there is no sound while
+     the window is in front": in front, WhatsApp stays quiet and this client did
+     the announcing.
+
+     The tone is played here rather than by spawning a player, so it belongs to
+     the application's own audio stream, follows its volume in the mixer, and
+     needs nothing installed. Decoded once, on arrival. */
+  let toneBuffer = null;
+  let audio = null;
+
+  const decodeTone = async payload => {
+    if (!payload || !payload.data) return;
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const binary = atob(payload.data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      toneBuffer = await audio.decodeAudioData(bytes.buffer);
+      log('tone ready (' + Math.round(toneBuffer.duration * 1000) + 'ms)');
+    } catch (err) {
+      log('could not decode the tone: ' + err.message);
+    }
+  };
+
+  const playTone = async () => {
+    if (!toneBuffer || !audio) return;
+    try {
+      /* A context created while the window was hidden starts suspended, and a
+         suspended context plays nothing at all. */
+      if (audio.state === 'suspended') await audio.resume();
+      const source = audio.createBufferSource();
+      source.buffer = toneBuffer;
+      source.connect(audio.destination);
+      source.start();
+    } catch (err) {
+      log('could not play the tone: ' + err.message);
+    }
+  };
+
+  on('tone', decodeTone);
+  on('play-tone', playTone);
+
   /* ------------------------------------------------------- what just arrived */
 
   /* Everything below only matters while the window is in front. WhatsApp Web
@@ -354,6 +401,33 @@ const start = ({ send, on }) => {
        message, so this is a backstop, not a queue depth. */
     if (arrivals.length > 16) arrivals = arrivals.slice(-16);
     if (!seeded) { seeded = true; seededAt = Date.now(); }
+
+    reportUnread(pane);
+  };
+
+  /* Which chats still have something waiting. A notification is an unread
+     message made visible, so the app withdraws one as soon as its chat stops
+     being unread -- and that covers being read on the phone just as well as
+     here, because WhatsApp Web clears the pill for both. Reported only when the
+     answer changes, which is a handful of messages an hour rather than one
+     message per scan. */
+  let lastUnread = null;
+  const reportUnread = pane => {
+    const names = [];
+    for (const row of pane.querySelectorAll('[role="row"]')) {
+      if (!unreadCount(row)) continue;
+      const name = nameOf(row);
+      if (name) names.push(name);
+    }
+    /* An empty list from an empty pane is not "everything has been read": the
+       chat list is rebuilt from nothing on every re-render, and reporting that
+       would withdraw every notification on screen. */
+    if (!names.length && !pane.querySelector('[role="row"]')) return;
+
+    const key = names.join(SEP);
+    if (key === lastUnread) return;
+    lastUnread = key;
+    send('unread-chats', names);
   };
 
   const watchList = () => {
@@ -708,6 +782,17 @@ const start = ({ send, on }) => {
   on('config', config => {
     if (config && config.notifications) installNotificationShim();
     log('ready on ' + location.host);
+
+    /* What the page asks for, so the app can bind those families to the
+       desktop font where it costs nothing -- in fontconfig, rather than in a
+       stylesheet that has to be matched against every element on every scroll. */
+    const report = () => {
+      try {
+        send('font-stack', getComputedStyle(document.body).fontFamily || '');
+      } catch (err) { /* the body is not there yet */ }
+    };
+    if (document.body) report();
+    else addEventListener('DOMContentLoaded', report, { once: true });
   });
 };
 

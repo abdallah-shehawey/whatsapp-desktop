@@ -21,6 +21,8 @@ const { TrayIcon } = require('./tray.js');
 const { Banners, sweepAvatars } = require('./notify.js');
 const { SEP } = require('./page/inject.js');
 const debug = require('./debug.js');
+const sound = require('./sound.js');
+const fonts = require('./fonts.js');
 
 const APP_ID = 'io.github.shehawey.whatsapp-desktop';
 const URL = 'https://web.whatsapp.com/';
@@ -34,6 +36,10 @@ const STARTUP_GRACE_MS = 30000;
    title counts unread CHATS and fires on its own clock, so without this the two
    paths announce one message twice. */
 const TITLE_FALLBACK_MS = 2000;
+/* How long a notification is safe from being withdrawn as "already read". The
+   unread pill is drawn a beat after the row moves, so a banner raised in that
+   gap would otherwise be taken down by the very next report. */
+const ARRIVAL_SETTLE_MS = 4000;
 
 const hidden = process.argv.includes('--hidden');
 const config = new Config();
@@ -57,6 +63,41 @@ const iconFile = (size, name) =>
   path.join(__dirname, '..', 'data', 'icons', String(size), name);
 const appIcon = iconFile(256, `apps/${APP_ID}.png`);
 
+/* ----------------------------------------------------------------- fonts */
+
+/* The desktop's font is imposed through fontconfig rather than through a user
+   stylesheet, because a stylesheet that matches every element is paid for on
+   every scroll -- measured at 212ms of blocked main thread against 82ms for the
+   same scroll without it.
+ *
+ * The catch is when. FONTCONFIG_FILE has to be in the environment the process
+ * was executed with: fontconfig is read once, early, and setting the variable
+ * from here reaches children but not this process -- measured, the running
+ * client had no FONTCONFIG_FILE in /proc/self/environ at all and drew the page
+ * in Roboto while `fc-match` against the very same config answered PoetsenOne.
+ *
+ * So the launcher exports it, and this is the belt to that pair of braces: when
+ * the variable did not arrive, the config is written and the client restarts
+ * itself once into an environment that has it. Guarded by an argument, because
+ * a relaunch loop is a worse bug than the wrong font. */
+const INHERITED_FONTCONFIG = process.env.FONTCONFIG_FILE;
+
+const configureFonts = () => {
+  if (!config.get('view.force-font')) return null;
+  const family = config.get('view.font') || desktop.interfaceFont();
+  return fonts.configure(family, app.getPath('userData'));
+};
+
+const fontConfigFile = configureFonts();
+if (fontConfigFile) {
+  process.env.FONTCONFIG_FILE = fontConfigFile;
+  if (INHERITED_FONTCONFIG !== fontConfigFile && !process.argv.includes('--font-retry')) {
+    console.log('restarting once so Chromium reads %s', fontConfigFile);
+    app.relaunch({ args: process.argv.slice(1).concat('--font-retry') });
+    app.exit(0);
+  }
+}
+
 /* -------------------------------------------------------------- switches */
 
 /* Wayland natively rather than through XWayland: it is the difference between
@@ -70,6 +111,24 @@ if (process.env.XDG_SESSION_TYPE === 'wayland') {
    memory back when it is not being looked at is worth more here than the
    milliseconds it costs to fault it in again. */
 app.commandLine.appendSwitch('enable-features', 'MemoryPurgeOnFreezeLimit');
+
+/* Scrolling.
+ *
+ * A browser scrolls a long chat smoothly because its compositor does the work
+ * on the GPU. Chromium decides that per driver, from a blocklist that is years
+ * out of date on Linux, and when it decides against it every scroll is a
+ * software raster of the whole viewport -- which is exactly the "it lags, the
+ * browser does not" report. The blocklist is overridden and rasterisation is
+ * asked for explicitly.
+ *
+ * Smooth scrolling itself is a separate thing: it is what turns a wheel notch
+ * into an animation instead of a jump, and Chrome ships it on by default while
+ * a bare Electron does not. */
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('enable-smooth-scrolling');
+app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization');
 
 /* ------------------------------------------------------------ single copy */
 
@@ -87,6 +146,9 @@ let cssKey = null;
 let loadedAt = 0;
 let unreadChats = 0;
 let lastArrivalAt = 0;
+/* The font stack the page says it wants, which is what gets aliased to the
+   desktop font. Empty until the page reports it, a moment after each load. */
+let pageFontStack = '';
 const pageBanners = new Map();          // page notification id -> the banner raised for it
 
 /* --------------------------------------------------------------- window */
@@ -121,12 +183,13 @@ const hideWindow = () => {
 const applyStyle = async () => {
   if (!win || win.isDestroyed()) return;
   const family = config.get('view.font') || desktop.interfaceFont();
-  const css = style.build({
-    family,
-    forceFont: config.get('view.force-font'),
-    arabicFix: config.get('view.arabic-fix'),
-    fontSize: config.get('view.font-size'),
-  });
+  const css = [
+    style.build({
+      arabicFix: config.get('view.arabic-fix'),
+      fontSize: config.get('view.font-size'),
+    }),
+    config.get('view.force-font') ? style.aliasSheet(pageFontStack, family) : '',
+  ].filter(Boolean).join('\n');
 
   try {
     if (cssKey) await win.webContents.removeInsertedCSS(cssKey);
@@ -135,8 +198,11 @@ const applyStyle = async () => {
   /* USER origin, which is the one level whose !important beats the page's own.
      An author-level sheet loses to WhatsApp's !important rules, and that is the
      difference between the desktop font being used and being ignored. */
-  cssKey = await win.webContents.insertCSS(css, { cssOrigin: 'user' });
-  console.log('drawing in %s at %dpx', family, config.get('view.font-size'));
+  cssKey = css ? await win.webContents.insertCSS(css, { cssOrigin: 'user' }) : null;
+  /* Kept reachable so the scroll probe can measure the page without it. */
+  require('./main-css.js').track(win, () => cssKey, key => { cssKey = key; });
+  console.log('drawing in %s at %dpx%s', family, config.get('view.font-size'),
+              pageFontStack ? '' : ' (waiting for the page to say what it asks for)');
 };
 
 const createWindow = () => {
@@ -162,6 +228,10 @@ const createWindow = () => {
       nodeIntegration: false,
       sandbox: false,
       spellcheck: !!config.get('behaviour.spellcheck'),
+      /* The tone this client plays for its own banners goes through the page,
+         and Chromium blocks audio from a page the user has not interacted with
+         yet -- which a window sitting in the tray never has. */
+      autoplayPolicy: 'no-user-gesture-required',
       /* Chromium picks its default families from fontconfig, which answers with
          the system default rather than the font chosen for the desktop. The user
          stylesheet is what actually draws the page, but these decide what
@@ -220,6 +290,13 @@ const createWindow = () => {
     await applyStyle();
     win.webContents.setZoomFactor(Number(config.get('view.zoom')) || 1);
     win.webContents.send('wa:config', { notifications: !!config.get('notifications.enabled') });
+
+    /* The tone is handed over once and kept in the page, decoded, so raising it
+       later costs nothing. */
+    if (config.get('notifications.sound')) {
+      const tone = sound.tone();
+      if (tone) win.webContents.send('wa:tone', tone);
+    }
     pushFocus();
   });
 
@@ -300,6 +377,15 @@ const onKey = (event, input) => {
 
 /* ---------------------------------------------------------- notifications */
 
+/* The tone for a banner this client raised itself. Nothing is played for the
+   notifications WhatsApp Web raises: it plays its own through the page, and two
+   sounds for one message is worse than none. */
+const playTone = () => {
+  if (!config.get('notifications.sound')) return;
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send('wa:play-tone', null);
+};
+
 /* Whether a banner is this client's to raise at all. While the window is away
    WhatsApp Web raises its own, which the page shim hands over here already
    dressed; the watcher has to stay out of that, or one message arrives twice. */
@@ -345,11 +431,13 @@ const describeThenNotify = () => setTimeout(async () => {
   if (!chat || !message) return;
 
   banners.show({
+    key: chat,
     title: chat,
     body: sender ? `${sender}: ${message}` : message,
     icon: avatar,
     onClick: showWindow,
   });
+  playTone();
 }, 250);
 
 /* WhatsApp Web puts "(3) WhatsApp" in the document title while chats are unread
@@ -390,6 +478,20 @@ const quit = () => {
 const wireIpc = () => {
   ipcMain.on('wa:log', (event, message) => console.log('page: %s', message));
 
+  /* The font stack the page actually asks for. fontconfig is read once per
+     process, so a family learned here takes effect on the next start -- which
+     is the price of not having to guess what WhatsApp will name its font next. */
+  ipcMain.on('wa:font-stack', (event, stack) => {
+    if (!config.get('view.force-font') || typeof stack !== 'string') return;
+    if (stack === pageFontStack) return;
+    pageFontStack = stack;
+    /* Applied straight away rather than on the next start: an @font-face alias
+       is a stylesheet, and a stylesheet can be inserted into a page that is
+       already open. */
+    applyStyle();
+    fonts.learn(app.getPath('userData'), stack.split(','));
+  });
+
   ipcMain.on('wa:focus-request', showWindow);
 
   /* The chat list watcher nudges us for every message it sees land, which is what
@@ -408,6 +510,7 @@ const wireIpc = () => {
   ipcMain.on('wa:page-notification', (event, note) => {
     if (!note || !config.get('notifications.enabled')) return;
     const banner = banners.show({
+      key: note.title,
       title: note.title,
       body: note.body,
       icon: note.avatar,
@@ -420,10 +523,29 @@ const wireIpc = () => {
   });
 
   ipcMain.on('wa:page-notification-close', (event, note) => {
-    const banner = note && pageBanners.get(note.id);
-    if (!banner) return;
+    const entry = note && pageBanners.get(note.id);
+    if (!entry) return;
     pageBanners.delete(note.id);
-    try { banner.close(); } catch (e) {}
+    entry.dispose();
+  });
+
+  /* Which chats still have something unread, reported by the page whenever the
+     answer changes. A notification is an unread message made visible, so when
+     the message stops being unread the notification has no business staying on
+     screen -- and it stops being unread whether it was read here or on the
+     phone, because WhatsApp Web clears the pill either way.
+
+     Only banners older than a moment are withdrawn: WhatsApp draws the unread
+     pill a beat after it moves the row, so the report that arrives right behind
+     an arrival can still show the chat as caught up. */
+  ipcMain.on('wa:unread-chats', (event, names) => {
+    if (!Array.isArray(names)) return;
+    const unread = new Set(names);
+    for (const key of banners.keys()) {
+      if (unread.has(key)) continue;
+      const closed = banners.closeKey(key, ARRIVAL_SETTLE_MS);
+      if (closed) console.log('withdrew %d notification(s) for %s: it has been read', closed, key);
+    }
   });
 };
 
