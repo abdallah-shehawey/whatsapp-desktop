@@ -1,8 +1,8 @@
 {
   "name": "whatsapp-desktop",
   "version": "0.1.0",
-  "description": "A WhatsApp Web desktop client on Chromium: tray, notifications, and the desktop font",
-  "license": "GPL-3.0",
+  "description": "WhatsApp Web desktop client for Linux with tray integration, notifications, and Arabic text fixes",
+  "license": "GPL-3.0-only",
   "author": "Abdallah Shehawey <shehawey9@gmail.com>",
   "main": "src/main.js",
   "scripts": {

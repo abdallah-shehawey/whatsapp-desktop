@@ -244,6 +244,45 @@ believes about itself.
 Unset by default, and deliberately so — it is a way into a live WhatsApp session,
 not a feature.
 
+## Releases and packages
+
+Tagged releases are built automatically for Linux by GitHub Actions. Each release publishes:
+
+| Artifact | Use |
+|---|---|
+| `.deb` | Debian, Ubuntu, Linux Mint, and other Debian-based distributions |
+| `.rpm` | Fedora, RHEL, openSUSE, and other RPM-based distributions |
+| `.pkg.tar.zst` | Arch Linux and Arch-based distributions |
+| `.tar.gz` source archive | Source distribution for building or packaging on another system |
+| GitHub-generated source archives | `zip` and `tar.gz` snapshots for the tagged source tree |
+
+Download packages from the [Releases](https://github.com/abdallah-shehawey/whatsapp-desktop/releases) page. On Debian-based systems, install a package with:
+
+```sh
+sudo apt install ./whatsapp-desktop_<version>_amd64.deb
+```
+
+On RPM-based systems, install with:
+
+```sh
+sudo dnf install ./whatsapp-desktop-<version>-1.x86_64.rpm
+```
+
+On Arch Linux, install with:
+
+```sh
+sudo pacman -U ./whatsapp-desktop-<version>-1-x86_64.pkg.tar.zst
+```
+
+For a source-tree installation, see [Install](#install). To create a release, update the version in `package.json`, commit the change, and push an annotated tag such as `v0.1.0`:
+
+```sh
+git tag -a v0.1.0 -m "Release v0.1.0"
+git push origin v0.1.0
+```
+
+The workflow runs the test suite, builds both native package formats, creates the source archive, generates SHA-256 checksums, and attaches the artifacts to a GitHub Release with generated release notes.
+
 ## Licence
 
-GPL-3.0. Icon origins are recorded in `data/icons/NOTICE`.
+This project is distributed under the **GNU General Public License v3.0 only (GPL-3.0-only)**. Icon origins are recorded in `data/icons/NOTICE`.

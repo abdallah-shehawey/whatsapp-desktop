@@ -11,6 +11,7 @@
 
 PREFIX  ?= $(HOME)/.local
 DESTDIR ?=
+VERSION ?= $(shell node -p "require('./package.json').version")
 
 APP_ID  = io.github.shehawey.whatsapp-desktop
 BIN     = whatsapp-desktop
@@ -108,7 +109,28 @@ test:
 run:
 	@env -u ELECTRON_RUN_AS_NODE npm start
 
+package-deb:
+	packaging/build-deb.sh
+
+package-rpm:
+	packaging/build-rpm.sh
+
+package-arch:
+	@mkdir -p dist
+	@cp packaging/PKGBUILD dist/PKGBUILD
+	@sed -i 's/^pkgver=.*/pkgver=$(VERSION)/' dist/PKGBUILD
+	@cd dist && makepkg --clean --cleanbuild --syncdeps --noconfirm
+	@rm -f dist/PKGBUILD
+
+package-source:
+	@mkdir -p dist
+	@git archive --format=tar.gz --prefix=whatsapp-desktop-$(VERSION)/ -o dist/whatsapp-desktop-$(VERSION)-source.tar.gz HEAD
+	@sha256sum dist/* > dist/SHA256SUMS
+	@echo "  SOURCE  dist/whatsapp-desktop-$(VERSION)-source.tar.gz"
+
+package: package-deb package-rpm package-arch package-source
+
 clean:
 	rm -rf node_modules
 
-.PHONY: all install autostart no-autostart uninstall icons test run clean
+.PHONY: all install autostart no-autostart uninstall icons test run package-deb package-rpm package-arch package-source package clean
