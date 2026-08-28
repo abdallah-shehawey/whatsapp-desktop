@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in src/*.js src/page/*.js tools/test-inject.js; do
+          for file in src/*.js src/page/*.js tools/*.js; do
             node --check "$file"
           done
 
