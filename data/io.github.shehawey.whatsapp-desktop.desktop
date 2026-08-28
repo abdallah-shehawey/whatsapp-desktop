@@ -8,5 +8,5 @@ Terminal=false
 Categories=Network;InstantMessaging;
 Keywords=whatsapp;chat;messaging;
 StartupNotify=true
-StartupWMClass=whatsapp-desktop
+StartupWMClass=WhatsApp
 SingleMainWindow=true

@@ -75,7 +75,10 @@ install: $(ELECTRON)/electron
 	@# Tray icons land in both contexts: SNI hosts disagree on which they search.
 	@for s in $(ICON_SIZES); do \
 	  for f in apps/$(APP_ID).png apps/$(APP_ID)-tray.png \
-	           status/$(APP_ID)-tray.png status/$(APP_ID)-tray-attention.png; do \
+	           apps/whatsapp-desktop.png apps/whatsapp-desktop-tray.png \
+	           apps/WhatsApp.png \
+	           status/$(APP_ID)-tray.png status/$(APP_ID)-tray-attention.png \
+	           status/whatsapp-desktop-tray.png status/whatsapp-desktop-tray-attention.png; do \
 	    install -Dm644 data/icons/$$s/$$f $(DESTDIR)$(icontheme)/$${s}x$${s}/$$f; \
 	  done; \
 	done
@@ -103,8 +106,13 @@ uninstall: no-autostart
 	@for s in $(ICON_SIZES); do \
 	  rm -f $(DESTDIR)$(icontheme)/$${s}x$${s}/apps/$(APP_ID).png \
 	        $(DESTDIR)$(icontheme)/$${s}x$${s}/apps/$(APP_ID)-tray.png \
+	        $(DESTDIR)$(icontheme)/$${s}x$${s}/apps/whatsapp-desktop.png \
+	        $(DESTDIR)$(icontheme)/$${s}x$${s}/apps/whatsapp-desktop-tray.png \
+	        $(DESTDIR)$(icontheme)/$${s}x$${s}/apps/WhatsApp.png \
 	        $(DESTDIR)$(icontheme)/$${s}x$${s}/status/$(APP_ID)-tray.png \
-	        $(DESTDIR)$(icontheme)/$${s}x$${s}/status/$(APP_ID)-tray-attention.png; \
+	        $(DESTDIR)$(icontheme)/$${s}x$${s}/status/$(APP_ID)-tray-attention.png \
+	        $(DESTDIR)$(icontheme)/$${s}x$${s}/status/whatsapp-desktop-tray.png \
+	        $(DESTDIR)$(icontheme)/$${s}x$${s}/status/whatsapp-desktop-tray-attention.png; \
 	done
 
 icons:

@@ -85,11 +85,16 @@ install -D -m 0644 README.md %{buildroot}%{_docdir}/%{name}/README.md
 /etc/xdg/autostart/io.github.shehawey.whatsapp-desktop.desktop
 /usr/share/applications/io.github.shehawey.whatsapp-desktop.desktop
 /usr/share/icons/hicolor/*/apps/io.github.shehawey.whatsapp-desktop.png
+/usr/share/icons/hicolor/*/apps/whatsapp-desktop.png
+/usr/share/icons/hicolor/*/apps/WhatsApp.png
 # The tray icon is installed into both contexts on purpose: SNI hosts disagree
 # on which of them they search.
 /usr/share/icons/hicolor/*/apps/io.github.shehawey.whatsapp-desktop-tray.png
+/usr/share/icons/hicolor/*/apps/whatsapp-desktop-tray.png
 /usr/share/icons/hicolor/*/status/io.github.shehawey.whatsapp-desktop-tray.png
+/usr/share/icons/hicolor/*/status/whatsapp-desktop-tray.png
 /usr/share/icons/hicolor/*/status/io.github.shehawey.whatsapp-desktop-tray-attention.png
+/usr/share/icons/hicolor/*/status/whatsapp-desktop-tray-attention.png
 %license %{_licensedir}/%{name}/LICENSE
 %doc %{_docdir}/%{name}/README.md
 

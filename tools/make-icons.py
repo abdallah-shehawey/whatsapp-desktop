@@ -73,13 +73,19 @@ def main() -> int:
             return 1
 
     for size in SIZES:
-        write(render(APP_MASTER, size), size, "apps", f"{APP_ID}.png")
+        app_icon = render(APP_MASTER, size)
+        write(app_icon, size, "apps", f"{APP_ID}.png")
+        write(app_icon, size, "apps", "whatsapp-desktop.png")
+        write(app_icon, size, "apps", "WhatsApp.png")
 
         tray = render(TRAY_MASTER, size)
         # Both contexts: SNI hosts disagree on which one they search.
         write(tray, size, "apps", f"{APP_ID}-tray.png")
+        write(tray, size, "apps", "whatsapp-desktop-tray.png")
         write(tray, size, "status", f"{APP_ID}-tray.png")
+        write(tray, size, "status", "whatsapp-desktop-tray.png")
         write(with_badge(tray, size), size, "status", f"{APP_ID}-tray-attention.png")
+        write(with_badge(tray, size), size, "status", "whatsapp-desktop-tray-attention.png")
 
     total = sum(1 for _ in ICONS.rglob("*.png")) - 1   # the tray master is one
     print(f"generated {total} icons across {len(SIZES)} sizes")
