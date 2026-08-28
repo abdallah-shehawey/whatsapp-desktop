@@ -65,19 +65,34 @@ const ARABIC_CLIP = `
 }`;
 
 /*
- * WhatsApp's conversation body is much heavier than the chat list: every wheel
- * tick can expose message bubbles, media previews, reactions, and their shadows.
- * Keep only that viewport on its own compositor layer. This is intentionally
- * scoped to WhatsApp's stable data-tab marker; a page-wide transform would make
- * the chat list and the whole app pay the same cost.
+ * WhatsApp's conversation is much heavier than the chat list: every wheel tick
+ * can expose message bubbles, media previews, reactions and their shadows. That
+ * one viewport is put on a compositor layer of its own -- `will-change` is the
+ * scroll-position hint, and the flat 3D transform is what actually promotes it
+ * on the Linux builds that otherwise leave a nested overflow viewport on the
+ * main-thread paint path. A page-wide transform would make the chat list and
+ * everything else pay the same cost, so it is scoped to the scroller.
  *
- * `will-change` gives Chromium an explicit scroll-position hint, while the small
- * 3D transform covers Linux/Electron builds that otherwise leave this nested
- * overflow viewport on the main-thread paint path. No custom scrollbar rules are
- * used because those disable Chromium's composited scrollbar path.
+ * Which element that is has to be checked against the live page, not guessed.
+ * This build marks it `data-testid`, not `data-tab` -- the data-tab values are
+ * bare numbers -- and it is the messages list itself that scrolls, not the panel
+ * body around it. A rule aimed at the wrong one does not fail, it silently
+ * applies to nothing:
+ *
+ *   WHATSAPP_DEBUG_EVAL=/tmp/e.js, then
+ *   getComputedStyle(document.querySelector('#main [data-testid="conversation-panel-messages"]')).willChange
+ *
+ * has to answer "scroll-position" and not "auto". Both spellings are matched so
+ * that the day WhatsApp renames the marker, the rule degrades to the one that
+ * still hits rather than to none.
+ *
+ * There are deliberately no ::-webkit-scrollbar rules here. A custom scrollbar
+ * is painted on the main thread, and these were applied to every scroller on the
+ * page.
  */
 const CONVERSATION_SCROLL = `
-#main [data-tab="conversation-panel-body"] {
+#main [data-testid="conversation-panel-messages"],
+#main [data-tab="conversation-panel-messages"] {
   will-change: scroll-position;
   transform: translate3d(0, 0, 0);
   backface-visibility: hidden;

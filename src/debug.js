@@ -43,7 +43,14 @@ const install = getWindow => {
        setting scrollTop, because only the first goes down Chromium's compositor
        path -- the one a browser scrolls a long chat on -- and that path is the
        whole question. The page samples its own frame intervals around it. */
-    if (source === '#scroll') {
+    if (source === '#scroll' || source.startsWith('#scroll ')) {
+      /* Which scroller, named outright when it matters. The pick below is a
+         heuristic over every div on the page, and a heuristic that chooses wrong
+         does not fail -- it measures the element it chose while the wheel turns
+         over the one under the pointer, and answers "nothing moved, no long
+         tasks" for a scroll that was never sent anywhere near it. Two runs
+         against the same conversation picked two different elements. */
+      const wanted = source.slice('#scroll'.length).trim();
       /* Frame intervals were the obvious metric and they are the wrong one: a
          window that is not being composited runs requestAnimationFrame free of
          vsync, so "6 ms a frame" reads as excellent when it means the page was
@@ -66,20 +73,34 @@ const install = getWindow => {
            long virtualised scrollers and both are what the complaint is about.
            Nothing is clicked to open a chat: that would mark it read. */
         const main = document.querySelector('#main');
-        window.__waScroller = pick(main) || pick(document.querySelector('#pane-side'));
-        window.__waTarget = main && window.__waScroller && main.contains(window.__waScroller)
+        const named = ${JSON.stringify(wanted)} ? document.querySelector(${JSON.stringify(wanted)}) : null;
+        window.__waScroller = named || pick(main) || pick(document.querySelector('#pane-side'));
+        window.__waTarget = named ? ${JSON.stringify(wanted || '')}
+          : main && window.__waScroller && main.contains(window.__waScroller)
           ? 'conversation' : 'chat list';
         window.__waFrom = window.__waScroller ? window.__waScroller.scrollTop : -1;
+        /* The selector is kept, not just the node. WhatsApp re-renders the
+           conversation while it is being scrolled and replaces this element, and
+           a report that reads the old detached one answers "it did not move, and
+           it cost nothing" for a scroll that moved seven thousand pixels. */
+        window.__waSelector = ${JSON.stringify(wanted || '')};
         return window.__waScroller ? window.__waTarget : 'nothing scrollable';
       })()`;
       const REPORT = `(() => {
         window.__waObs?.disconnect();
         const long = window.__waLong || [];
+        if (window.__waSelector) {
+          const live = document.querySelector(window.__waSelector);
+          if (live) window.__waScroller = live;
+        }
         return JSON.stringify({
           longTasks: long.length,
           blockedMs: long.reduce((a, b) => a + b, 0),
           worstMs: long.length ? Math.max(...long) : 0,
           scrolled: window.__waScroller ? Math.round(window.__waFrom - window.__waScroller.scrollTop) : null,
+          /* Said outright, because a scroll that did not happen used to read as a
+             scroll that cost nothing. */
+          moved: window.__waScroller ? window.__waFrom !== window.__waScroller.scrollTop : false,
           target: window.__waTarget,
         });
       })()`;
@@ -103,12 +124,19 @@ const install = getWindow => {
         const point = where ? JSON.parse(where) : null;
         const x = point ? Math.round(point.x * zoom) : Math.round(bounds.width * 0.65);
         const y = point ? Math.round(point.y * zoom) : Math.round(bounds.height * 0.5);
+        /* In phases, the way a mouse sends them. Chromium latches a scroll to
+           the element the gesture began over, and a stream of wheel events that
+           never says it began is a stream it is free to route elsewhere. */
         for (let i = 0; i < 60; i++) {
           win.webContents.sendInputEvent({
             type: 'mouseWheel', x, y, deltaX: 0, deltaY: 120, canScroll: true,
+            phase: i === 0 ? 'began' : 'changed',
           });
           await new Promise(resolve => setTimeout(resolve, 16));
         }
+        win.webContents.sendInputEvent({
+          type: 'mouseWheel', x, y, deltaX: 0, deltaY: 0, canScroll: true, phase: 'ended',
+        });
         await new Promise(resolve => setTimeout(resolve, 300));
         console.log('debug: scroll %s', await win.webContents.executeJavaScript(REPORT, true));
       } catch (e) {

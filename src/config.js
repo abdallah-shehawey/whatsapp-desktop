@@ -27,6 +27,7 @@ const DEFAULTS = {
   'behaviour.spellcheck': true,
   'notifications.enabled': true,
   'notifications.sound': true,     // a tone for the banners this client raises itself
+  'notifications.outgoing-sound': false,  // WhatsApp's own tone for a message you send
   'notifications.banner-seconds': 12,
 };
 
@@ -115,6 +116,10 @@ class Config {
       '# A tone for the banners this client raises itself. WhatsApp plays its own',
       '# for the ones it raises, and two sounds for one message is worse than none.',
       `sound = ${v['notifications.sound']}`,
+      '# WhatsApp plays a tone of its own when a message of yours goes out. Off',
+      '# here: the message is already on screen, with a tick under it, in the',
+      '# window you are looking at.',
+      `outgoing-sound = ${v['notifications.outgoing-sound']}`,
       '# Seconds before a banner is taken down and filed silently. GNOME parks a',
       '# banner under an idle pointer for ever, and one parked banner swallows',
       '# every message behind it.',

@@ -78,6 +78,32 @@ rang. Each banner is closed after twelve seconds and the message posted again at
 LOW urgency, which the shell files in the notification centre without a banner and
 without a sound. Nothing is lost and nothing blocks.
 
+**And a banner comes down when its message has been dealt with**, which two
+different things can say. *The chat is the one on screen*, in a window with focus
+— an answer, immediate and certain, and the one that fires the instant a chat is
+opened. *The chat has stopped being unread* — an inference, which arrives a beat
+late because WhatsApp draws the pill after it moves the row, but which also covers
+a message read on the phone.
+
+Only the second of those existed at first, and it was refused for the first four
+seconds of a banner's life — the guard that keeps a pill drawn late from
+withdrawing a banner raised a moment ago. Since the page reports the unread list
+only when it *changes*, a refusal was final: open a chat while its banner was
+still on screen and the message stayed in the notification centre for good, while
+the same chat opened after the banner had been filed came down correctly. A
+refused withdrawal is now deferred to the moment the guard expires and asked
+again, and the chat on screen is reported in its own right and withdraws without
+any guard at all.
+
+**The tone WhatsApp plays for a message going out is muted**, because the message
+is already on screen with a tick under it, in the window being looked at. It
+cannot be silenced by name — WhatsApp serves its sounds from `static.whatsapp.net`
+under filenames that are hashes and change with the build — so it is silenced by
+the moment: a send is an `Enter` in the composer or a click on the send button,
+and anything played within a beat of that is the sound of your own message. A
+voice note in the conversation is left alone. `[notifications] outgoing-sound`
+turns it back on.
+
 ## What Chromium made unnecessary
 
 Three of the GTK client's fixes are simply gone, and it is worth writing down
@@ -170,9 +196,10 @@ back `undefined` and nothing runs.
 | `src/page/inject.js` | the chat-list watcher and the notification shim, in WhatsApp's own world |
 | `src/style.js` | the user stylesheet — the font, and the room Arabic needs |
 | `src/notify.js` | the banner policy, and pictures named from their own bytes |
-| `src/tray.js`, `src/config.js`, `src/desktop.js`, `src/debug.js` | |
+| `src/tray.js`, `src/config.js`, `src/desktop.js`, `src/sound.js`, `src/fonts.js`, `src/debug.js` | |
 | `tools/make-icons.py` | regenerates `data/icons` — `make icons`, never hand-edit the PNGs |
 | `tools/test-inject.js` | replays a chat list past the watcher — `make test` |
+| `tools/test-style.js` | checks the stylesheet still names the elements it is aimed at |
 
 State lives in `~/.local/share/whatsapp-desktop`, config in
 `~/.config/whatsapp-desktop` -- named for the project rather than the product,
@@ -209,6 +236,8 @@ and a shell extension that patches the message tray can do the same by accident.
 | `[behaviour] close-to-tray` | `true` | closing the window leaves the client running |
 | `[behaviour] minimize-to-tray` | `false` | minimise is not close |
 | `[notifications] enabled` | `true` | off hands notifications back to Chromium's own handling |
+| `[notifications] sound` | `true` | a tone for the banners this client raises itself — WhatsApp plays its own for the ones it raises |
+| `[notifications] outgoing-sound` | `false` | WhatsApp's own tone for a message *you* send |
 | `[notifications] banner-seconds` | `12` | before a banner is taken down and filed silently |
 
 ### Arabic
@@ -224,6 +253,41 @@ off the rhythm the page was designed on — and inside a bubble it lands on a sp
 in a div pinned at 19px and shears five pixels off every line. That version
 shipped once from the GTK client and came straight back out.
 
+## Scrolling
+
+A browser scrolls a long chat smoothly because its compositor does the work.
+Chromium decides that per driver, from a blocklist years out of date on Linux, so
+the blocklist is overridden and rasterisation asked for explicitly; smooth
+scrolling itself is a separate switch, on by default in Chrome and off in a bare
+Electron. The conversation's scroller is put on a layer of its own — scoped to
+that one element, because a page-wide transform makes everything else pay the
+same cost.
+
+**Which element that is has to be checked, not guessed.** A rule aimed at the
+wrong one does not fail; it applies to nothing and looks exactly like a fix. This
+build marks the scroller `data-testid="conversation-panel-messages"` — the
+`data-tab` values are bare numbers, and the panel *body* is not the scroller —
+and `getComputedStyle(...).willChange` has to answer `scroll-position` before any
+of it is believed.
+
+Measured with `#scroll` below: on a warm conversation it is **zero long tasks**
+over 4800px, and the chat list is zero as well — promoting that one too changed
+nothing, so it is not promoted. What blocks the main thread is WhatsApp loading
+older messages (71–123 ms), which is its work, not the compositor's.
+
+**Wayland is asked about twice**, and that is a portability fix rather than a
+local one. `XDG_SESSION_TYPE` is set by the login session and inherited; anything
+that does not pass the whole environment on — a launcher, a systemd unit — leaves
+it unset, Electron falls through to X11, and the client lands on XWayland with
+soft text and stepped wheel scrolling. Nothing announces that, so `WAYLAND_DISPLAY`
+is consulted as well and the answer is printed at startup.
+
+Three things that look like they belong here and do not: `--use-angle=vulkan`
+(Chromium logs Vulkan as incompatible with the Wayland backend, and the client
+exits), a hard-coded `--num-raster-threads` (Chromium sizes it from the core
+count), and `--enable-features=OverlayScrollbar` — measured, no effect at all,
+because WhatsApp styles its own scrollbars.
+
 ## Diagnosing it
 
 Devtools are a `Ctrl+Shift+I` away, which the GTK client could never offer —
@@ -235,11 +299,23 @@ WHATSAPP_DEBUG_EVAL=/tmp/eval.js whatsapp-desktop
 ```
 
 Whatever lands in that file is evaluated in the live page and the result logged.
-Four words are commands to the app instead: `#snapshot` writes a PNG of the
+Some words are commands to the app instead: `#snapshot` writes a PNG of the
 window (a GNOME Wayland session will not hand a screenshot of this process to
 anything outside it; `capturePage` is inside it), `#hide` and `#show` drive the
-tray behaviour without a tray to click, and `#state` prints what the window
-believes about itself.
+tray behaviour without a tray to click, `#state` prints what the window believes
+about itself, `#gpu` prints which of Chromium's pipelines are accelerated, and
+`#tone` plays the notification sound.
+
+`#scroll` measures a real one: sixty wheel events sent as input, with the page's
+long tasks sampled around them. It takes a selector — `#scroll [data-testid=
+"conversation-panel-messages"]` — and that is not a convenience. Left to pick a
+scroller by itself it can choose one element while the wheel turns over another,
+and it used to keep the **node**, which WhatsApp replaces mid-scroll: the report
+then read a detached element and answered *did not move, cost nothing* for a
+scroll that had moved seven thousand pixels. It re-resolves the selector now and
+says `moved` outright. Frame intervals are deliberately not the metric — a window
+that is not being composited runs `requestAnimationFrame` free of vsync, and
+"6 ms a frame" there means *not on screen*, not *smooth*.
 
 Unset by default, and deliberately so — it is a way into a live WhatsApp session,
 not a feature.

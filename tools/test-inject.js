@@ -165,11 +165,16 @@ const document = {
 
 const handlers = new Map();                 // channel -> what the page listens with
 
-/* The app side of the bridge the page is given. Only two channels matter to the
-   watcher: the nudge that something arrived, and the log. */
+let openReports = [];                       // what the page said was on screen
+let unreadReports = [];                     // and which chats it said were unread
+
+/* The app side of the bridge the page is given: the nudge that something
+   arrived, the log, and the two reports the app withdraws notifications on. */
 const send = (channel, payload) => {
   if (channel === 'arrival') pings++;
   else if (channel === 'log') logs.push(String(payload));
+  else if (channel === 'open-chat') openReports.push(payload);
+  else if (channel === 'unread-chats') unreadReports.push(payload);
 };
 const on = (channel, fn) => handlers.set(channel, fn);
 const push = (channel, payload) => {
@@ -177,11 +182,34 @@ const push = (channel, payload) => {
   if (fn) fn(payload);
 };
 
+/* Whatever the page listens to the window for -- the keystroke and the click
+   that mean a message is going out, and the load that starts the watcher. */
+const listeners = new Map();
+const listen = (type, fn) => {
+  if (!listeners.has(type)) listeners.set(type, []);
+  listeners.get(type).push(fn);
+};
+const fire = (type, event) => { for (const fn of listeners.get(type) || []) fn(event); };
+
+/* Just enough of the two audio interfaces for the mute to have something to
+   hook. The page replaces the methods on these prototypes, so what a call proves
+   is which way it went. */
+let played = [];
+class HTMLMediaElement {
+  constructor(where) { this.where = where || ''; }
+  play() { played.push('audio'); return Promise.resolve(); }
+  closest(sel) { return this.where === sel ? {} : null; }
+}
+class AudioBufferSourceNode {
+  start() { played.push('webaudio'); }
+}
+
 const sandbox = {
   document, console,
   navigator: { userAgent: 'test' },
   location: { host: 'web.whatsapp.com' },
   setTimeout, clearTimeout, clearInterval,
+  HTMLMediaElement, AudioBufferSourceNode,
   /* watchList is installed on an interval in the page; here it runs once and the
      observer it registers is driven by hand, one pass at a time. */
   setInterval: fn => { fn(); return 0; },
@@ -190,7 +218,7 @@ const sandbox = {
     observe() {}
   },
   Event: class { constructor(type) { this.type = type; } },
-  addEventListener() {}, dispatchEvent() {},
+  addEventListener: listen, dispatchEvent() {},
   module: { exports: {} },
 };
 sandbox.window = sandbox;
@@ -204,7 +232,7 @@ vm.runInContext(fs.readFileSync(SRC, 'utf8'), sandbox, { filename: 'inject.js' }
 sandbox.module.exports.start({ send, on });
 /* Notifications off: the shim needs a window.Notification to wrap, and nothing
    in here raises one. The watcher is what this rig drives. */
-push('config', { notifications: false });
+push('config', { notifications: false, muteSendTone: true });
 
 const setFocus = state => push('focus', state);
 
@@ -337,6 +365,88 @@ const check = (label, got, want) => {
   setFocus(false);
   setFocus(true);
   check('the queue does not survive the window going away', await describe(), '');
+
+  /* ------------------------------------------------------- the withdrawals */
+
+  /* What the app takes a notification down on. The unread list is an inference
+     that arrives a beat late; the chat on screen is the answer, and it is the one
+     that has to be right the instant a chat is opened -- opening a chat while its
+     banner was still up used to leave the message in the notification centre for
+     good. */
+  openReports = [];
+  await scan();
+  check('the chat on screen is not reported again when nothing has changed',
+        openReports.length, 0);
+
+  mega.setAttribute('aria-selected', 'false');
+  joo.setAttribute('aria-selected', 'true');
+  await scan();
+  check('opening another chat reports it', openReports.pop(), 'EL Joo');
+
+  /* A chat that was already open when the window went away is being read the
+     moment it comes back, and nothing about the chat itself changes to say so. */
+  openReports = [];
+  setFocus(false);
+  setFocus(true);
+  check('and the window coming back says it again', openReports.pop(), 'EL Joo');
+
+  closeConversation();
+  await scan();
+  check('with no conversation open, nothing is on screen', openReports.pop(), '');
+
+  /* And the slower half of it: the unread list, which is what covers a message
+     read on the phone. */
+  unreadReports = [];
+  update(joo, { badge: 2, preview: 'خلاص؟', when: clock() });
+  await scan();
+  check('a chat going unread is reported', (unreadReports.pop() || []).includes('EL Joo'), true);
+  update(joo, { badge: 0 });
+  await scan();
+  check('and reported again without it once it has been read',
+        (unreadReports.pop() || []).includes('EL Joo'), false);
+
+  /* ----------------------------------------------- the tone of a message out */
+
+  /* Muted by the moment rather than by name: WhatsApp serves its sounds from
+     hashed filenames that change with the build, so the moment is all there is to
+     match on. */
+  const SEND_TONE_GAP = 2000;        // longer than the beat a send is muted for
+  const composer = el('div', { contenteditable: 'true' });
+  const sendButton = el('span', { 'data-icon': 'wds-ic-send-filled' });
+
+  played = [];
+  new sandbox.HTMLMediaElement('').play();
+  check('a sound with no message going out is left alone', played.join(), 'audio');
+
+  played = [];
+  fire('keydown', { key: 'Enter', target: composer });
+  new sandbox.HTMLMediaElement('').play();
+  new sandbox.AudioBufferSourceNode().start();
+  check('the tone for a message going out is muted, either way a page plays one',
+        played.join(), '');
+
+  advance(SEND_TONE_GAP);            // out of the window the last Enter opened
+  played = [];
+  fire('pointerdown', { target: sendButton });
+  new sandbox.HTMLMediaElement('').play();
+  check('and muted for a click on send, which is how a picture goes', played.join(), '');
+
+  played = [];
+  fire('keydown', { key: 'Enter', target: composer });
+  new sandbox.HTMLMediaElement('#main').play();
+  check('a voice note in the conversation still plays', played.join(), 'audio');
+
+  advance(SEND_TONE_GAP);
+  played = [];
+  fire('keydown', { key: 'Enter', shiftKey: true, target: composer });
+  new sandbox.HTMLMediaElement('').play();
+  check('Shift+Enter is a newline, not a message going out', played.join(), 'audio');
+
+  played = [];
+  fire('keydown', { key: 'Enter', target: composer });
+  advance(SEND_TONE_GAP);
+  new sandbox.HTMLMediaElement('').play();
+  check('and somebody else writing two seconds later still rings', played.join(), 'audio');
 
   console.log(failures ? '\n' + failures + ' failed' : '\nall checks pass');
   process.exit(failures ? 1 : 0);

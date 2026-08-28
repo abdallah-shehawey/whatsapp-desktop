@@ -206,6 +206,21 @@ class Banners {
     return closed;
   }
 
+  /* How long until the youngest banner still up for this chat is old enough for
+     that guard, or 0 when nothing is waiting on it. A caller that was refused
+     needs this: the reason it was refused expires, and nothing else will tell
+     it when. */
+  guardRemaining(key, minimumAge) {
+    const set = this.byKey.get(key);
+    if (!set) return 0;
+    let longest = 0;
+    for (const entry of set) {
+      const left = minimumAge - (Date.now() - entry.raisedAt);
+      if (left > longest) longest = left;
+    }
+    return longest;
+  }
+
   keys() { return [...this.byKey.keys()]; }
 }
 

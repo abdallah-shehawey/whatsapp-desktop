@@ -102,12 +102,27 @@ if (fontConfigFile) {
 
 /* Wayland natively rather than through XWayland: it is the difference between
    crisp text on a fractional scale and a blurry upscale, and between smooth
-   trackpad scrolling and stepped wheel events. */
+   trackpad scrolling and stepped wheel events.
+ *
+ * Asked of the socket as well as of the session type, and this matters on
+ * somebody else's machine rather than on the one it was written on.
+ * XDG_SESSION_TYPE is set by the login session and inherited; a client started
+ * from anything that does not pass the whole environment on -- a launcher, a
+ * systemd unit, a terminal opened inside something else -- sees it missing,
+ * falls through to X11, and lands on XWayland. Nothing announces that: the
+ * client simply looks softer and scrolls in steps, which is exactly the report
+ * this switch exists to prevent. WAYLAND_DISPLAY is set by the compositor
+ * itself, so between the two the answer survives the trip. */
 const chromiumFeatures = ['MemoryPurgeOnFreezeLimit', 'CanvasOopRasterization'];
-if (process.env.XDG_SESSION_TYPE === 'wayland') {
+const onWayland = process.env.XDG_SESSION_TYPE === 'wayland' ||
+                  !!process.env.WAYLAND_DISPLAY;
+if (onWayland) {
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
   chromiumFeatures.push('WaylandWindowDecorations');
 }
+/* Said out loud, because the difference is one a user reports as "it looks
+   blurry" or "it scrolls in steps" and never as "it is on XWayland". */
+console.log('display server: %s', onWayland ? 'wayland, natively' : 'x11');
 /* WhatsApp Web is one page that stays open for days. Letting Chromium hand
    memory back when it is not being looked at is worth more here than the
    milliseconds it costs to fault it in again. Electron accepts one
@@ -152,6 +167,12 @@ let lastArrivalAt = 0;
    desktop font. Empty until the page reports it, a moment after each load. */
 let pageFontStack = '';
 const pageBanners = new Map();          // page notification id -> the banner raised for it
+/* The conversation on screen and the chats that still have something waiting,
+   both as the page last reported them, plus the withdrawals that are waiting out
+   ARRIVAL_SETTLE_MS before they can be carried out. */
+let openChat = '';
+let unreadChatNames = new Set();
+const withdrawing = new Map();          // chat -> the timer that will try again
 
 /* --------------------------------------------------------------- window */
 
@@ -168,6 +189,8 @@ const pushFocus = () => {
   const active = win.isVisible() && !win.isMinimized() && win.isFocused();
   win.webContents.send('wa:focus', active);
   if (tray) tray.setWindowVisible(win.isVisible() && !win.isMinimized());
+  /* A window coming back is the user arriving at whatever chat is on screen. */
+  if (active) withdrawOpen();
 };
 
 const showWindow = () => {
@@ -291,7 +314,10 @@ const createWindow = () => {
     loadedAt = Date.now();
     await applyStyle();
     win.webContents.setZoomFactor(Number(config.get('view.zoom')) || 1);
-    win.webContents.send('wa:config', { notifications: !!config.get('notifications.enabled') });
+    win.webContents.send('wa:config', {
+      notifications: !!config.get('notifications.enabled'),
+      muteSendTone: !config.get('notifications.outgoing-sound'),
+    });
 
     /* The tone is handed over once and kept in the page, decoded, so raising it
        later costs nothing. */
@@ -386,6 +412,54 @@ const playTone = () => {
   if (!config.get('notifications.sound')) return;
   if (!win || win.isDestroyed()) return;
   win.webContents.send('wa:play-tone', null);
+};
+
+/* ------------------------------------------------------------ withdrawals */
+
+/* A notification is an unread message made visible, so it comes down as soon as
+   the message has been dealt with. Two things say that it has, and they are not
+   the same thing:
+ *
+ *   the chat is the one on screen, in a window the user is looking at -- which
+ *   is an answer, immediate and certain;
+ *
+ *   the chat has stopped being unread -- which is an inference, and one that
+ *   arrives a beat late because WhatsApp draws the pill a beat after it moves
+ *   the row. It also covers a message read on the phone.
+ */
+
+/* The banners for the conversation on screen, taken down at once.
+
+   Deliberately without the ARRIVAL_SETTLE_MS guard below: that guard is there
+   for a pill drawn late, and there is nothing late about the chat the user just
+   clicked on. Opening a chat while its banner was still on screen used to leave
+   the message sitting in the notification centre for good -- the guard refused
+   the withdrawal, and the page reports the unread list only when it CHANGES, so
+   nothing ever asked a second time. */
+const withdrawOpen = () => {
+  if (!banners || !openChat) return;
+  if (!win || win.isDestroyed()) return;
+  if (!win.isVisible() || win.isMinimized() || !win.isFocused()) return;
+
+  const closed = banners.closeKey(openChat);
+  if (closed) console.log('withdrew %d notification(s) for %s: it is the chat on screen',
+                          closed, openChat);
+};
+
+/* The banners for a chat that has stopped being unread. A request refused for
+   being too young is not dropped -- nothing would ever ask again -- but deferred
+   to the moment the guard is over and asked again then, because the chat may
+   have gone unread once more in between. */
+const withdrawRead = key => {
+  const waiting = withdrawing.get(key);
+  if (waiting) { clearTimeout(waiting); withdrawing.delete(key); }
+  if (!banners || unreadChatNames.has(key)) return;
+
+  const closed = banners.closeKey(key, ARRIVAL_SETTLE_MS);
+  if (closed) console.log('withdrew %d notification(s) for %s: it has been read', closed, key);
+
+  const left = banners.guardRemaining(key, ARRIVAL_SETTLE_MS);
+  if (left > 0) withdrawing.set(key, setTimeout(() => withdrawRead(key), left + 50));
 };
 
 /* Whether a banner is this client's to raise at all. While the window is away
@@ -512,7 +586,12 @@ const wireIpc = () => {
   ipcMain.on('wa:page-notification', (event, note) => {
     if (!note || !config.get('notifications.enabled')) return;
     const banner = banners.show({
-      key: note.title,
+      /* Keyed on the chat the page found in its list rather than on the title
+         WhatsApp wrote, so this path and the watcher's agree on what a chat is
+         called. The withdrawal side speaks chat-list names and nothing else: a
+         key that does not appear there is a notification nothing can take
+         down. */
+      key: note.chat || note.title,
       title: note.title,
       body: note.body,
       icon: note.avatar,
@@ -531,23 +610,25 @@ const wireIpc = () => {
     entry.dispose();
   });
 
+  /* The conversation on screen, reported by the page when it changes and again
+     whenever the window comes back. This is the signal that takes a banner down
+     the moment the user opens the chat -- the unread report below cannot: it is
+     refused for the first few seconds of a banner's life, and it is sent only
+     when the answer changes, so those few seconds used to be for ever. */
+  ipcMain.on('wa:open-chat', (event, name) => {
+    openChat = typeof name === 'string' ? name : '';
+    withdrawOpen();
+  });
+
   /* Which chats still have something unread, reported by the page whenever the
      answer changes. A notification is an unread message made visible, so when
      the message stops being unread the notification has no business staying on
      screen -- and it stops being unread whether it was read here or on the
-     phone, because WhatsApp Web clears the pill either way.
-
-     Only banners older than a moment are withdrawn: WhatsApp draws the unread
-     pill a beat after it moves the row, so the report that arrives right behind
-     an arrival can still show the chat as caught up. */
+     phone, because WhatsApp Web clears the pill either way. */
   ipcMain.on('wa:unread-chats', (event, names) => {
-    if (!Array.isArray(names)) return;
-    const unread = new Set(names);
-    for (const key of banners.keys()) {
-      if (unread.has(key)) continue;
-      const closed = banners.closeKey(key, ARRIVAL_SETTLE_MS);
-      if (closed) console.log('withdrew %d notification(s) for %s: it has been read', closed, key);
-    }
+    if (!Array.isArray(names) || !banners) return;
+    unreadChatNames = new Set(names);
+    for (const key of new Set([...banners.keys(), ...withdrawing.keys()])) withdrawRead(key);
   });
 };
 

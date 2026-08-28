@@ -44,6 +44,9 @@ const start = ({ send, on }) => {
        its own notifications, so an arrival still waiting to be asked about would
        be announced a second time the moment the window came back. */
     if (!focused) arrivals = [];
+    /* And the chat on screen is said again, unchanged though it is: it is only
+       now, with the window back, that it is being read. */
+    else refreshOpen();
   });
 
   /* ------------------------------------------------------------------- tone */
@@ -84,6 +87,9 @@ const start = ({ send, on }) => {
       const source = audio.createBufferSource();
       source.buffer = toneBuffer;
       source.connect(audio.destination);
+      /* Ours, and so exempt from the muting of the tone WhatsApp plays for a
+         message going out. */
+      source.__waOurs = true;
       source.start();
     } catch (err) {
       log('could not play the tone: ' + err.message);
@@ -403,6 +409,7 @@ const start = ({ send, on }) => {
     if (!seeded) { seeded = true; seededAt = Date.now(); }
 
     reportUnread(pane);
+    reportOpen();
   };
 
   /* Which chats still have something waiting. A notification is an unread
@@ -430,6 +437,25 @@ const start = ({ send, on }) => {
     send('unread-chats', names);
   };
 
+  /* Which chat the user is looking at. The unread report above is an inference
+     -- no pill, so it must have been read -- and it arrives a beat after the
+     fact, late enough that the app has to hold a banner raised a moment ago
+     safe from it. This is the answer instead: a chat drawn on screen in a window
+     that has focus is a chat being read, and its banner can go now.
+
+     Reported on change, and again whenever the window comes back: a chat that
+     was already open when the window went away is being read the moment it
+     returns, and nothing about the chat itself changes to say so. */
+  let lastOpen = null;
+  const reportOpen = () => {
+    const row = openRow();
+    const name = row ? nameOf(row) : '';
+    if (name === lastOpen) return;
+    lastOpen = name;
+    send('open-chat', name);
+  };
+  const refreshOpen = () => { lastOpen = null; reportOpen(); };
+
   const watchList = () => {
     const pane = document.querySelector('#pane-side');
     if (!pane || pane.__waWatched) return;
@@ -440,8 +466,11 @@ const start = ({ send, on }) => {
     new MutationObserver(() => {
       clearTimeout(timer);
       timer = setTimeout(scanList, 150);
+    /* aria-selected is in the filter for the report of which chat is on screen:
+       opening one usually rewrites its row anyway, by clearing the unread pill,
+       but a chat that was already caught up moves nothing else at all. */
     }).observe(pane, { childList: true, subtree: true, characterData: true,
-                       attributes: true, attributeFilter: ['title'] });
+                       attributes: true, attributeFilter: ['title', 'aria-selected'] });
     log('watching the chat list for arrivals');
   };
 
@@ -553,31 +582,38 @@ const start = ({ send, on }) => {
     return withTimeout(fetchAvatar(img.src));
   };
 
-  /* Asked by name when the notification is one the page raised. WhatsApp titles a
-     group notification with the group name and a direct one with the contact, so
-     an exact match is tried first and a containing one after it. */
-  const avatarFor = async name => {
+  /* The row a notification WhatsApp raised belongs to. WhatsApp titles a group
+     notification with the group name and a direct one with the contact, so an
+     exact match is tried first and a containing one after it. */
+  const rowFor = name => {
     const wanted = strip(name);
-    if (!wanted) return '';
-
-    /* This is only ever asked while a banner for that chat is on its way out, so
-       it doubles as the record of it. Nothing else tells this side that WhatsApp
-       Web announced something while the window was away, and without it the guess
-       below would announce the same chat again the moment the window came back and
-       anything asked. */
-    rememberName(wanted);
+    if (!wanted) return null;
 
     const pane = document.querySelector('#pane-side');
     const rows = [...(pane ? pane.querySelectorAll('[role="row"]') : [])];
-    let match = rows.find(row => nameOf(row) === wanted);
+    const exact = rows.find(row => nameOf(row) === wanted);
+    if (exact) return exact;
 
-    if (!match)
-      match = rows.find(row => {
-        const rowName = nameOf(row);
-        return rowName.length > 2 &&
-               (wanted.indexOf(rowName) >= 0 || rowName.indexOf(wanted) >= 0);
-      });
+    return rows.find(row => {
+      const rowName = nameOf(row);
+      return rowName.length > 2 &&
+             (wanted.indexOf(rowName) >= 0 || rowName.indexOf(wanted) >= 0);
+    }) || null;
+  };
 
+  /* Asked by name when the notification is one the page raised.
+
+     This is only ever asked while a banner for that chat is on its way out, so
+     it doubles as the record of it. Nothing else tells this side that WhatsApp
+     Web announced something while the window was away, and without it the guess
+     in describeUnread would announce the same chat again the moment the window
+     came back and anything asked. */
+  const avatarFor = async name => {
+    const wanted = strip(name);
+    if (!wanted) return '';
+    rememberName(wanted);
+
+    const match = rowFor(wanted);
     return match ? avatarOf(match) : '';
   };
 
@@ -676,6 +712,88 @@ const start = ({ send, on }) => {
     queued: arrivals.map(a => ({ name: a.name, preview: a.preview, age: Date.now() - a.at })),
   });
 
+  /* ------------------------------------------------- the sound of a message
+                                                        going out */
+
+  /* WhatsApp plays a tone of its own the moment a message of yours leaves, and
+     it is the one sound here that says nothing: the message is already on
+     screen, with a tick under it, in the window being looked at.
+   *
+   * It cannot be silenced by name. WhatsApp serves its sounds from
+   * static.whatsapp.net under filenames that are hashes -- l-ut9G1w4eu.ogg,
+   * kAbvQpjkfMK.ogg -- and they change with the build, so there is nothing
+   * stable to match on. What is stable is the moment: a message goes out because
+   * the user pressed a key or clicked a button, and the tone follows within a
+   * beat. Sound played inside that beat is the sound of their own message; sound
+   * played outside it belongs to somebody else and is left alone. */
+  const SEND_TONE_MS = 1500;
+  let sentAt = 0;
+  let muteSendTone = false;
+  let mutedOne = false;
+
+  /* What sending looks like from out here: Enter in the composer -- Shift+Enter
+     is a newline and a keystroke mid-composition belongs to the input method --
+     or a click on the send button, which is how a picture, a voice note or a
+     forward goes. The button is found by the name of its icon and by its label,
+     never by its class: class names are obfuscated and rotate every build. */
+  const SEND_ICON  = /send/i;
+  const SEND_LABEL = /^(send|إرسال|ارسال)\b/i;
+  const isSendClick = target => {
+    if (!target || !target.closest) return false;
+    const icon = target.closest('[data-icon]');
+    if (icon && SEND_ICON.test(icon.getAttribute('data-icon') || '')) return true;
+    const labelled = target.closest('[aria-label]');
+    return !!labelled && SEND_LABEL.test(strip(labelled.getAttribute('aria-label')));
+  };
+
+  const noteSend = () => { sentAt = Date.now(); };
+
+  const watchForSends = () => {
+    addEventListener('keydown', event => {
+      if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey) return;
+      if (event.isComposing || event.keyCode === 229) return;
+      const target = event.target;
+      if (target && target.closest && target.closest('[contenteditable="true"]')) noteSend();
+    }, true);
+    addEventListener('pointerdown', event => {
+      if (isSendClick(event.target)) noteSend();
+    }, true);
+
+    /* Both ways a page can make a sound, because which one WhatsApp uses is not
+       worth depending on: it has played its tones through an <audio> element for
+       years, and the tone this client raises for its own banners goes through
+       WebAudio -- a build that moved from one to the other is a build where this
+       quietly stopped working. The client's own source is tagged, and exempt. */
+    if (window.HTMLMediaElement) {
+      const play = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function (...args) {
+        if (muted(this)) return Promise.resolve();
+        return play.apply(this, args);
+      };
+    }
+
+    if (window.AudioBufferSourceNode) {
+      const start = AudioBufferSourceNode.prototype.start;
+      AudioBufferSourceNode.prototype.start = function (...args) {
+        if (!this.__waOurs && muted(this)) return;
+        return start.apply(this, args);
+      };
+    }
+  };
+
+  /* A sound effect and not something the user asked to hear. A voice note and a
+     video live in the conversation; a tone is an element the page keeps to
+     itself, or no element at all. Silencing a voice note because a message went
+     out a second ago would be a bug of its own. */
+  const muted = source => {
+    if (!muteSendTone || Date.now() - sentAt > SEND_TONE_MS) return false;
+    if (source && source.closest && source.closest('#main')) return false;
+    if (!mutedOne) { mutedOne = true; log('muting the tone WhatsApp plays for a message going out'); }
+    return true;
+  };
+
+  watchForSends();
+
   /* --------------------------------------------- the notifications WA raises */
 
   /* While the window is away WhatsApp Web raises its own notification, and it is
@@ -707,8 +825,15 @@ const start = ({ send, on }) => {
 
         /* The picture comes from the icon WhatsApp put on the notification when
            there is one, and from the chat list by name when there is not -- and
-           that lookup is also what records that WhatsApp announced this chat, so
-           the watcher does not announce it again when the window comes back. */
+           the lookup by name is also what records that WhatsApp announced this
+           chat, so the watcher does not announce it again when the window comes
+           back.
+
+           The chat goes over with it, taken from the list rather than from the
+           title, because the title is WhatsApp's wording of who wrote and the
+           withdrawals all speak in chat-list names. A notification keyed on
+           anything else is one nothing can take down again. */
+        const row = rowFor(this.title);
         Promise.resolve()
           .then(() => {
             if (!this.icon) return avatarFor(this.title);
@@ -718,6 +843,7 @@ const start = ({ send, on }) => {
           .catch(() => '')
           .then(avatar => send('page-notification', {
             id: this.__id, title: this.title, body: this.body,
+            chat: row ? nameOf(row) : '',
             avatar: avatar || '', silent: this.silent,
           }));
       }
@@ -781,6 +907,7 @@ const start = ({ send, on }) => {
 
   on('config', config => {
     if (config && config.notifications) installNotificationShim();
+    muteSendTone = !!(config && config.muteSendTone);
     log('ready on ' + location.host);
 
     /* What the page asks for, so the app can bind those families to the
