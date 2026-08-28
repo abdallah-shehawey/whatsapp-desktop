@@ -23,6 +23,7 @@ nothing, not even a state directory.
 - **Banners come down on the client's own clock.** GNOME shows one at a time,
   queues three behind it and drops the rest, so each banner is closed after
   twelve seconds and refiled silently in the notification centre.
+- **Voice and video calls work out of the box.** Full WebRTC support for microphone and camera with automatic device permissions and Linux-specific rendering fixes.
 - Dark or light follows the desktop, links open in your browser, downloads land
   in `~/Downloads`, `Ctrl` `+`/`-`/`0` zoom and the window size is remembered.
 

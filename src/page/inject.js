@@ -27,6 +27,19 @@ const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 const start = ({ send, on }) => {
   const log = message => send('log', String(message));
 
+  /* WebGPU on Linux/Wayland has a broken CreateExternalTexture implementation in
+     Chromium for video streams (generating "Invalid ExternalTexture is invalid" and
+     black video call frames). Disabling navigator.gpu forces WhatsApp to use its
+     working WebGL / direct MediaStream pipeline. */
+  try {
+    if (window.Navigator && window.Navigator.prototype && 'gpu' in window.Navigator.prototype) {
+      Object.defineProperty(window.Navigator.prototype, 'gpu', {
+        get: () => undefined,
+        configurable: true,
+      });
+    }
+  } catch (e) {}
+
   /* ------------------------------------------------------------------ focus */
 
   /* Only this file's own view of focus, pushed in by the app. It is the line the
@@ -871,8 +884,16 @@ const start = ({ send, on }) => {
      worse one -- so a ring, which loops and goes on long after any tone would
      have finished, is exempt before anything else is decided. */
   const muted = source => {
-    if (source && source.closest && source.closest('#main')) return false;
-    if (source && (source.loop === true || lengthOf(source) > RINGING_S)) return false;
+    if (!source) return false;
+    /* Video elements (camera stream, remote caller video, chat video) must never be muted or blocked */
+    if ((typeof HTMLVideoElement !== 'undefined' && source instanceof HTMLVideoElement) ||
+        (source.tagName && source.tagName.toUpperCase() === 'VIDEO')) return false;
+    /* WebRTC media streams (video/audio calls) have srcObject, never mute them */
+    if (source.srcObject) return false;
+    /* Elements inside conversation or call overlay/modals */
+    if (source.closest && (source.closest('#main') || source.closest('[role="dialog"]') || source.closest('[data-testid*="call"]') || source.closest('[class*="call"]'))) return false;
+    /* Ringing or looped sounds */
+    if (source.loop === true || lengthOf(source) > RINGING_S) return false;
 
     /* Within a beat of a keystroke or a click on send: their own message. */
     if (Date.now() - sentAt <= SEND_TONE_MS) {

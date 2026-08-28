@@ -113,7 +113,7 @@ if (fontConfigFile) {
  * client simply looks softer and scrolls in steps, which is exactly the report
  * this switch exists to prevent. WAYLAND_DISPLAY is set by the compositor
  * itself, so between the two the answer survives the trip. */
-const chromiumFeatures = ['MemoryPurgeOnFreezeLimit', 'CanvasOopRasterization'];
+const chromiumFeatures = ['MemoryPurgeOnFreezeLimit', 'WebRTCPipeWireCapturer'];
 const onWayland = process.env.XDG_SESSION_TYPE === 'wayland' ||
                   !!process.env.WAYLAND_DISPLAY;
 if (onWayland) {
@@ -144,8 +144,12 @@ app.commandLine.appendSwitch('enable-features', chromiumFeatures.join(','));
  * a bare Electron does not. */
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('enable-smooth-scrolling');
+/* WebGPU on Linux/Wayland has a broken CreateExternalTexture pipeline for video
+   streams, which causes WhatsApp call cameras to render black 1280x720 frames.
+   Disabling WebGPU forces WhatsApp to use its reliable WebGL/direct pipeline. */
+app.commandLine.appendSwitch('disable-features', 'WebGPU');
+app.commandLine.appendSwitch('disable-webgpu');
 
 /* ------------------------------------------------------------ single copy */
 
@@ -366,6 +370,8 @@ const createWindow = () => {
 };
 
 const isWhatsApp = url => {
+  if (!url) return true;
+  if (url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('about:')) return true;
   try {
     const host = new global.URL(url).hostname;
     return host === 'web.whatsapp.com' || host.endsWith('.whatsapp.com') || host === 'whatsapp.com';
@@ -702,15 +708,19 @@ const wireDownloads = ses => {
 const ALLOWED_PERMISSIONS = new Set([
   'notifications', 'media', 'audioCapture', 'videoCapture',
   'clipboard-read', 'clipboard-sanitized-write', 'fullscreen', 'display-capture',
+  'speaker-selection', 'mediaKeySystem', 'idle-detection', 'window-management',
 ]);
 
 const wirePermissions = ses => {
   ses.setPermissionRequestHandler((contents, permission, callback, details) => {
-    const url = (details && details.requestingUrl) || (contents && contents.getURL()) || '';
-    callback(isWhatsApp(url) && ALLOWED_PERMISSIONS.has(permission));
+    callback(ALLOWED_PERMISSIONS.has(permission));
   });
-  ses.setPermissionCheckHandler((contents, permission, origin) =>
-    isWhatsApp(origin || '') && ALLOWED_PERMISSIONS.has(permission));
+  ses.setPermissionCheckHandler((contents, permission, origin, details) => {
+    return ALLOWED_PERMISSIONS.has(permission);
+  });
+  ses.setDevicePermissionHandler(details => {
+    return true;
+  });
 };
 
 /* WhatsApp Web keys the client it thinks it is talking to off the user agent, and
