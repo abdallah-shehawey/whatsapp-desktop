@@ -504,13 +504,20 @@ const describeThenNotify = () => setTimeout(async () => {
   }
 
   if (answer === 'open') {
-    /* No banner over the very conversation it came from -- the user is reading
-       it as it lands. The tone, though, is the whole point: WhatsApp used to
-       play its own here, and that is now silenced along with the rest of the
-       page's, so this is the client's turn to make the one sound it makes
-       everywhere else. */
-    console.log('a message in the chat on screen: the tone, and no banner');
-    playTone();
+    /* Nothing at all: no banner, and no tone either.
+     *
+     * The message landed in the conversation the user is looking at, with the
+     * bubble drawn under their eyes as it arrived -- there is nothing left for
+     * an announcement to tell them. WhatsApp Web used to play its own tone here
+     * and it is silenced along with the rest of the page's; a tone was put in
+     * its place for a moment, and it was noise. This is the one case that is
+     * quiet on purpose, and the only one.
+     *
+     * "In front" is doing real work in that sentence: this path is reached only
+     * while the window is visible AND focused (bannersAreOurs). A message to the
+     * chat on screen of a window the user is NOT looking at goes down the page's
+     * own path instead, and is announced like any other. */
+    console.log('a message in the chat on screen: nothing raised, and nothing played');
     return;
   }
   if (!answer) {
