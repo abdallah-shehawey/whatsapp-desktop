@@ -39,7 +39,8 @@ Architecture: $ARCH
 Maintainer: Abdallah Shehawey <shehawey9@gmail.com>
 Homepage: https://github.com/abdallah-shehawey/whatsapp-desktop
 Installed-Size: $INSTALLED_SIZE
-Depends: libasound2, libatk-bridge2.0-0, libatk1.0-0, libc6, libcairo2, libcups2, libdbus-1-3, libdrm2, libgbm1, libglib2.0-0, libgtk-3-0, libnspr4, libnss3, libpango-1.0-0, libx11-6, libx11-xcb1, libxcb1, libxcomposite1, libxdamage1, libxext6, libxfixes3, libxrandr2, libxshmfence1
+Depends: libasound2, libatk-bridge2.0-0, libatk1.0-0, libatspi2.0-0, libc6, libcairo2, libcups2, libdbus-1-3, libdrm2, libexpat1, libfontconfig1, libfreetype6, libgbm1, libgdk-pixbuf-2.0-0, libglib2.0-0, libgtk-3-0, libnspr4, libnss3, libpango-1.0-0, libwayland-client0, libwayland-cursor0, libwayland-egl1, libx11-6, libx11-xcb1, libxcb1, libxcomposite1, libxcursor1, libxdamage1, libxext6, libxfixes3, libxi6, libxinerama1, libxkbcommon0, libxrandr2, libxshmfence1
+Recommends: libsecret-1-0, fonts-noto-color-emoji, fonts-noto-core
 Description: WhatsApp Web desktop client for Linux
  WhatsApp Web in a dedicated Chromium window with a system tray,
  desktop notifications, desktop font integration, and Arabic text fixes.

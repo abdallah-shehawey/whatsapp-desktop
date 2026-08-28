@@ -1,6 +1,6 @@
 # Maintainer: Abdallah Shehawey <shehawey9@gmail.com>
 pkgname=whatsapp-desktop
-pkgver=1.0.0
+pkgver=1.2.0
 pkgrel=1
 pkgdesc='WhatsApp Web desktop client for Linux with tray integration and Arabic text fixes'
 arch=('x86_64')

@@ -79,6 +79,7 @@ make test       # replays a chat list past the watcher, no browser needed
 | `[notifications] enabled` | `true` | off hands notifications back to Chromium |
 | `[notifications] sound` | `true` | a tone for the banners this client raises |
 | `[notifications] outgoing-sound` | `false` | WhatsApp's own tone for a message *you* send |
+| `[notifications] whatsapp-sound` | `false` | let WhatsApp play its own tone for a message arriving, instead of the desktop tone this client plays either way |
 | `[notifications] banner-seconds` | `12` | before a banner is refiled silently |
 
 State lives in `~/.local/share/whatsapp-desktop`.

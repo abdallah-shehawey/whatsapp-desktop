@@ -317,6 +317,10 @@ const createWindow = () => {
     win.webContents.send('wa:config', {
       notifications: !!config.get('notifications.enabled'),
       muteSendTone: !config.get('notifications.outgoing-sound'),
+      /* One event, one sound, and the same one either way round: the client
+         plays the desktop's tone for a message arriving whether the window is in
+         front or in the tray, so the page's own tone is silenced. */
+      mutePageTone: !config.get('notifications.whatsapp-sound'),
     });
 
     /* The tone is handed over once and kept in the page, decoded, so raising it
@@ -405,9 +409,16 @@ const onKey = (event, input) => {
 
 /* ---------------------------------------------------------- notifications */
 
-/* The tone for a banner this client raised itself. Nothing is played for the
-   notifications WhatsApp Web raises: it plays its own through the page, and two
-   sounds for one message is worse than none. */
+/* The tone for a banner, whichever half of the client raised it.
+ *
+ * It used to be played only for the watcher's banners -- the window-in-front
+ * half -- because WhatsApp Web plays a tone of its own for the notifications it
+ * raises, and two sounds for one message is worse than none. What that left was
+ * two different sounds for the same event: the desktop's tone with the window in
+ * front, and WhatsApp's own, served from static.whatsapp.net, with the window in
+ * the tray. A notification that does not sound like itself is the one thing a
+ * notification must not be. So the page's tone is silenced instead (see the
+ * sound section of src/page/inject.js) and this one is played for both. */
 const playTone = () => {
   if (!config.get('notifications.sound')) return;
   if (!win || win.isDestroyed()) return;
@@ -493,7 +504,13 @@ const describeThenNotify = () => setTimeout(async () => {
   }
 
   if (answer === 'open') {
-    console.log('notification skipped: the message is in the chat on screen');
+    /* No banner over the very conversation it came from -- the user is reading
+       it as it lands. The tone, though, is the whole point: WhatsApp used to
+       play its own here, and that is now silenced along with the rest of the
+       page's, so this is the client's turn to make the one sound it makes
+       everywhere else. */
+    console.log('a message in the chat on screen: the tone, and no banner');
+    playTone();
     return;
   }
   if (!answer) {
@@ -511,7 +528,16 @@ const describeThenNotify = () => setTimeout(async () => {
     title: chat,
     body: sender ? `${sender}: ${message}` : message,
     icon: avatar,
-    onClick: showWindow,
+    /* A banner is a message, and clicking one is asking to read it. The banners
+       WhatsApp Web raises have always done this -- the click goes back to the
+       page and WhatsApp's own handler opens the conversation -- while these,
+       raised on this side, only brought the window forward and left the user
+       wherever they already were. The page has no handler to hand this one back
+       to, so it is asked for the chat by name. */
+    onClick: () => {
+      showWindow();
+      if (win && !win.isDestroyed()) win.webContents.send('wa:open-chat-request', chat);
+    },
   });
   playTone();
 }, 250);
@@ -601,6 +627,19 @@ const wireIpc = () => {
       },
     });
     if (banner) pageBanners.set(note.id, banner);
+    /* And the tone, because the page's own has been silenced for this.
+     *
+     * `silent` on the notification is deliberately not honoured. In the web API
+     * it means "raise this without the browser's own sound", and a page that
+     * plays its own tone through an <audio> element -- which is exactly what
+     * WhatsApp Web does -- has every reason to set it. Honouring it here, with
+     * that tone silenced, would leave the one case this whole change is about
+     * making no sound at all. It is logged instead, so the truth about which
+     * notifications carry it is in the log rather than in a guess. */
+    if (banner) {
+      if (note.silent) console.log('the page asked for a silent notification; the tone is played anyway');
+      playTone();
+    }
   });
 
   ipcMain.on('wa:page-notification-close', (event, note) => {

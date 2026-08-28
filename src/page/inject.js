@@ -617,6 +617,60 @@ const start = ({ send, on }) => {
     return match ? avatarOf(match) : '';
   };
 
+  /* Opening a chat from a banner raised on this side.
+   *
+   * A banner WhatsApp Web raised carries its own click handler back into the
+   * page, and WhatsApp opens the conversation itself -- that is the window-away
+   * half, and it has always worked. The watcher's banners, the ones raised while
+   * the window is in front, had nothing of the kind: clicking one raised the
+   * window and left the user looking at whatever chat they were already in.
+   *
+   * Nothing on this side knows how to navigate WhatsApp Web except by doing what
+   * the user would do, which is press the row in the list. It is found by name,
+   * the same lookup the banner's key came from, so the two cannot disagree, and
+   * the list is virtualised but a chat that has just received a message is at
+   * the top of it -- which is the part that is rendered.
+   *
+   * Where the press is aimed matters more than what is in it. A row's handler
+   * is not on the row: it is on an element inside it, and an event dispatched at
+   * the row -- or at the [role="gridcell"] immediately under it -- travels
+   * upwards from there and never reaches it. Measured on the live page, in this
+   * order: pressing the row opened nothing, pressing the gridcell opened
+   * nothing, pressing the deepest node inside the row opened the chat. So the
+   * target is the name itself, which every chat row carries and which sits under
+   * every handler between it and the row.
+   *
+   * The whole press goes out and not a bare .click(): the row answers to pointer
+   * and mouse events both, and which of them opens a conversation is WhatsApp's
+   * business rather than something to depend on. */
+  const pressRow = row => {
+    const target = row.querySelector('span[title]') || row;
+    const box = row.getBoundingClientRect();
+    const where = {
+      bubbles: true, cancelable: true, view: window, button: 0, buttons: 1,
+      clientX: Math.round(box.left + box.width / 2),
+      clientY: Math.round(box.top + box.height / 2),
+    };
+    const pointer = Object.assign({ pointerId: 1, pointerType: 'mouse', isPrimary: true }, where);
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      const isPointer = type.indexOf('pointer') === 0;
+      const Kind = isPointer && window.PointerEvent ? window.PointerEvent : window.MouseEvent;
+      try {
+        target.dispatchEvent(new Kind(type, isPointer ? pointer : where));
+      } catch (err) { /* a kind this build does not construct; the rest still go */ }
+    }
+  };
+
+  on('open-chat-request', name => {
+    const row = rowFor(name);
+    if (!row) { log('cannot open "' + name + '": no row for it in the rendered list'); return; }
+    pressRow(row);
+    /* Said as soon as the page has drawn it rather than waited for: which chat
+       is on screen is what takes the banner down, and the observer that would
+       report it on its own fires a beat later than the click does. */
+    setTimeout(refreshOpen, 400);
+  });
+
   /* ------------------------------------------------------------ the question */
 
   /* Answers the app's one question at notification time: what just arrived, and
@@ -712,24 +766,41 @@ const start = ({ send, on }) => {
     queued: arrivals.map(a => ({ name: a.name, preview: a.preview, age: Date.now() - a.at })),
   });
 
-  /* ------------------------------------------------- the sound of a message
-                                                        going out */
+  /* ---------------------------------------------- the sounds the page makes */
 
-  /* WhatsApp plays a tone of its own the moment a message of yours leaves, and
-     it is the one sound here that says nothing: the message is already on
-     screen, with a tick under it, in the window being looked at.
+  /* WhatsApp Web plays two tones of its own, and the client has an opinion about
+     both.
    *
-   * It cannot be silenced by name. WhatsApp serves its sounds from
+   * The first is the one it plays the moment a message of yours leaves, and it
+   * is the one sound here that says nothing: the message is already on screen,
+   * with a tick under it, in the window being looked at.
+   *
+   * The second is the one it plays for a message arriving while the window is
+   * away -- the only moment WhatsApp Web announces anything itself, because it
+   * is the only moment it believes nobody is looking. That tone is not
+   * unwanted, it is simply the wrong one: with the window in front the client
+   * announces the arrival with the desktop's own notification sound, so the
+   * same message sounded like two different events depending on where the
+   * window happened to be. It is silenced here and the client plays its tone
+   * for that banner too, which is the whole of "one event, one sound".
+   *
+   * Neither can be silenced by name. WhatsApp serves its sounds from
    * static.whatsapp.net under filenames that are hashes -- l-ut9G1w4eu.ogg,
    * kAbvQpjkfMK.ogg -- and they change with the build, so there is nothing
    * stable to match on. What is stable is the moment: a message goes out because
    * the user pressed a key or clicked a button, and the tone follows within a
-   * beat. Sound played inside that beat is the sound of their own message; sound
-   * played outside it belongs to somebody else and is left alone. */
+   * beat. Sound played inside that beat is the sound of their own message;
+   * sound played outside it, by something that is not the conversation, is the
+   * arrival tone. */
   const SEND_TONE_MS = 1500;
+  /* Longer than any notification tone and far shorter than a call: a ring is
+     what must never be silenced by any of this. */
+  const RINGING_S = 6;
   let sentAt = 0;
   let muteSendTone = false;
-  let mutedOne = false;
+  let mutePageTone = false;
+  let mutedSend = false;
+  let mutedArrival = false;
 
   /* What sending looks like from out here: Enter in the composer -- Shift+Enter
      is a newline and a keystroke mid-composition belongs to the input method --
@@ -758,12 +829,14 @@ const start = ({ send, on }) => {
     addEventListener('pointerdown', event => {
       if (isSendClick(event.target)) noteSend();
     }, true);
+  };
 
-    /* Both ways a page can make a sound, because which one WhatsApp uses is not
-       worth depending on: it has played its tones through an <audio> element for
-       years, and the tone this client raises for its own banners goes through
-       WebAudio -- a build that moved from one to the other is a build where this
-       quietly stopped working. The client's own source is tagged, and exempt. */
+  /* Both ways a page can make a sound, because which one WhatsApp uses is not
+     worth depending on: it has played its tones through an <audio> element for
+     years, and the tone this client raises for its own banners goes through
+     WebAudio -- a build that moved from one to the other is a build where this
+     quietly stopped working. The client's own source is tagged, and exempt. */
+  const interceptSounds = () => {
     if (window.HTMLMediaElement) {
       const play = HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play = function (...args) {
@@ -781,18 +854,44 @@ const start = ({ send, on }) => {
     }
   };
 
+  /* How long a source is going to sound for, asked of whichever kind it is.
+     Unknown -- an <audio> whose metadata has not loaded -- answers 0, which is
+     the answer that does not exempt anything: the loop test below is what a ring
+     is actually caught by. */
+  const lengthOf = source => {
+    const seconds = source && source.buffer ? source.buffer.duration
+                  : source ? source.duration : 0;
+    return typeof seconds === 'number' && isFinite(seconds) ? seconds : 0;
+  };
+
   /* A sound effect and not something the user asked to hear. A voice note and a
      video live in the conversation; a tone is an element the page keeps to
      itself, or no element at all. Silencing a voice note because a message went
-     out a second ago would be a bug of its own. */
+     out a second ago would be a bug of its own, and silencing a call would be a
+     worse one -- so a ring, which loops and goes on long after any tone would
+     have finished, is exempt before anything else is decided. */
   const muted = source => {
-    if (!muteSendTone || Date.now() - sentAt > SEND_TONE_MS) return false;
     if (source && source.closest && source.closest('#main')) return false;
-    if (!mutedOne) { mutedOne = true; log('muting the tone WhatsApp plays for a message going out'); }
+    if (source && (source.loop === true || lengthOf(source) > RINGING_S)) return false;
+
+    /* Within a beat of a keystroke or a click on send: their own message. */
+    if (Date.now() - sentAt <= SEND_TONE_MS) {
+      if (!muteSendTone) return false;
+      if (!mutedSend) { mutedSend = true; log('muting the tone WhatsApp plays for a message going out'); }
+      return true;
+    }
+
+    /* Anything else: a message arriving while the window is away, which the
+       client is about to announce with the desktop's tone. Only once that tone
+       is decoded and ready, though -- muting this one before there is another
+       would turn an arrival the user could hear into one they could not. */
+    if (!mutePageTone || !toneBuffer) return false;
+    if (!mutedArrival) { mutedArrival = true; log('muting the tone WhatsApp plays for a message arriving'); }
     return true;
   };
 
   watchForSends();
+  interceptSounds();
 
   /* --------------------------------------------- the notifications WA raises */
 
@@ -908,6 +1007,7 @@ const start = ({ send, on }) => {
   on('config', config => {
     if (config && config.notifications) installNotificationShim();
     muteSendTone = !!(config && config.muteSendTone);
+    mutePageTone = !!(config && config.mutePageTone);
     log('ready on ' + location.host);
 
     /* What the page asks for, so the app can bind those families to the

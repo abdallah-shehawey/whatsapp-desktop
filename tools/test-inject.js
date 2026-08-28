@@ -83,6 +83,10 @@ class El {
   }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
   contains(other) { let n = other; while (n) { if (n === this) return true; n = n.parentNode; } return false; }
+  /* Pressing a row aims at the middle of it, so there has to be a middle. The
+     numbers do not matter to anything: nothing in the page reads them back. */
+  getBoundingClientRect() { return { left: 0, top: 0, width: 320, height: 72 }; }
+  dispatchEvent(event) { dispatched.push({ on: this, type: event.type }); return true; }
   closest(sel) {
     const tests = parseSel(sel);
     let node = this;
@@ -202,6 +206,23 @@ class HTMLMediaElement {
 }
 class AudioBufferSourceNode {
   start() { played.push('webaudio'); }
+  connect() {}
+}
+/* Enough of WebAudio for the client's own tone to be decoded and played, which
+   is what the muting of WhatsApp's arrival tone is conditional on: silencing
+   theirs before ours is ready would leave the arrival with no sound at all. */
+class AudioContext {
+  constructor() { this.state = 'running'; this.destination = {}; }
+  decodeAudioData() { return Promise.resolve({ duration: 0.4 }); }
+  createBufferSource() { return new AudioBufferSourceNode(); }
+  resume() { return Promise.resolve(); }
+}
+
+/* Every event the page dispatches at the chat list, in order, with the element
+   it was aimed at. */
+let dispatched = [];
+class MockEvent {
+  constructor(type) { this.type = type; }
 }
 
 const sandbox = {
@@ -209,7 +230,9 @@ const sandbox = {
   navigator: { userAgent: 'test' },
   location: { host: 'web.whatsapp.com' },
   setTimeout, clearTimeout, clearInterval,
-  HTMLMediaElement, AudioBufferSourceNode,
+  HTMLMediaElement, AudioBufferSourceNode, AudioContext,
+  MouseEvent: MockEvent, PointerEvent: MockEvent,
+  atob: text => Buffer.from(text, 'base64').toString('binary'),
   /* watchList is installed on an interval in the page; here it runs once and the
      observer it registers is driven by hand, one pass at a time. */
   setInterval: fn => { fn(); return 0; },
@@ -447,6 +470,65 @@ const check = (label, got, want) => {
   advance(SEND_TONE_GAP);
   new sandbox.HTMLMediaElement('').play();
   check('and somebody else writing two seconds later still rings', played.join(), 'audio');
+
+  /* ---------------------------------------------- the tone of a message in */
+
+  /* The other half of the same idea. WhatsApp announces an arrival itself only
+     while the window is away, and it does it with a tone of its own -- so the
+     same message sounded one way in front of the user and another behind them.
+     The client plays the desktop's tone for both now, which means this one has
+     to go. */
+  push('config', { notifications: false, muteSendTone: true, mutePageTone: true });
+  advance(SEND_TONE_GAP);
+
+  played = [];
+  new sandbox.HTMLMediaElement('').play();
+  check('with no tone of its own yet, the client leaves WhatsApp to announce it',
+        played.join(), 'audio');
+
+  push('tone', { data: Buffer.from('a tone').toString('base64'), mime: 'audio/ogg' });
+  await sleep(0);                                  // decoded on a microtask
+
+  played = [];
+  new sandbox.HTMLMediaElement('').play();
+  new sandbox.AudioBufferSourceNode().start();
+  check('the tone for a message arriving is muted once the client has one',
+        played.join(), '');
+
+  played = [];
+  push('play-tone', null);
+  await sleep(0);
+  check("and the client's own tone plays straight through the muting",
+        played.join(), 'webaudio');
+
+  played = [];
+  const ringing = new sandbox.HTMLMediaElement('');
+  ringing.loop = true;
+  ringing.play();
+  check('a call ringing is never muted, whatever else is', played.join(), 'audio');
+
+  /* ------------------------------------------ opening a chat from a banner */
+
+  /* A banner is a message, and clicking one is asking to read it. The page is
+     given the chat by name and presses the row, because that is the only way in
+     to a conversation from out here. */
+  dispatched = [];
+  push('open-chat-request', 'EL Joo');
+  check('clicking a banner presses the row for its chat',
+        dispatched.map(d => d.type).join(','),
+        'pointerdown,mousedown,pointerup,mouseup,click');
+  /* Aimed at the name and not at the row: the handler that opens a conversation
+     is inside the row, and an event that starts at the row travels away from it.
+     That was measured on the live page, and it is the whole reason this presses
+     what it presses. */
+  check('and it is aimed inside that row and not at the row itself',
+        dispatched.length ? dispatched[0].on.getAttribute('title') : '',
+        'EL Joo');
+
+  dispatched = [];
+  push('open-chat-request', 'Somebody Not In The List');
+  check('a chat the list is not showing is left alone rather than guessed at',
+        dispatched.length, 0);
 
   console.log(failures ? '\n' + failures + ' failed' : '\nall checks pass');
   process.exit(failures ? 1 : 0);

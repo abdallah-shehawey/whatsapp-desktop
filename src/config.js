@@ -28,6 +28,7 @@ const DEFAULTS = {
   'notifications.enabled': true,
   'notifications.sound': true,     // a tone for the banners this client raises itself
   'notifications.outgoing-sound': false,  // WhatsApp's own tone for a message you send
+  'notifications.whatsapp-sound': false,  // let WhatsApp play its own tone for a message arriving
   'notifications.banner-seconds': 12,
 };
 
@@ -120,6 +121,13 @@ class Config {
       '# here: the message is already on screen, with a tick under it, in the',
       '# window you are looking at.',
       `outgoing-sound = ${v['notifications.outgoing-sound']}`,
+      '# WhatsApp also plays one for a message arriving while the window is away,',
+      '# and that is the only moment it announces anything itself. Off here, so',
+      '# that a message sounds the same whether the window is in front or in the',
+      '# tray: the client plays the desktop tone for both. Turn it on to hear',
+      "# WhatsApp's own tone instead -- and then the window in front stays silent,",
+      '# because that is the half WhatsApp does not announce.',
+      `whatsapp-sound = ${v['notifications.whatsapp-sound']}`,
       '# Seconds before a banner is taken down and filed silently. GNOME parks a',
       '# banner under an idle pointer for ever, and one parked banner swallows',
       '# every message behind it.',
