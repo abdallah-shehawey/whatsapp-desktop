@@ -170,12 +170,6 @@ class TrayIcon {
           },
         ],
       },
-      {
-        label: 'Start at Login',
-        type: 'checkbox',
-        checked: autostart,
-        click: item => this.handlers.onToggleAutostart && this.handlers.onToggleAutostart(item.checked),
-      },
       { type: 'separator' },
       { label: 'Quit', accelerator: 'Ctrl+Q', click: () => this.handlers.onQuit && this.handlers.onQuit() },
     ]));

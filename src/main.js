@@ -54,7 +54,8 @@ const config = new Config();
    client into. */
 const dataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
 app.setPath('userData', path.join(dataHome, 'whatsapp-desktop'));
-app.setName('whatsapp-desktop');
+app.setName('WhatsApp');
+process.title = 'WhatsApp';
 
 /* Notifications carry the application's desktop file: without it GNOME files
    every banner under "Electron" and draws Electron's icon on it. */
@@ -247,10 +248,10 @@ const openSettings = () => {
 
   const isDark = nativeTheme.shouldUseDarkColors;
   settingsWin = new BrowserWindow({
-    width: 560,
-    height: 620,
-    minWidth: 480,
-    minHeight: 520,
+    width: 480,
+    height: 590,
+    resizable: false,
+    frame: false,
     title: 'WhatsApp Settings',
     icon: appIcon,
     autoHideMenuBar: true,

@@ -18,7 +18,6 @@
       --text-muted: #667781;
       --border-color: #2a3942;
       --switch-bg: #374248;
-      --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
       --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
@@ -36,7 +35,6 @@
         --text-muted: #8696a0;
         --border-color: #e9edef;
         --switch-bg: #d1d7db;
-        --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
       }
     }
 
@@ -53,7 +51,6 @@
       --text-muted: #667781;
       --border-color: #2a3942;
       --switch-bg: #374248;
-      --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     }
 
     :root[data-theme="light"] {
@@ -69,7 +66,6 @@
       --text-muted: #8696a0;
       --border-color: #e9edef;
       --switch-bg: #d1d7db;
-      --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     }
 
     * {
@@ -83,55 +79,45 @@
       font-family: var(--font-family);
       background-color: var(--bg-primary);
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: 13.5px;
       line-height: 1.5;
       overflow-x: hidden;
       overflow-y: auto;
-      padding-bottom: 24px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
       transition: background-color 0.25s ease, color 0.25s ease;
     }
 
-    /* Scrollbar */
-    ::-webkit-scrollbar {
-      width: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: var(--border-color);
-      border-radius: 3px;
-    }
-
+    /* Custom Header / Drag Bar */
     .header {
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      -webkit-app-region: drag;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 20px;
+      padding: 12px 16px;
       background-color: var(--bg-secondary);
       border-bottom: 1px solid var(--border-color);
-      transition: background-color 0.25s ease, border-color 0.25s ease;
+      flex-shrink: 0;
     }
 
     .header-title {
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 17px;
+      font-size: 15px;
       font-weight: 600;
       color: var(--text-primary);
     }
 
     .header-title svg {
-      width: 22px;
-      height: 22px;
+      width: 20px;
+      height: 20px;
       fill: var(--accent);
     }
 
     .close-btn {
+      -webkit-app-region: no-drag;
       background: transparent;
       border: none;
       color: var(--text-secondary);
@@ -149,34 +135,46 @@
       color: var(--text-primary);
     }
 
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 3px;
+    }
+
     .container {
-      max-width: 540px;
-      margin: 0 auto;
-      padding: 16px 20px 0;
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 16px;
+      flex: 1;
+      overflow-y: auto;
     }
 
     .section {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
     }
 
     .section-title {
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 11px;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.8px;
       color: var(--text-muted);
-      padding: 0 4px;
+      padding: 0 2px;
     }
 
     .card {
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: 12px;
+      border-radius: 10px;
       overflow: hidden;
       transition: all 0.25s ease;
     }
@@ -186,7 +184,7 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 8px;
-      padding: 12px;
+      padding: 10px;
     }
 
     .theme-option {
@@ -194,20 +192,21 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      padding: 14px 8px;
+      gap: 6px;
+      padding: 12px 6px;
       background-color: var(--bg-secondary);
       border: 2px solid transparent;
-      border-radius: 10px;
+      border-radius: 8px;
       cursor: pointer;
       transition: all 0.2s ease;
       color: var(--text-secondary);
       font-weight: 500;
+      font-size: 12.5px;
     }
 
     .theme-option svg {
-      width: 24px;
-      height: 24px;
+      width: 22px;
+      height: 22px;
       fill: currentColor;
     }
 
@@ -228,7 +227,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 16px;
+      padding: 11px 14px;
       border-bottom: 1px solid var(--border-color);
       transition: background-color 0.15s ease;
     }
@@ -244,28 +243,28 @@
     .row-info {
       display: flex;
       flex-direction: column;
-      gap: 3px;
-      padding-right: 16px;
+      gap: 2px;
+      padding-right: 12px;
     }
 
     .row-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
       color: var(--text-primary);
     }
 
     .row-desc {
-      font-size: 12px;
+      font-size: 11.5px;
       color: var(--text-secondary);
-      line-height: 1.4;
+      line-height: 1.35;
     }
 
     /* Switch Toggle */
     .switch {
       position: relative;
       display: inline-block;
-      width: 44px;
-      height: 24px;
+      width: 40px;
+      height: 22px;
       flex-shrink: 0;
     }
 
@@ -283,19 +282,19 @@
       right: 0;
       bottom: 0;
       background-color: var(--switch-bg);
-      transition: .25s ease;
-      border-radius: 24px;
+      transition: .22s ease;
+      border-radius: 22px;
     }
 
     .slider:before {
       position: absolute;
       content: "";
-      height: 18px;
-      width: 18px;
+      height: 16px;
+      width: 16px;
       left: 3px;
       bottom: 3px;
       background-color: white;
-      transition: .25s ease;
+      transition: .22s ease;
       border-radius: 50%;
       box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
@@ -305,32 +304,32 @@
     }
 
     input:checked + .slider:before {
-      transform: translateX(20px);
+      transform: translateX(18px);
     }
 
-    /* Number & Zoom controls */
+    /* Stepper / Zoom controls */
     .stepper {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       background-color: var(--bg-secondary);
       border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 4px;
+      border-radius: 6px;
+      padding: 3px;
     }
 
     .stepper-btn {
-      width: 28px;
-      height: 28px;
+      width: 24px;
+      height: 24px;
       border: none;
       background-color: var(--bg-card);
       color: var(--text-primary);
-      border-radius: 6px;
+      border-radius: 4px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
       transition: all 0.15s ease;
     }
@@ -341,18 +340,19 @@
     }
 
     .stepper-val {
-      min-width: 44px;
+      min-width: 38px;
       text-align: center;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-primary);
     }
 
     .footer-note {
       text-align: center;
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
-      margin-top: 8px;
+      margin-top: 2px;
+      padding-bottom: 8px;
     }
   </style>
 </head>
@@ -365,8 +365,8 @@
       </svg>
       <span>WhatsApp Settings</span>
     </div>
-    <button class="close-btn" id="closeBtn" title="Close Settings">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <button class="close-btn" id="closeBtn" title="Close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="18" y1="6" x2="6" y2="18"></line>
         <line x1="6" y1="6" x2="18" y2="18"></line>
       </svg>
@@ -377,7 +377,7 @@
 
     <!-- Theme Section -->
     <div class="section">
-      <div class="section-title">Theme / المظهر</div>
+      <div class="section-title">Theme</div>
       <div class="card">
         <div class="theme-grid">
           <button class="theme-option" data-theme="system" id="themeSystem">
@@ -386,7 +386,7 @@
             </svg>
             <span>System</span>
           </button>
-          <button class="theme-option" data-theme="dark" id="themeDark">
+          <button class="theme-option active" data-theme="dark" id="themeDark">
             <svg viewBox="0 0 24 24">
               <path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-5.4-5.4c0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
             </svg>
@@ -404,7 +404,7 @@
 
     <!-- Startup & System -->
     <div class="section">
-      <div class="section-title">Startup & Tray / التشغيل وشريط المهام</div>
+      <div class="section-title">Startup & Tray</div>
       <div class="card">
         <div class="row">
           <div class="row-info">
@@ -412,7 +412,7 @@
             <div class="row-desc">Launch WhatsApp automatically in the background at startup</div>
           </div>
           <label class="switch">
-            <input type="checkbox" id="autostartToggle">
+            <input type="checkbox" id="autostartToggle" checked>
             <span class="slider"></span>
           </label>
         </div>
@@ -423,7 +423,7 @@
             <div class="row-desc">Closing the window leaves WhatsApp running in the tray</div>
           </div>
           <label class="switch">
-            <input type="checkbox" id="closeToTrayToggle">
+            <input type="checkbox" id="closeToTrayToggle" checked>
             <span class="slider"></span>
           </label>
         </div>
@@ -443,7 +443,7 @@
 
     <!-- Notifications & Sounds -->
     <div class="section">
-      <div class="section-title">Notifications & Sounds / الإشعارات والأصوات</div>
+      <div class="section-title">Notifications & Sounds</div>
       <div class="card">
         <div class="row">
           <div class="row-info">
@@ -451,7 +451,7 @@
             <div class="row-desc">Show notification banners with sender picture and message</div>
           </div>
           <label class="switch">
-            <input type="checkbox" id="notifyToggle">
+            <input type="checkbox" id="notifyToggle" checked>
             <span class="slider"></span>
           </label>
         </div>
@@ -462,7 +462,7 @@
             <div class="row-desc">Play tone when a new message arrives</div>
           </div>
           <label class="switch">
-            <input type="checkbox" id="notifySoundToggle">
+            <input type="checkbox" id="notifySoundToggle" checked>
             <span class="slider"></span>
           </label>
         </div>
@@ -482,7 +482,7 @@
 
     <!-- Display & Zoom -->
     <div class="section">
-      <div class="section-title">Display & Text / الخط والعرض</div>
+      <div class="section-title">Display & Text</div>
       <div class="card">
         <div class="row">
           <div class="row-info">
@@ -548,6 +548,7 @@
     }
 
     async function loadSettings() {
+      if (!window.api) return;
       try {
         const data = await window.api.getSettings();
         if (!data) return;
@@ -571,63 +572,65 @@
     Object.keys(themeButtons).forEach(theme => {
       themeButtons[theme].addEventListener('click', async () => {
         applyThemeToUI(theme);
-        await window.api.setTheme(theme);
+        if (window.api) await window.api.setTheme(theme);
       });
     });
 
     // Autostart Handler
     autostartToggle.addEventListener('change', async () => {
-      await window.api.setAutostart(autostartToggle.checked);
+      if (window.api) await window.api.setAutostart(autostartToggle.checked);
     });
 
     // Toggle Handlers
     closeToTrayToggle.addEventListener('change', async () => {
-      await window.api.setSetting('behaviour.close-to-tray', closeToTrayToggle.checked);
+      if (window.api) await window.api.setSetting('behaviour.close-to-tray', closeToTrayToggle.checked);
     });
 
     minimizeToTrayToggle.addEventListener('change', async () => {
-      await window.api.setSetting('behaviour.minimize-to-tray', minimizeToTrayToggle.checked);
+      if (window.api) await window.api.setSetting('behaviour.minimize-to-tray', minimizeToTrayToggle.checked);
     });
 
     notifyToggle.addEventListener('change', async () => {
-      await window.api.setSetting('notifications.enabled', notifyToggle.checked);
+      if (window.api) await window.api.setSetting('notifications.enabled', notifyToggle.checked);
     });
 
     notifySoundToggle.addEventListener('change', async () => {
-      await window.api.setSetting('notifications.sound', notifySoundToggle.checked);
+      if (window.api) await window.api.setSetting('notifications.sound', notifySoundToggle.checked);
     });
 
     outgoingSoundToggle.addEventListener('change', async () => {
-      await window.api.setSetting('notifications.outgoing-sound', outgoingSoundToggle.checked);
+      if (window.api) await window.api.setSetting('notifications.outgoing-sound', outgoingSoundToggle.checked);
     });
 
     arabicFixToggle.addEventListener('change', async () => {
-      await window.api.setSetting('view.arabic-fix', arabicFixToggle.checked);
+      if (window.api) await window.api.setSetting('view.arabic-fix', arabicFixToggle.checked);
     });
 
     // Zoom Handlers
     zoomInBtn.addEventListener('click', async () => {
       currentZoom = Math.min(2.0, parseFloat((currentZoom + 0.1).toFixed(1)));
       zoomVal.textContent = Math.round(currentZoom * 100) + '%';
-      await window.api.setSetting('view.zoom', currentZoom);
+      if (window.api) await window.api.setSetting('view.zoom', currentZoom);
     });
 
     zoomOutBtn.addEventListener('click', async () => {
       currentZoom = Math.max(0.5, parseFloat((currentZoom - 0.1).toFixed(1)));
       zoomVal.textContent = Math.round(currentZoom * 100) + '%';
-      await window.api.setSetting('view.zoom', currentZoom);
+      if (window.api) await window.api.setSetting('view.zoom', currentZoom);
     });
 
     closeBtn.addEventListener('click', () => {
-      window.api.close();
+      if (window.api) window.api.close();
     });
 
-    window.api.onSettingsChanged(data => {
-      if (data) {
-        if (data.theme !== undefined) applyThemeToUI(data.theme);
-        if (data.autostart !== undefined) autostartToggle.checked = !!data.autostart;
-      }
-    });
+    if (window.api && window.api.onSettingsChanged) {
+      window.api.onSettingsChanged(data => {
+        if (data) {
+          if (data.theme !== undefined) applyThemeToUI(data.theme);
+          if (data.autostart !== undefined) autostartToggle.checked = !!data.autostart;
+        }
+      });
+    }
 
     loadSettings();
   </script>

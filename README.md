@@ -28,6 +28,10 @@ nothing, not even a state directory.
 - Dark or light follows the desktop, links open in your browser, downloads land
   in `~/Downloads`, `Ctrl` `+`/`-`/`0` zoom and the window size is remembered.
 
+<p align="center">
+  <img src="screenshots/settings.png" alt="WhatsApp Desktop Settings" width="420" />
+</p>
+
 ## Install
 
 From the [shinux repository](https://abdallah-shehawey.github.io/shinux-repo/):
