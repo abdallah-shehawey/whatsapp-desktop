@@ -33,5 +33,5 @@ rpmbuild -bb \
   --define "_build_id_links none" \
   "$BUILD/rpmbuild/SPECS/whatsapp-desktop.spec" >/dev/null
 
-cp "$BUILD"/rpmbuild/RPMS/*/whatsapp-desktop-"$VERSION"-*.rpm "$DIST/"
+cp "$BUILD"/rpmbuild/RPMS/*/*.rpm "$DIST/"
 printf 'Created %s\n' "$DIST/whatsapp-desktop-$VERSION-*.rpm"
