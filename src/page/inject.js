@@ -144,8 +144,13 @@ const start = ({ send, on }) => {
 
   const titlesIn = row => [...row.querySelectorAll('span[title]')];
   const nameOf = row => {
+    if (!row) return '';
     const first = titlesIn(row)[0];
-    return strip(first && first.getAttribute('title'));
+    const fromTitle = strip(first && first.getAttribute('title'));
+    if (fromTitle) return fromTitle;
+    const dirAuto = row.querySelector('span[dir="auto"], div[dir="auto"]');
+    if (dirAuto && dirAuto.innerText) return strip(dirAuto.innerText.split('\n')[0]);
+    return '';
   };
 
   /* A message of our own moves a chat to the top of the list and rewrites its
@@ -177,15 +182,21 @@ const start = ({ send, on }) => {
   const isMuted = row => [...row.querySelectorAll('[aria-label]')]
       .some(e => MUTED_LABEL.test(e.getAttribute('aria-label') || ''));
 
-  /* How many messages the row says are waiting. The pill carries the number in
-     its label ("3 unread messages"); a row with no pill is caught up. */
   const UNREAD_LABEL = /unread|غير مقروء/i;
   const unreadCount = row => {
+    if (!row) return 0;
     for (const el of row.querySelectorAll('[aria-label]')) {
       const label = el.getAttribute('aria-label') || '';
       if (!UNREAD_LABEL.test(label)) continue;
       const digits = label.match(/\d+/);
       return digits ? parseInt(digits[0], 10) : 1;
+    }
+    for (const el of row.querySelectorAll('[data-icon]')) {
+      const icon = el.getAttribute('data-icon') || '';
+      if (/unread/i.test(icon)) {
+        const digits = (el.innerText || el.getAttribute('aria-label') || '').match(/\d+/);
+        return digits ? parseInt(digits[0], 10) : 1;
+      }
     }
     return 0;
   };
@@ -249,9 +260,28 @@ const start = ({ send, on }) => {
      because two identical messages inside the same minute move nothing else. */
   const readRow = row => {
     const titles = titlesIn(row);
+    const name = (titles[0] && strip(titles[0].getAttribute('title'))) || nameOf(row);
+    let preview = strip(titles[1] && titles[1].getAttribute('title'));
+
+    if (!preview && row) {
+      const icons = iconNames(row);
+      if (icons.some(i => /sticker|ملصق/i.test(i))) preview = 'Sticker';
+      else if (icons.some(i => /image|photo|camera|صورة/i.test(i))) preview = 'Photo';
+      else if (icons.some(i => /audio|ptt|mic|headset|صوت|voice/i.test(i))) preview = 'Voice message';
+      else if (icons.some(i => /video|فيديو/i.test(i))) preview = 'Video';
+      else if (icons.some(i => /document|doc|مستند/i.test(i))) preview = 'Document';
+      else if (icons.some(i => /gif/i.test(i))) preview = 'GIF';
+      else {
+        const text = row.innerText || '';
+        if (/ملصق|sticker/i.test(text)) preview = 'Sticker';
+        else if (/صورة|photo|image/i.test(text)) preview = 'Photo';
+        else if (/رسالة صوتية|صوت|voice message/i.test(text)) preview = 'Voice message';
+      }
+    }
+
     return {
-      name:    strip(titles[0] && titles[0].getAttribute('title')),
-      preview: strip(titles[1] && titles[1].getAttribute('title')),
+      name,
+      preview: preview || '',
       badge:   unreadCount(row),
       when:    ((row.innerText || '').match(/\b\d{1,2}:\d{2}(?:\s*[AP]M)?\b/) || [''])[0],
     };
@@ -432,19 +462,45 @@ const start = ({ send, on }) => {
      answer changes, which is a handful of messages an hour rather than one
      message per scan. */
   let lastUnread = null;
-  const reportUnread = pane => {
-    const names = [];
-    for (const row of pane.querySelectorAll('[role="row"]')) {
-      if (!unreadCount(row)) continue;
-      const name = nameOf(row);
-      if (name) names.push(name);
-    }
-    /* An empty list from an empty pane is not "everything has been read": the
-       chat list is rebuilt from nothing on every re-render, and reporting that
-       would withdraw every notification on screen. */
-    if (!names.length && !pane.querySelector('[role="row"]')) return;
+  const knownUnread = new Map();
+  const UNREAD_GRACE_MS = 2500;
 
-    const key = names.join(SEP);
+  const reportUnread = pane => {
+    const now = Date.now();
+    const currentUnread = new Set();
+    const renderedNames = new Set();
+
+    for (const row of pane.querySelectorAll('[role="row"]')) {
+      const name = nameOf(row);
+      if (!name) continue;
+      renderedNames.add(name);
+      if (unreadCount(row) > 0) {
+        currentUnread.add(name);
+        knownUnread.set(name, now);
+      }
+    }
+
+    if (!renderedNames.size && !pane.querySelector('[role="row"]')) return;
+
+    const names = [];
+    for (const [name, lastSeen] of knownUnread.entries()) {
+      if (currentUnread.has(name)) {
+        names.push(name);
+      } else if (renderedNames.has(name)) {
+        const open = openRow();
+        const isOpenChat = open && nameOf(open) === name && focused;
+        if (!isOpenChat && (now - lastSeen < UNREAD_GRACE_MS)) {
+          names.push(name);
+        } else {
+          knownUnread.delete(name);
+        }
+      } else {
+        if (now - lastSeen < 60000) names.push(name);
+        else knownUnread.delete(name);
+      }
+    }
+
+    const key = names.sort().join(SEP);
     if (key === lastUnread) return;
     lastUnread = key;
     send('unread-chats', names);

@@ -428,6 +428,16 @@ const check = (label, got, want) => {
   check('and reported again without it once it has been read',
         (unreadReports.pop() || []).includes('EL Joo'), false);
 
+  /* A sticker or media arrival without a preview title is recognized and announced */
+  await describe(); // drain any queued arrival from the unread test above
+  update(pdf, { badge: 5, preview: '', sender: 'Mega', when: clock() });
+  const stickerIcon = el('span', { 'data-icon': 'ic-sticker' });
+  pdf.append(stickerIcon);
+  await scan();
+  check('a sticker message is announced as Sticker',
+        await describe(), 'Pdf & Assignments | Mega: Sticker');
+  stickerIcon.remove();
+
   /* ----------------------------------------------- the tone of a message out */
 
   /* Muted by the moment rather than by name: WhatsApp serves its sounds from

@@ -774,10 +774,8 @@ const wireIpc = () => {
   });
 
   ipcMain.on('wa:page-notification-close', (event, note) => {
-    const entry = note && pageBanners.get(note.id);
-    if (!entry) return;
+    if (!note) return;
     pageBanners.delete(note.id);
-    entry.dispose();
   });
 
   /* The conversation on screen, reported by the page when it changes and again
