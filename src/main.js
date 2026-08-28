@@ -45,6 +45,23 @@ const ARRIVAL_SETTLE_MS = 4000;
 const hidden = process.argv.includes('--hidden');
 const config = new Config();
 
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  const pkg = require('../package.json');
+  console.log(`whatsapp-desktop ${pkg.version}`);
+  app.exit(0);
+}
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(`Usage: whatsapp-desktop [options]
+
+Options:
+  --hidden        Start minimized to the system tray
+  -v, --version   Show version number
+  -h, --help      Show this help message
+`);
+  app.exit(0);
+}
+
 /* ------------------------------------------------------------------ paths */
 
 /* The state directory keeps the project's own name rather than the product's.
