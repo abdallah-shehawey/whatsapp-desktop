@@ -31,7 +31,10 @@ rpmbuild -bb \
   --define "_topdir $BUILD/rpmbuild" \
   --define "version $VERSION" \
   --define "_build_id_links none" \
-  "$BUILD/rpmbuild/SPECS/whatsapp-desktop.spec" >/dev/null
+  "$BUILD/rpmbuild/SPECS/whatsapp-desktop.spec"
 
-cp "$BUILD"/rpmbuild/RPMS/*/*.rpm "$DIST/"
+shopt -s nullglob
+for rpm in "$BUILD"/rpmbuild/RPMS/*/*.rpm; do
+  cp -v "$rpm" "$DIST/"
+done
 printf 'Created %s\n' "$DIST/whatsapp-desktop-$VERSION-*.rpm"
