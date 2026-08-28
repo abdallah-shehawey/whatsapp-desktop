@@ -951,6 +951,16 @@ const start = ({ send, on }) => {
     /* Ringing or looped sounds */
     if (source.loop === true || lengthOf(source) > RINGING_S) return false;
 
+    /* Voice notes and media playback. WhatsApp plays voice messages, audio files
+       and video messages through <audio>/<video> elements whose src is a blob: URL
+       or a URL on WhatsApp's media CDN (mmg.whatsapp.net, pps.whatsapp.net, or
+       media-*.cdn.whatsapp.net). These are user content, not notification tones,
+       and must never be silenced. Their duration is often NaN when .play() is first
+       called -- the metadata has not loaded yet -- so the RINGING_S check above
+       cannot catch them. */
+    const src = source.currentSrc || source.src || '';
+    if (/^blob:|mmg\.whatsapp\.net|pps\.whatsapp\.net|media[\w-]*\.cdn\.whatsapp\.net/i.test(src)) return false;
+
     /* Within a beat of a keystroke or a click on send: their own message. */
     if (Date.now() - sentAt <= SEND_TONE_MS) {
       if (!muteSendTone) return false;

@@ -9,7 +9,7 @@
  */
 'use strict';
 
-const { app, BrowserWindow, Menu, session, shell, nativeTheme, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, Menu, session, shell, nativeTheme, ipcMain, screen, desktopCapturer, systemPreferences } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -856,6 +856,33 @@ const wirePermissions = ses => {
   });
 };
 
+/* Screen sharing during calls. WhatsApp Web calls getDisplayMedia() when the user
+   presses the share-screen button in a call, and Electron does not forward that to
+   the compositor on its own -- the page must ask the main process for a source, or
+   the request silently goes nowhere. The entire screen is handed over without a
+   picker: WhatsApp's own UI already tells the user what they are sharing, and a
+   system dialog on top of that would be a speed bump. PipeWire is the path it takes
+   on Wayland, and the WebRTCPipeWireCapturer flag in the switches above is what
+   enables that. */
+const wireScreenSharing = ses => {
+  ses.setDisplayMediaRequestHandler(async (request, callback) => {
+    try {
+      const sources = await desktopCapturer.getSources({ types: ['screen'] });
+      const source = sources[0];
+      if (!source) {
+        console.warn('screen sharing: no sources found');
+        callback({ video: null });
+        return;
+      }
+      console.log('screen sharing: handing over "%s"', source.name);
+      callback({ video: source, audio: 'loopback' });
+    } catch (err) {
+      console.warn('screen sharing failed: %s', err.message);
+      callback({ video: null });
+    }
+  });
+};
+
 /* WhatsApp Web keys the client it thinks it is talking to off the user agent, and
    the Electron one is not a browser it knows. A plain Chrome string is: the same
    page, the same features, and the device registers as Chrome on Linux rather
@@ -894,6 +921,7 @@ app.whenReady().then(() => {
   ses.setUserAgent(ua);
   wireDownloads(ses);
   wirePermissions(ses);
+  wireScreenSharing(ses);
 
   if (config.get('behaviour.spellcheck')) {
     try { ses.setSpellCheckerLanguages(['en-US']); } catch (e) {}
