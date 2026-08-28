@@ -24,6 +24,7 @@ nothing, not even a state directory.
   queues three behind it and drops the rest, so each banner is closed after
   twelve seconds and refiled silently in the notification centre.
 - **Voice and video calls work out of the box.** Full WebRTC support for microphone and camera with automatic device permissions and Linux-specific rendering fixes.
+- **Built-in Settings & Theme Switcher.** Switch between System Default, Dark Mode, and Light Mode, toggle Autostart at login, and configure tray behavior from the dedicated Settings window (`Ctrl+,`) or directly from the tray menu.
 - Dark or light follows the desktop, links open in your browser, downloads land
   in `~/Downloads`, `Ctrl` `+`/`-`/`0` zoom and the window size is remembered.
 

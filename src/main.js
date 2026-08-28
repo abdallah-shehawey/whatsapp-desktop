@@ -23,6 +23,7 @@ const { SEP } = require('./page/inject.js');
 const debug = require('./debug.js');
 const sound = require('./sound.js');
 const fonts = require('./fonts.js');
+const autostart = require('./autostart.js');
 
 const APP_ID = 'io.github.shehawey.whatsapp-desktop';
 const URL = 'https://web.whatsapp.com/';
@@ -160,6 +161,7 @@ if (!app.requestSingleInstanceLock()) {
 /* ----------------------------------------------------------------- state */
 
 let win = null;
+let settingsWin = null;
 let tray = null;
 let banners = null;
 let quitting = false;
@@ -207,6 +209,71 @@ const showWindow = () => {
 const hideWindow = () => {
   if (!win || win.isDestroyed()) return;
   win.hide();
+};
+
+const setTheme = theme => {
+  config.set('view.theme', theme);
+  config.save();
+  if (theme === 'dark') {
+    nativeTheme.themeSource = 'dark';
+  } else if (theme === 'light') {
+    nativeTheme.themeSource = 'light';
+  } else {
+    nativeTheme.themeSource = desktop.prefersDark() ? 'dark' : 'light';
+  }
+  if (win && !win.isDestroyed()) {
+    win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#0b141a' : '#ffffff');
+  }
+  if (tray) tray.render();
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.webContents.send('settings:changed', { theme });
+  }
+};
+
+const setAutostart = enable => {
+  autostart.setEnabled(enable);
+  if (tray) tray.render();
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.webContents.send('settings:changed', { autostart: enable });
+  }
+};
+
+const openSettings = () => {
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.show();
+    settingsWin.focus();
+    return;
+  }
+
+  const isDark = nativeTheme.shouldUseDarkColors;
+  settingsWin = new BrowserWindow({
+    width: 560,
+    height: 620,
+    minWidth: 480,
+    minHeight: 520,
+    title: 'WhatsApp Settings',
+    icon: appIcon,
+    autoHideMenuBar: true,
+    backgroundColor: isDark ? '#111b21' : '#f0f2f5',
+    webPreferences: {
+      preload: path.join(__dirname, 'settings-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  Menu.setApplicationMenu(null);
+  settingsWin.loadFile(path.join(__dirname, 'settings.html'));
+
+  settingsWin.once('ready-to-show', () => {
+    settingsWin.show();
+    settingsWin.focus();
+  });
+
+  settingsWin.on('closed', () => {
+    settingsWin = null;
+  });
 };
 
 const applyStyle = async () => {
@@ -276,6 +343,13 @@ const createWindow = () => {
 
   Menu.setApplicationMenu(null);
   win.loadURL(URL);
+
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && (input.control || input.meta) && input.key === ',') {
+      event.preventDefault();
+      openSettings();
+    }
+  });
 
   /* ------------------------------------------------------ closing and hiding */
 
@@ -593,6 +667,49 @@ const quit = () => {
 const wireIpc = () => {
   ipcMain.on('wa:log', (event, message) => console.log('page: %s', message));
 
+  ipcMain.handle('settings:get', () => {
+    return {
+      theme: config.get('view.theme') || 'system',
+      autostart: autostart.isEnabled(),
+      closeToTray: !!config.get('behaviour.close-to-tray'),
+      minimizeToTray: !!config.get('behaviour.minimize-to-tray'),
+      notifyEnabled: !!config.get('notifications.enabled'),
+      notifySound: !!config.get('notifications.sound'),
+      outgoingSound: !!config.get('notifications.outgoing-sound'),
+      arabicFix: !!config.get('view.arabic-fix'),
+      zoom: Number(config.get('view.zoom')) || 1.0,
+      fontSize: Number(config.get('view.font-size')) || 16,
+    };
+  });
+
+  ipcMain.handle('settings:set-theme', (_, theme) => {
+    setTheme(theme);
+    return true;
+  });
+
+  ipcMain.handle('settings:set-autostart', (_, enable) => {
+    setAutostart(enable);
+    return true;
+  });
+
+  ipcMain.handle('settings:set', (_, key, value) => {
+    config.set(key, value);
+    config.save();
+    if (key === 'view.zoom' && win && !win.isDestroyed()) {
+      win.webContents.setZoomFactor(Number(value) || 1.0);
+    }
+    if (key === 'view.arabic-fix' || key === 'view.font-size') {
+      applyStyle();
+    }
+    return true;
+  });
+
+  ipcMain.on('settings:close', () => {
+    if (settingsWin && !settingsWin.isDestroyed()) {
+      settingsWin.close();
+    }
+  });
+
   /* The font stack the page actually asks for. fontconfig is read once per
      process, so a family learned here takes effect on the next start -- which
      is the price of not having to guess what WhatsApp will name its font next. */
@@ -766,7 +883,14 @@ app.whenReady().then(() => {
     try { ses.setSpellCheckerLanguages(['en-US']); } catch (e) {}
   }
 
-  nativeTheme.themeSource = desktop.prefersDark() ? 'dark' : 'light';
+  const initialTheme = config.get('view.theme') || 'system';
+  if (initialTheme === 'dark') {
+    nativeTheme.themeSource = 'dark';
+  } else if (initialTheme === 'light') {
+    nativeTheme.themeSource = 'light';
+  } else {
+    nativeTheme.themeSource = desktop.prefersDark() ? 'dark' : 'light';
+  }
 
   banners = new Banners({
     seconds: Number(config.get('notifications.banner-seconds')) || 12,
@@ -782,6 +906,11 @@ app.whenReady().then(() => {
     onShow: showWindow,
     onHide: hideWindow,
     onQuit: quit,
+    onSettings: openSettings,
+    onSetTheme: setTheme,
+    getTheme: () => config.get('view.theme') || 'system',
+    onToggleAutostart: setAutostart,
+    getAutostart: () => autostart.isEnabled(),
     title: TITLE,
   });
 
@@ -791,7 +920,9 @@ app.whenReady().then(() => {
      changed in Settings, should not need the client restarted. */
   desktop.watch(['color-scheme', 'font-name'], key => {
     if (key === 'color-scheme') {
-      nativeTheme.themeSource = desktop.prefersDark() ? 'dark' : 'light';
+      if ((config.get('view.theme') || 'system') === 'system') {
+        nativeTheme.themeSource = desktop.prefersDark() ? 'dark' : 'light';
+      }
     } else {
       applyStyle();
     }

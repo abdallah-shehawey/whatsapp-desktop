@@ -15,6 +15,7 @@ const CONFIG_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir
 const CONFIG_PATH = path.join(CONFIG_DIR, 'whatsapp-desktop.conf');
 
 const DEFAULTS = {
+  'view.theme': 'system',          // 'system' (follow desktop), 'dark', or 'light'
   'view.font': '',                 // empty: follow the desktop font
   'view.font-size': 16,            // WhatsApp sizes in rem, so this scales the client
   'view.zoom': 1.0,
@@ -89,6 +90,8 @@ class Config {
       '# whatsapp-desktop -- every key is optional; delete one to get the default back.',
       '',
       '[view]',
+      '# Theme mode: system (follow desktop), dark, or light.',
+      `theme = ${v['view.theme'] || 'system'}`,
       '# Family for everything the client draws. Empty follows the desktop font.',
       `font = ${v['view.font']}`,
       '# Root font size in pixels. WhatsApp sizes in rem, so this scales the client.',

@@ -105,12 +105,12 @@ const waitForHost = onHost => {
 };
 
 class TrayIcon {
-  constructor({ normal, attention, onShow, onHide, onQuit, title = 'WhatsApp' }) {
+  constructor({ normal, attention, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, onToggleAutostart, getAutostart, title = 'WhatsApp' }) {
     this.icons = {
       normal: nativeImage.createFromPath(normal),
       attention: nativeImage.createFromPath(attention || normal),
     };
-    this.handlers = { onShow, onHide, onQuit };
+    this.handlers = { onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, onToggleAutostart, getAutostart };
     this.title = title;
     this.unread = false;
     this.windowVisible = false;
@@ -134,10 +134,47 @@ class TrayIcon {
 
   render() {
     if (!this.tray) return;
+    const currentTheme = this.handlers.getTheme ? this.handlers.getTheme() : 'system';
+    const autostart = this.handlers.getAutostart ? this.handlers.getAutostart() : false;
+
     this.tray.setContextMenu(Menu.buildFromTemplate([
       {
         label: this.windowVisible ? 'Hide WhatsApp' : 'Open WhatsApp',
         click: () => (this.windowVisible ? this.handlers.onHide : this.handlers.onShow)(),
+      },
+      { type: 'separator' },
+      {
+        label: 'Settings…',
+        click: () => this.handlers.onSettings && this.handlers.onSettings(),
+      },
+      {
+        label: 'Theme',
+        submenu: [
+          {
+            label: 'System Default',
+            type: 'radio',
+            checked: currentTheme === 'system',
+            click: () => this.handlers.onSetTheme && this.handlers.onSetTheme('system'),
+          },
+          {
+            label: 'Dark Mode',
+            type: 'radio',
+            checked: currentTheme === 'dark',
+            click: () => this.handlers.onSetTheme && this.handlers.onSetTheme('dark'),
+          },
+          {
+            label: 'Light Mode',
+            type: 'radio',
+            checked: currentTheme === 'light',
+            click: () => this.handlers.onSetTheme && this.handlers.onSetTheme('light'),
+          },
+        ],
+      },
+      {
+        label: 'Start at Login',
+        type: 'checkbox',
+        checked: autostart,
+        click: item => this.handlers.onToggleAutostart && this.handlers.onToggleAutostart(item.checked),
       },
       { type: 'separator' },
       { label: 'Quit', accelerator: 'Ctrl+Q', click: () => this.handlers.onQuit && this.handlers.onQuit() },
