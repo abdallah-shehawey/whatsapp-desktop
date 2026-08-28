@@ -1,12 +1,12 @@
 # Maintainer: Abdallah Shehawey <shehawey9@gmail.com>
 pkgname=whatsapp-desktop
-pkgver=1.2.1
+pkgver=1.2.2
 pkgrel=1
 pkgdesc='WhatsApp Web desktop client for Linux with tray integration and Arabic text fixes'
 arch=('x86_64')
 url='https://github.com/abdallah-shehawey/whatsapp-desktop'
 license=('GPL-3.0-only')
-depends=('alsa-lib' 'at-spi2-core' 'cairo' 'cups' 'dbus' 'gtk3' 'libdrm' 'libx11' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxrandr' 'mesa' 'nspr' 'nss' 'pango' 'zlib')
+depends=('alsa-lib' 'at-spi2-core' 'cairo' 'cups' 'dbus' 'glib2' 'gtk3' 'libdrm' 'libx11' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxrandr' 'mesa' 'nspr' 'nss' 'pango' 'zlib')
 makedepends=('git' 'npm' 'make')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/abdallah-shehawey/whatsapp-desktop/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')

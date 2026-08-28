@@ -735,7 +735,12 @@ app.on('window-all-closed', () => {
      Ctrl+Q and the tray's Quit are for. */
 });
 
-app.on('before-quit', () => { quitting = true; });
+app.on('before-quit', () => {
+  quitting = true;
+  /* The tray keeps a gdbus monitor alive to notice a status icon host coming and
+     going; nothing else would take it down. */
+  if (tray) tray.destroy();
+});
 
 app.whenReady().then(() => {
   sweepAvatars();

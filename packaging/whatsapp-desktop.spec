@@ -19,7 +19,7 @@
 %global __requires_exclude ^(libffmpeg|libEGL|libGLESv2|libvk_swiftshader|libvulkan)\.so.*$
 
 Name:           whatsapp-desktop
-Version:        %{?version}%{!?version:1.2.1}
+Version:        %{?version}%{!?version:1.2.2}
 Release:        %{?release}%{!?release:1}%{?dist}
 Summary:        WhatsApp Web desktop client for Linux
 License:        GPL-3.0-only
@@ -32,6 +32,10 @@ Requires:       at-spi2-atk
 Requires:       cairo
 Requires:       cups-libs
 Requires:       dbus-libs
+# gdbus, which is how the tray asks whether a status icon host is listening
+# and waits for one that is not up yet. gtk3 already pulls it in; it is named
+# here because the tray, not the toolkit, is what stops working without it.
+Requires:       glib2
 Requires:       gtk3
 Requires:       libX11
 Requires:       libXcomposite

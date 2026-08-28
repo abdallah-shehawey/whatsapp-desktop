@@ -13,7 +13,9 @@ nothing, not even a state directory.
 
 - **Lives in the tray.** Closing the window keeps the client connected;
   `Ctrl+Q` and the tray's Quit are the two ways out, and it can start hidden at
-  login.
+  login. GNOME has no tray of its own: the icon needs the AppIndicator
+  extension, and the client waits for it rather than giving up when it starts
+  first at login.
 - **Draws everything in the desktop's font**, applied live when you change it.
 - **One notification per message**, with the sender, the text and the sender's
   picture, a click that opens that conversation, and a withdrawal the moment you
