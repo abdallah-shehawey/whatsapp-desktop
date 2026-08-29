@@ -1269,9 +1269,58 @@ const start = ({ send, on }) => {
     return node;
   };
 
+  /* Escape, when WhatsApp does not answer it.
+   *
+   * Escape closes an ordinary conversation -- WhatsApp's own handler does that,
+   * and there are twenty-odd keydown listeners on window that look like one per
+   * mounted panel. It does NOT close a conversation inside a community: measured,
+   * with a real key from sendInputEvent, with the caret in the composer and with
+   * the caret taken out of it, and the panel stayed up both times.
+   *
+   * So the key is left to WhatsApp first, and only if the conversation is still
+   * there a moment later is it sent again -- at the document, with the caret out
+   * of the composer, which is the one arrangement not yet tried. A guard stops
+   * the second one being answered by this handler and asking for a third.
+   *
+   * Deliberately does nothing when the conversation did close: this is a retry
+   * for a key that went unanswered, not a second way of doing the same thing. */
+  const RETRY_MS = 150;
+  let retrying = false;
+  const conversation = () => document.querySelector('#main');
+
+  const retryEscape = () => {
+    if (!conversation()) return;
+    retrying = true;
+    try {
+      const box = composer();
+      if (box) { try { box.blur(); } catch (err) {} }
+      const list = document.querySelector('#pane-side');
+      if (list) {
+        if (!list.hasAttribute('tabindex')) list.setAttribute('tabindex', '-1');
+        try { list.focus(); } catch (err) {}
+      }
+      for (const type of ['keydown', 'keyup']) {
+        document.dispatchEvent(new KeyboardEvent(type, {
+          key: 'Escape', code: 'Escape', keyCode: 27, which: 27,
+          bubbles: true, cancelable: true, composed: true,
+        }));
+      }
+      log(conversation() ? 'Escape went unanswered and the retry did not help either'
+                         : 'Escape was answered on the retry');
+    } finally {
+      retrying = false;
+    }
+  };
+
   addEventListener('keydown', event => {
     if (event.key !== 'Escape' || event.defaultPrevented) return;
-    if (!emojiPanel()) return;               // nothing open: WhatsApp's key, not ours
+    if (!emojiPanel()) {
+      /* No panel: the key is WhatsApp's, and this only watches what it did with
+         it. Nothing is swallowed here -- the event goes on to WhatsApp exactly as
+         it did before. */
+      if (!retrying && conversation()) setTimeout(retryEscape, RETRY_MS);
+      return;
+    }
 
     const button = panelButton();
     if (!button) { log('the emoji panel is open and its button cannot be found'); return; }

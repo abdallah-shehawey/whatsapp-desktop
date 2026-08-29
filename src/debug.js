@@ -262,6 +262,59 @@ const install = (getWindow, getBanners) => {
       return;
     }
 
+    /* Who is listening for a key, and where. Escape closes a normal chat and does
+       not close a community one, so WhatsApp's handler exists and something in
+       the community view is in front of it -- and guessing which element from the
+       outside is how an afternoon goes. DOMDebugger.getEventListeners answers it
+       directly, and it needs the devtools protocol, which is already attached
+       here for #gc. */
+    if (source === '#listeners' || source.startsWith('#listeners ')) {
+      const what = source.length > 11 ? source.slice(11).trim() : 'window';
+      let attached = false;
+      try {
+        if (!win.webContents.debugger.isAttached()) { win.webContents.debugger.attach('1.3'); attached = true; }
+        const { result } = await win.webContents.debugger.sendCommand('Runtime.evaluate', {
+          expression: what, returnByValue: false,
+        });
+        const { listeners } = await win.webContents.debugger.sendCommand(
+          'DOMDebugger.getEventListeners', { objectId: result.objectId, depth: 1 });
+        const keys = (listeners || []).filter(l => /^key/.test(l.type));
+        console.log('debug: %s has %d listener(s), %d for keys: %s', what,
+                    (listeners || []).length, keys.length,
+                    JSON.stringify(keys.map(l => ({ type: l.type, capture: l.useCapture,
+                                                    at: l.scriptId + ':' + l.lineNumber }))));
+      } catch (err) {
+        console.log('debug: could not read listeners: %s', err.message);
+      } finally {
+        if (attached) { try { win.webContents.debugger.detach(); } catch (e) {} }
+      }
+      return;
+    }
+
+    /* Escape with the caret taken out of the composer first, in one go rather
+       than in two evaluations a page-focus restore apart. */
+    if (source === '#esc-outside') {
+      await win.webContents.executeJavaScript(
+        '(() => { const b = document.querySelector(\'[contenteditable="true"]\');' +
+        ' if (b) b.blur(); const p = document.querySelector("#pane-side");' +
+        ' if (p) { p.setAttribute("tabindex", "-1"); p.focus(); }' +
+        ' return document.activeElement && document.activeElement.id; })()', true);
+      for (const type of ['keyDown', 'char', 'keyUp'])
+        win.webContents.sendInputEvent({ type, keyCode: 'Escape' });
+      console.log('debug: sent Escape with the caret out of the composer');
+      return;
+    }
+
+    /* Open a conversation by name, through the very path a clicked notification
+       takes. Synthetic clicks from an evaluated script do not open one -- React
+       ignores them -- so this is the only way to put the client into a given
+       conversation from outside it. */
+    if (source.startsWith('#open ')) {
+      win.webContents.send('wa:open-chat-request', { name: source.slice(6).trim() });
+      console.log('debug: asked the page to open a conversation');
+      return;
+    }
+
     if (source === '#tone') {
       win.webContents.send('wa:play-tone', null);
       console.log('debug: tone requested');
