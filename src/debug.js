@@ -262,12 +262,16 @@ const install = (getWindow, getBanners) => {
       return;
     }
 
-    /* Who is listening for a key, and where. Escape closes a normal chat and does
-       not close a community one, so WhatsApp's handler exists and something in
-       the community view is in front of it -- and guessing which element from the
-       outside is how an afternoon goes. DOMDebugger.getEventListeners answers it
-       directly, and it needs the devtools protocol, which is already attached
-       here for #gc. */
+    /* Who is listening for a key, and where. It was written for the Escape that
+       closes a normal chat and not a community one, and the answer came from the
+       page instead -- three listeners of inject.js's own, one at each point of
+       the dispatch: in a community subgroup the key arrives at window's capture
+       phase with defaultPrevented already true and never reaches the bubble
+       phase, so something the community view mounts eats it and closes nothing.
+       This stays for the next key that behaves oddly, because guessing which
+       element from the outside is how an afternoon goes. DOMDebugger
+       .getEventListeners answers it directly, and it needs the devtools protocol,
+       which is already attached here for #gc. */
     if (source === '#listeners' || source.startsWith('#listeners ')) {
       const what = source.length > 11 ? source.slice(11).trim() : 'window';
       let attached = false;
@@ -292,7 +296,9 @@ const install = (getWindow, getBanners) => {
     }
 
     /* Escape with the caret taken out of the composer first, in one go rather
-       than in two evaluations a page-focus restore apart. */
+       than in two evaluations a page-focus restore apart. It answered its
+       question -- where the caret is makes no difference to the key a community
+       subgroup swallows -- and is kept only as a probe. */
     if (source === '#esc-outside') {
       await win.webContents.executeJavaScript(
         '(() => { const b = document.querySelector(\'[contenteditable="true"]\');' +

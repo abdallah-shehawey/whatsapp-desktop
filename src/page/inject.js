@@ -704,8 +704,21 @@ const start = ({ send, on }) => {
          knew, whose message has since changed. */
       if (!seeded || before === undefined) continue;
       if (Date.now() - seededAt < SETTLE_MS) continue;
-      if (!isArrival(before, now)) continue;
-      if (isSilenced(row)) continue;
+      /* Reactions get their own line in the log, and only reactions. They are
+         the one arrival whose row keeps the delivery tick of the message it
+         landed on, so they pass through more tests than anything else does and
+         "no notification came" has more places to have happened. The chat is
+         named and the reaction is not: what somebody chose to react with is as
+         much their message as the words would have been. */
+      const isReaction = REACTION_PREVIEW.test(now.preview);
+      if (!isArrival(before, now)) {
+        if (isReaction) log('a reaction in "' + now.name + '" did not read as an arrival');
+        continue;
+      }
+      if (isSilenced(row)) {
+        if (isReaction) log('a reaction in "' + now.name + '" is in a muted chat');
+        continue;
+      }
       /* The delivery tick says the last message in this row is the user's own,
          and that is normally the end of it. A reaction is the exception: it is
          somebody else's event landing on the user's own message, so the row
@@ -714,17 +727,23 @@ const start = ({ send, on }) => {
          of a message the user sent and dropped. Narrow on purpose -- only a
          preview that opens with WhatsApp's own word for it gets past the guard,
          and the user's own reaction is written "You reacted", which does not. */
-      if (isOutgoing(row) && !REACTION_PREVIEW.test(now.preview)) continue;
+      if (isOutgoing(row) && !isReaction) continue;
 
       /* Nothing is queued while the window is away: WhatsApp raises its own
          notification then, and the app dresses that one instead. A queue built up
          in the background used to be handed over the moment the window came back,
          and every message in it was announced a second time. */
-      if (!focused) continue;
+      if (!focused) {
+        if (isReaction)
+          log('a reaction in "' + now.name + '" arrived with the window away; ' +
+              'WhatsApp raises that one');
+        continue;
+      }
 
       /* Queued per message rather than per chat: the app asks once for each one,
          and collapsing them here is what swallowed the second and third message of
          a burst from the same person. */
+      if (isReaction) log('a reaction in "' + now.name + '" is queued');
       arrivals.push({ row, name: now.name, preview: now.preview,
                       sender: senderIn(row), at: Date.now() });
       ping();
@@ -1269,56 +1288,211 @@ const start = ({ send, on }) => {
     return node;
   };
 
-  /* Escape, when WhatsApp does not answer it.
+  /* Escape, when WhatsApp swallows it and closes nothing.
    *
    * Escape closes an ordinary conversation -- WhatsApp's own handler does that,
    * and there are twenty-odd keydown listeners on window that look like one per
-   * mounted panel. It does NOT close a conversation inside a community: measured,
-   * with a real key from sendInputEvent, with the caret in the composer and with
-   * the caret taken out of it, and the panel stayed up both times.
+   * mounted panel. It does NOT close a conversation inside a community, and the
+   * live page finally said why. Three listeners of this file's own, one at each
+   * point of the dispatch, watched a real key sent by the app:
    *
-   * So the key is left to WhatsApp first, and only if the conversation is still
-   * there a moment later is it sent again -- at the document, with the caret out
-   * of the composer, which is the one arrangement not yet tried. A guard stops
-   * the second one being answered by this handler and asking for a third.
+   *   an ordinary chat -- the key arrives at window's capture phase unprevented,
+   *   travels the whole way to the bubble phase, and the conversation is already
+   *   gone by the time it gets there. Nothing consumed it; something acted on it.
    *
-   * Deliberately does nothing when the conversation did close: this is a retry
-   * for a key that went unanswered, not a second way of doing the same thing. */
-  const RETRY_MS = 150;
-  let retrying = false;
+   *   a community subgroup -- by window's capture phase defaultPrevented is
+   *   ALREADY true, and the key never reaches the bubble phase at all. Something
+   *   the community view mounts answers Escape, calls preventDefault and
+   *   stopPropagation, and then closes nothing. The conversation stays up.
+   *
+   * So there was never anything to retry: the key was not missed, it was eaten.
+   * Sending a second one -- at the document, with the caret out of the composer,
+   * which is what stood here before -- only fed the same handler again, and was
+   * measured doing nothing both times. What does close it is the conversation
+   * menu's own "Close chat", pressed the way every control on this page has to be.
+   *
+   * The one thing this must never do is close a conversation for an Escape that
+   * was for something else -- a dropdown, the profile drawer, in-chat search, a
+   * reply being cancelled. Every one of those leaves the conversation open too,
+   * so "still open" is not the test. What they are told apart by is timing, and
+   * the timings were measured one at a time:
+   *
+   *   a dropdown is the slow one. It stays in the DOM for its exit animation --
+   *   141ms and 147ms in two runs -- and a MutationObserver over the whole of
+   *   #app saw NOTHING before that, not an attribute, not a class. Nothing can
+   *   tell it apart from an Escape that did nothing, so waiting for it would put
+   *   a seventh of a second in front of every close. It does not have to be
+   *   waited for: a dropdown that is up is up at the keypress, and reading it
+   *   there costs nothing.
+   *
+   *   everything else goes at once. The profile drawer was gone 27ms after the
+   *   key. In-chat search closed inside the dispatch itself -- a listener
+   *   registered after this one, on the same event, already saw it gone.
+   *
+   * So: a layer that is up at the keypress is answered by leaving Escape alone,
+   * and everything else is caught by watching the page for a short moment. The
+   * page is counted rather than reasoned about, because a count moves for a
+   * layer this code has never heard of too. Measured at rest that count sat at
+   * 3611 without a flicker, and a message landing inside the window costs
+   * nothing worse than an Escape that has to be pressed a second time. */
+
+  /* The layers that leave slowly, read at the keypress. The emoji panel is one
+     of them and is handled above this; it is named here as well because this
+     runs for the Escape after the one that opened it. */
+  const OPEN_LAYER = '[role="menu"], [role="listbox"], [role="application"]';
+  const ANSWERED_MS = 60;
+  const WATCH_MS = 8;
+  let closing = false;
   const conversation = () => document.querySelector('#main');
 
-  const retryEscape = () => {
-    if (!conversation()) return;
-    retrying = true;
+  /* The other slow one, and it wears no role at all: a photo opened full screen
+     took 299ms to leave the DOM, and carries neither a role nor a name to ask
+     it by. What it does do is cover the window, so it is asked geometrically --
+     is the chat list still the thing on top of the chat list? Measured both
+     ways: with the photo up, the middle of the pane answers a div outside it;
+     with the photo shut, it answers the pane's own span. This catches every
+     full-window overlay, including the ones WhatsApp has not shipped yet. */
+  const chatListCovered = () => {
+    const pane = document.querySelector('#pane-side');
+    if (!pane) return false;
+    const box = pane.getBoundingClientRect();
+    if (!box.width || !box.height) return false;
+    const on = document.elementFromPoint(Math.round(box.left + box.width / 2),
+                                         Math.round(box.top + box.height / 2));
+    return !!on && !pane.contains(on);
+  };
+
+  /* The page in a few cheap numbers, chosen to move whenever a layer opens or
+     shuts. The roles are counted apart from the total because they are the
+     layers this is about, and because the log is worth reading.
+
+     The total is compared with a tolerance and the roles exactly. A live
+     conversation drifts by a node or two on its own -- a timestamp, a tick, a
+     picture finishing -- and a drift of one is not an Escape that did something,
+     while every layer measured here moved hundreds: 139 for a dropdown, 288 for
+     a photo, 351 for the profile drawer, 48 for in-chat search. */
+  const DRIFT = 8;
+
+  const layers = () => {
+    const app = document.querySelector('#app') || document.body;
+    return {
+      menus: document.querySelectorAll('[role="menu"]').length,
+      dialogs: document.querySelectorAll('[role="dialog"]').length,
+      panels: document.querySelectorAll('[role="application"]').length,
+      nodes: app.querySelectorAll('*').length,
+    };
+  };
+
+  const same = (a, b) => a.menus === b.menus && a.dialogs === b.dialogs &&
+                         a.panels === b.panels && Math.abs(a.nodes - b.nodes) <= DRIFT;
+
+  /* The item that closes a chat, found by its icon and not by its words: this
+     account reads WhatsApp in English and the next one reads it in Arabic, and
+     the icon is the same in both. `ic-cancel` was the only one of its name in
+     both menus measured -- a community subgroup's twelve items and a direct
+     chat's fifteen -- and everything that destroys something carries a different
+     one (`ic-delete`, `ic-block`, `ic-do-not-disturb-on`, `ic-logout`). If a
+     build ever draws two, this presses neither: a menu of destructive items is
+     the wrong place to guess. The label is only a fallback, for a build that has
+     renamed the icon. */
+  const CLOSE_LABEL = /^(close chat|إغلاق الدردشة|إغلاق المحادثة)$/i;
+
+  const closeItem = () => {
+    const items = [...document.querySelectorAll('[role="menuitem"]')];
+    const byIcon = items.filter(item => {
+      const title = item.querySelector('svg title');
+      return title && strip(title.textContent) === 'ic-cancel';
+    });
+    if (byIcon.length === 1) return byIcon[0];
+    if (byIcon.length > 1) {
+      log('the conversation menu draws ' + byIcon.length + ' items that could close it; none pressed');
+      return null;
+    }
+    return items.find(item => CLOSE_LABEL.test(strip(item.getAttribute('aria-label')))) || null;
+  };
+
+  /* The menu is opened only to press one thing in it. It is up for about a
+     thirtieth of a second, which still reads as a flash, so it is hidden while
+     that happens -- verified against a capture of the window, where opacity on
+     the menu alone leaves nothing visible: neither it nor its wrapper paints a
+     background of its own.
+
+     The style removes itself twice over, once when the press is done and once on
+     a timer armed before the menu is opened at all, so that a throw anywhere in
+     between cannot leave this page without menus. */
+  const hideMenus = () => {
+    const style = document.createElement('style');
+    style.textContent = '[role="menu"] { opacity: 0 !important; }';
+    (document.head || document.documentElement).appendChild(style);
+    let dropped = false;
+    const drop = () => { if (dropped) return; dropped = true; try { style.remove(); } catch (err) {} };
+    setTimeout(drop, 1500);
+    return drop;
+  };
+
+  const menuButton = () => {
+    const header = document.querySelector('#main header');
+    if (!header) return null;
+    for (const el of header.querySelectorAll('button, [role="button"]'))
+      if (el.getAttribute('aria-haspopup') === 'menu') return el;
+    return null;
+  };
+
+  const closeConversation = async () => {
+    const button = menuButton();
+    if (!button) { log('Escape closed nothing and the conversation menu cannot be found'); return; }
+
+    const show = hideMenus();
     try {
-      const box = composer();
-      if (box) { try { box.blur(); } catch (err) {} }
-      const list = document.querySelector('#pane-side');
-      if (list) {
-        if (!list.hasAttribute('tabindex')) list.setAttribute('tabindex', '-1');
-        try { list.focus(); } catch (err) {}
+      press(button, deepestIn(button));
+      /* 31ms, measured, and not one of them is this client's to save: React
+         mounts the menu when it is ready. Polled on a timer rather than on
+         animation frames, which is both quicker to notice it -- 31ms against
+         45ms, three frames -- and safe in a window nobody is looking at, where
+         frames stop coming and an await on one would never return. */
+      let menu = null;
+      const until = Date.now() + 500;
+      while (!menu && Date.now() < until) {
+        await new Promise(resolve => setTimeout(resolve, 2));
+        menu = document.querySelector('[role="menu"]');
       }
-      for (const type of ['keydown', 'keyup']) {
-        document.dispatchEvent(new KeyboardEvent(type, {
-          key: 'Escape', code: 'Escape', keyCode: 27, which: 27,
-          bubbles: true, cancelable: true, composed: true,
-        }));
-      }
-      log(conversation() ? 'Escape went unanswered and the retry did not help either'
-                         : 'Escape was answered on the retry');
+      if (!menu) { log('Escape closed nothing and the conversation menu did not open'); return; }
+
+      const item = closeItem();
+      /* Left open on purpose when the item cannot be found: the menu becomes
+         visible again the moment this returns, and the user is looking at the
+         thing this failed to press rather than at nothing. */
+      if (!item) { log('Escape closed nothing and the menu has no "close chat" in it'); return; }
+
+      press(item, deepestIn(item));
+      log('Escape closed nothing, so the conversation was closed from its own menu');
     } finally {
-      retrying = false;
+      show();
     }
   };
 
   addEventListener('keydown', event => {
     if (event.key !== 'Escape' || event.defaultPrevented) return;
     if (!emojiPanel()) {
-      /* No panel: the key is WhatsApp's, and this only watches what it did with
-         it. Nothing is swallowed here -- the event goes on to WhatsApp exactly as
-         it did before. */
-      if (!retrying && conversation()) setTimeout(retryEscape, RETRY_MS);
+      /* No panel: the key is WhatsApp's. Nothing is swallowed here -- the event
+         goes on to it exactly as it did before -- and all this does is take the
+         page's measure now, and again once WhatsApp has had its turn with it. */
+      if (closing || !conversation()) return;
+      /* A layer that is up now is what the key is for, and this has nothing to
+         say about it. */
+      if (document.querySelector(OPEN_LAYER) || chatListCovered()) return;
+
+      const before = layers();
+      const until = Date.now() + ANSWERED_MS;
+      const watch = () => {
+        if (closing || !conversation() || !same(layers(), before)) return;
+        if (Date.now() < until) { setTimeout(watch, WATCH_MS); return; }
+        closing = true;
+        closeConversation()
+          .catch(err => log('could not close the conversation: ' + err.message))
+          .then(() => { closing = false; });
+      };
+      setTimeout(watch, WATCH_MS);
       return;
     }
 
@@ -1656,6 +1830,7 @@ const start = ({ send, on }) => {
            withdrawals all speak in chat-list names. A notification keyed on
            anything else is one nothing can take down again. */
         const chat = chatNameFor(this.title);
+        log('WhatsApp raised a notification of its own');
         Promise.resolve()
           .then(() => {
             if (!this.icon) return avatarFor(this.title);
