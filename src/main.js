@@ -991,21 +991,50 @@ const wirePermissions = ses => {
    on Wayland, and the WebRTCPipeWireCapturer flag in the switches above is what
    enables that. */
 const wireScreenSharing = ses => {
+  /* Electron will not forward getDisplayMedia anywhere without a handler, so the
+     share-screen button in a call silently does nothing until one is set. What
+     the handler must never do is fail to answer: a callback that is not called
+     leaves the page waiting for ever, which looks exactly like a button that
+     does nothing -- the very thing this is here to fix.
+
+     useSystemPicker asks Chromium to run the platform's own chooser and skip
+     this handler entirely where it can. That is the right answer wherever it is
+     available, and the handler below is what happens where it is not. */
   ses.setDisplayMediaRequestHandler(async (request, callback) => {
+    /* Wayland picks in the compositor, not here.
+     *
+     * desktopCapturer.getSources() on a Wayland session goes out to
+     * xdg-desktop-portal and waits -- and measured on this session it never came
+     * back, for screens and for windows alike, with an eight second ceiling on
+     * the measurement. A handler built on it is a handler that never answers,
+     * which is how "screen sharing was added" and screen sharing did not work.
+     *
+     * There is nothing to enumerate anyway. Under WebRTCPipeWireCapturer the
+     * portal puts up its own chooser when the stream starts, and it is the only
+     * thing on a Wayland session allowed to say what may be captured. So the
+     * request is answered at once with the screen Chromium will hand to the
+     * portal, and the user picks in the dialog the compositor draws. */
+    if (onWayland) {
+      console.log('screen sharing: handing the choice to the desktop portal');
+      callback({ video: { id: 'screen:0:0', name: 'Entire screen' } });
+      return;
+    }
+
+    /* X11, where enumeration is local and answers immediately. Windows as well
+       as screens: WhatsApp's own button offers both, and a handler that only
+       ever answers with a screen turns "share this window" into "share
+       everything", which is a privacy bug rather than a missing feature. */
     try {
-      /* Windows as well as screens. WhatsApp Web's share button offers both, and
-         a handler that only ever answers with a screen turns "share this window"
-         into "share everything" -- which is a privacy bug, not a missing
-         feature. On Wayland the choice is made in the portal dialog the
-         compositor puts up anyway, and asking for both types is what lets that
-         dialog offer both. */
-      const sources = await desktopCapturer.getSources({
-        types: ['screen', 'window'],
-        fetchWindowIcons: false,
-      });
-      /* A screen first when there is one: on Wayland every entry here is a
-         placeholder the portal fills in, and the screen entry is the one that
-         lets the user pick in the portal's own dialog. */
+      const sources = await Promise.race([
+        desktopCapturer.getSources({ types: ['screen', 'window'], fetchWindowIcons: false }),
+        /* Belt and braces. Whatever else happens, this handler answers. */
+        new Promise(resolve => setTimeout(() => resolve(null), 5000)),
+      ]);
+      if (!sources) {
+        console.warn('screen sharing: the desktop did not answer in time');
+        callback({ video: null });
+        return;
+      }
       const source = sources.find(s => s.id.startsWith('screen:')) || sources[0];
       if (!source) {
         console.warn('screen sharing: nothing to share -- no screen or window source');
@@ -1014,15 +1043,14 @@ const wireScreenSharing = ses => {
       }
       console.log('screen sharing: handing over "%s"', source.name);
       /* No audio. `loopback` is the system-audio capture Electron implements on
-         Windows and nowhere else, and passing it on Linux is at best ignored --
-         WhatsApp does not carry desktop audio over a screen share in any case,
-         and the microphone is already in the call. */
+         Windows and nowhere else; passing it here is at best ignored, and the
+         microphone is already in the call. */
       callback({ video: source });
     } catch (err) {
       console.warn('screen sharing failed: %s', err.message);
       callback({ video: null });
     }
-  });
+  }, { useSystemPicker: true });
 };
 
 /* WhatsApp Web keys the client it thinks it is talking to off the user agent, and

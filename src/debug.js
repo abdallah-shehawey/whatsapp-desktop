@@ -205,6 +205,26 @@ const install = getWindow => {
       return;
     }
 
+    /* What the screen-share handler would be choosing between. On Wayland the
+       compositor's own portal is what actually picks, and this is the call that
+       asks it -- so an answer here means the path from getDisplayMedia to the
+       compositor is whole, and a hang means the portal is waiting for the user. */
+    if (source === '#screens' || source.startsWith('#screens ')) {
+      const { desktopCapturer } = require('electron');
+      const types = source.length > 8 ? source.slice(9).trim().split(/\s+/) : ['screen', 'window'];
+      try {
+        const sources = await Promise.race([
+          desktopCapturer.getSources({ types, fetchWindowIcons: false }),
+          new Promise(resolve => setTimeout(() => resolve('timed out after 8s'), 8000)),
+        ]);
+        console.log('debug: [%s] %s', types.join(','), typeof sources === 'string' ? sources :
+          JSON.stringify(sources.map(s => ({ id: s.id, name: s.name }))));
+      } catch (e) {
+        console.warn('debug: screen sources failed: %s', e.message);
+      }
+      return;
+    }
+
     if (source === '#gpu') {
       const { app } = require('electron');
       console.log('debug: %s', JSON.stringify(app.getGPUFeatureStatus()));
