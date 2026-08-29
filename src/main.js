@@ -659,7 +659,7 @@ const describeThenNotify = () => setTimeout(async () => {
     return;
   }
 
-  const [chat, sender, message, avatar] = answer.split(SEP);
+  const [chat, sender, message, avatar, token] = answer.split(SEP);
   if (!chat || !message) return;
 
   const raised = banners.show({
@@ -679,7 +679,12 @@ const describeThenNotify = () => setTimeout(async () => {
        to, so it is asked for the chat by name. */
     onClick: () => {
       showWindow();
-      if (win && !win.isDestroyed()) win.webContents.send('wa:open-chat-request', chat);
+      /* The row this banner was made from travels back with the click, because a
+         chat cannot always be found again by its name: two of them can share one,
+         and this account has such a pair. The name and the message go too, for
+         when WhatsApp has recycled the row in the meantime. */
+      if (win && !win.isDestroyed())
+        win.webContents.send('wa:open-chat-request', { token, name: chat, preview: message });
     },
   });
   /* One event, one sound. A banner refused as a message already announced is not

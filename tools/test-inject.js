@@ -442,7 +442,7 @@ const check = (label, got, want) => {
   pdf.append(stickerIcon);
   await scan();
   check('a sticker message is announced as a sticker, glyph and all',
-        await describe(), 'Pdf & Assignments | Mega: \u{1f3f7} Sticker');
+        await describe(), 'Pdf & Assignments | Mega: \u{1f3f7}\ufe0f Sticker');
   stickerIcon.remove();
 
 
@@ -686,6 +686,46 @@ const check = (label, got, want) => {
   push('open-chat-request', 'Somebody Not In The List');
   check('a chat the list is not showing is left alone rather than guessed at',
         dispatched.length, 0);
+
+  /* ------------------------------------------------ two chats, one name */
+
+  /* A community and a group inside it can carry the same name, and on the
+     account this was written against two do. Nothing a lookup by name can see
+     tells them apart, so the banner has to remember which row it was made from
+     -- and that token is what the click carries back. */
+  await describe();
+  for (const row of pane.children) if (row.__spec) update(row, { badge: 0 });
+  advance(120000);
+  await scan();
+  await describe();
+
+  const twinA = mkRow({ name: 'Same Name', preview: 'الاولانى', when: clock(), badge: 0,
+                        sender: 'Ali' });
+  const twinB = mkRow({ name: 'Same Name', preview: 'التانية', when: clock(), badge: 0,
+                        sender: 'Sara' });
+  pane.append(twinA, twinB);
+  await scan();                                   // both seen for the first time
+
+  /* The SECOND of the two receives a message; the first is left alone. */
+  update(twinB, { badge: 1, preview: 'دى بتاعة التانية', when: clock() });
+  await scan();
+  const answer = await sandbox.window.__waDescribeUnread();
+  const parts = answer.split(US);
+  check('the banner names the chat', parts[0], 'Same Name');
+  check('and carries a token for the row it was made from', !!parts[4], true);
+
+  dispatched = [];
+  push('open-chat-request', { token: parts[4], name: parts[0], preview: parts[2] });
+  check('clicking it opens the row it came from, not the first of that name',
+        dispatched.length ? dispatched[0].on.parentNode : null, twinB);
+
+  /* And with the row recycled out from under it, the message still finds it. */
+  dispatched = [];
+  push('open-chat-request', { token: 'gone', name: 'Same Name', preview: 'دى بتاعة التانية' });
+  check('and finds it again by its message when the row has been replaced',
+        dispatched.length ? dispatched[0].on.parentNode : null, twinB);
+
+  twinA.remove(); twinB.remove();
 
   console.log(failures ? '\n' + failures + ' failed' : '\nall checks pass');
   process.exit(failures ? 1 : 0);

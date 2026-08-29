@@ -322,35 +322,62 @@ const start = ({ send, on }) => {
    * Ordered, and the order is load-bearing: a voice note's icon is named "ptt"
    * on some builds and "audio" on others, and "audio" would otherwise be read as
    * a music file; a GIF is a video to every icon set that does not name it. */
+  /*
+   * The sticker's glyph, which took the longest to settle.
+   *
+   * Unicode has no sticker, so this is the nearest thing that is not already
+   * spoken for: a label, which is a thing you peel and stick. Not the framed
+   * picture -- that is a photograph, and Photo has the camera. Not a smiley --
+   * that is what an emoji is.
+   *
+   * The variation selector after it is not decoration. U+1F3F7 defaults to TEXT
+   * presentation, so without U+FE0F fontconfig hands it to whatever monochrome
+   * font claims it first -- Symbola here, measured -- and the banner shows an
+   * outline glyph that reads as a box rather than a sticker. Every label below
+   * carries the selector for the same reason, whether it needs it or not: the
+   * fully-qualified form is the one that always lands in the emoji font.
+   */
+  const STICKER = '\u{1F3F7}\uFE0F Sticker';
+  /* The selector is on the three whose default presentation is text -- the label,
+     the film frames and the framed picture -- and off the rest, whose default is
+     already the emoji. Adding it where it is not needed makes a sequence Unicode
+     does not list, and the point was to be handed to the emoji font, not to carry
+     an invisible character for its own sake. */
+
   const MEDIA_KINDS = [
-    { icon: /sticker|ملصق/i,                         label: '🏷 Sticker' },
-    { icon: /\bgif\b/i,                              label: '🎞 GIF' },
-    { icon: /ptt|mic\b|headset|voice|رسالة صوتية/i,  label: '🎤 Voice message' },
-    { icon: /image|photo|camera|صورة/i,              label: '📷 Photo' },
-    { icon: /video|فيديو/i,                          label: '🎥 Video' },
-    { icon: /audio|music|أغنية|صوت/i,                label: '🎵 Audio' },
-    { icon: /poll|استطلاع/i,                         label: '📊 Poll' },
-    { icon: /location|pin\b|موقع/i,                  label: '📍 Location' },
-    { icon: /contact|vcard|جهة اتصال/i,              label: '👤 Contact' },
-    { icon: /document|\bdoc\b|مستند|ملف/i,           label: '📄 Document' },
+    { icon: /sticker|ملصق/i,                         label: STICKER },
+    { icon: /\bgif\b/i,                              label: '\u{1F39E}\uFE0F GIF' },
+    { icon: /ptt|mic\b|headset|voice|رسالة صوتية/i,  label: '\u{1F3A4} Voice message' },
+    { icon: /image|photo|camera|صورة/i,              label: '\u{1F4F7} Photo' },
+    { icon: /videocam|video|فيديو/i,                label: '\u{1F3A5} Video' },
+    { icon: /audio|music|أغنية|صوت/i,                label: '\u{1F3B5} Audio' },
+    { icon: /poll|استطلاع/i,                         label: '\u{1F4CA} Poll' },
+    { icon: /location|pin\b|موقع/i,                  label: '\u{1F4CD} Location' },
+    { icon: /contact|vcard|جهة اتصال/i,              label: '\u{1F464} Contact' },
+    { icon: /document|\bdoc\b|مستند|ملف/i,           label: '\u{1F4C4} Document' },
   ];
 
   /* The words WhatsApp itself writes in a preview for the same things, so a
-     preview that arrived as text still gets its glyph. Anchored, and the sender
-     prefix is allowed in front: "Mega: Photo" is a photo, "photo of the lab" is
-     a message about one. */
+     preview that arrived as text still gets its glyph. Anchored, because a
+     message about a photo is a message and not a photo. */
   const MEDIA_WORDS = [
-    { text: /^(sticker|ملصق)$/i,                            label: '🏷 Sticker' },
-    { text: /^(gif)$/i,                                     label: '🎞 GIF' },
-    { text: /^(voice message|رسالة صوتية)$/i,               label: '🎤 Voice message' },
-    { text: /^(photo|image|صورة)$/i,                        label: '📷 Photo' },
-    { text: /^(video|فيديو)$/i,                             label: '🎥 Video' },
-    { text: /^(audio|أغنية|ملف صوتي)$/i,                    label: '🎵 Audio' },
-    { text: /^(poll|استطلاع)$/i,                            label: '📊 Poll' },
-    { text: /^(location|live location|موقع)$/i,             label: '📍 Location' },
-    { text: /^(contact|جهة اتصال)$/i,                       label: '👤 Contact' },
-    { text: /^(document|مستند)$/i,                          label: '📄 Document' },
-    { text: /^(this message was deleted|تم حذف هذه الرسالة)$/i, label: '🚫 Deleted message' },
+    { text: /^(sticker|ملصق)$/i,                            label: STICKER },
+    { text: /^(gif)$/i,                                     label: '\u{1F39E}\uFE0F GIF' },
+    { text: /^(voice message|رسالة صوتية)$/i,               label: '\u{1F3A4} Voice message' },
+    { text: /^(photo|image|صورة)$/i,                        label: '\u{1F4F7} Photo' },
+    /* WhatsApp's own name for the round one, and it is the phone's wording too,
+       so it is kept rather than flattened into "Video". */
+    { text: /^(video note|ملاحظة فيديو)$/i,               label: '\u{1F3A5} Video note' },
+    { text: /^(video|فيديو)$/i,                             label: '\u{1F3A5} Video' },
+    { text: /^(audio|أغنية|ملف صوتي)$/i,                    label: '\u{1F3B5} Audio' },
+    { text: /^(poll|استطلاع)$/i,                             label: '\u{1F4CA} Poll' },
+    { text: /^(location|live location|موقع)$/i,             label: '\u{1F4CD} Location' },
+    { text: /^(contact|جهة اتصال)$/i,                       label: '\u{1F464} Contact' },
+    { text: /^(document|مستند)$/i,                          label: '\u{1F4C4} Document' },
+    { text: /^(\d+\s*(photos|videos|صور|مقاطع))$/i,             label: '\u{1F5BC}\uFE0F Album' },
+    { text: /^(missed voice call|missed video call|مكالمة فائتة)$/i,
+      label: '\u{1F4DE} Missed call' },
+    { text: /^(this message was deleted|تم حذف هذه الرسالة)$/i, label: '\u{1F6AB} Deleted message' },
   ];
 
   /* The kind of a row, from its icons and then from whatever text it carries.
@@ -495,6 +522,38 @@ const start = ({ send, on }) => {
      parent message still in its preview, and that is not an arrival. */
   const REPEAT_MS = 2 * 60 * 1000;
   const lastAnnounced = new Map();        // chat -> { preview, at }
+
+  /*
+   * The row each banner was made from, so clicking it opens THAT conversation.
+   *
+   * Two chats can carry one name, and on this account two do: a community and a
+   * group inside it, both called "4th ECE Alazhar University" -- verified on the
+   * live list, where they differ in nothing a lookup by name can see. Finding the
+   * chat by name afterwards is therefore a coin toss, and the specification is
+   * explicit that a click must open the conversation the message came from and
+   * not the first row that happens to share its title.
+   *
+   * The element itself is the answer while it lives. WhatsApp recycles rows, so
+   * it is not the only answer: the name and the message ride along with it, and
+   * between them they find the row again when the original has been thrown away.
+   */
+  const OPENABLE_TTL_MS = 30 * 60 * 1000;
+  let nextToken = 1;
+  const openable = new Map();             // token -> { row, name, preview, at }
+
+  const rememberOpenable = (row, name, preview) => {
+    const token = String(nextToken++);
+    openable.set(token, { row, name, preview, at: Date.now() });
+    if (openable.size > 64) {
+      const cutoff = Date.now() - OPENABLE_TTL_MS;
+      for (const [key, held] of openable) if (held.at < cutoff) openable.delete(key);
+      for (const key of openable.keys()) {
+        if (openable.size <= 64) break;
+        openable.delete(key);
+      }
+    }
+    return token;
+  };
 
   const sweepStamped = (map, ttl) => {
     const now = Date.now();
@@ -1008,9 +1067,22 @@ const start = ({ send, on }) => {
 
   const pressRow = row => press(row, row.querySelector('span[title]') || row);
 
-  on('open-chat-request', name => {
-    const row = rowFor(name);
+  on('open-chat-request', request => {
+    /* A bare name is still accepted: it is what the click carried before the
+       banners started remembering which row they were made from. */
+    const wanted = typeof request === 'string' ? { name: request } : (request || {});
+    const held = wanted.token ? openable.get(wanted.token) : null;
+    const name = wanted.name || (held && held.name) || '';
+    const preview = wanted.preview || (held && held.preview) || '';
+
+    /* The row it was actually made from, while it is still on the page. Then the
+       row carrying that same message, which tells two chats of one name apart.
+       Then, and only then, the first row with the name. */
+    const row = (held && held.row && held.row.isConnected ? held.row : null) ||
+                findRow(name, preview) ||
+                rowFor(name);
     if (!row) { log('cannot open "' + name + '": no row for it in the rendered list'); return; }
+    if (wanted.token) openable.delete(wanted.token);
     pressRow(row);
     /* Said as soon as the page has drawn it rather than waited for: which chat
        is on screen is what takes the banner down, and the observer that would
@@ -1231,7 +1303,8 @@ const start = ({ send, on }) => {
     rememberAnnounced({ name: state.name, preview: preview, when: state.when });
     if (preview !== state.preview) rememberAnnounced(state);
 
-    return [state.name, sender, preview, await avatarOf(row, state.name)].join(SEP);
+    const token = rememberOpenable(row, state.name, preview);
+    return [state.name, sender, preview, await avatarOf(row, state.name), token].join(SEP);
   };
 
   /* What the watcher is holding, for the devtools console and the test rig. Every
