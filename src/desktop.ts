@@ -25,14 +25,14 @@ const PANGO_STYLES = new Set([
 ]);
 
 /* "PoetsenOne 10" -> "PoetsenOne"; "Noto Sans Bold Italic 11" -> "Noto Sans". */
-const familyOf = spec => {
+const familyOf = (spec: string) => {
   const words = String(spec || '').replace(/^'|'$/g, '').trim().split(/\s+/);
   if (words.length && /^\d+(\.\d+)?$/.test(words[words.length - 1])) words.pop();
   while (words.length > 1 && PANGO_STYLES.has(words[words.length - 1].toLowerCase())) words.pop();
   return words.join(' ').trim();
 };
 
-const read = (schema, key) => {
+const read = (schema: string, key: string) => {
   try {
     return execFileSync('gsettings', ['get', schema, key], { encoding: 'utf8', timeout: 2000 })
       .trim().replace(/^'|'$/g, '');
@@ -41,7 +41,7 @@ const read = (schema, key) => {
   }
 };
 
-const gsettings = key => read(SCHEMA, key);
+const gsettings = (key: string) => read(SCHEMA, key);
 
 /* Two settings that are asked in front of a notification rather than once at
    startup, and so are worth not spawning gsettings for every time. A quarter of
@@ -51,7 +51,7 @@ const gsettings = key => read(SCHEMA, key);
 const CACHE_MS = 15000;
 const cached = new Map();
 
-const setting = (schema, key, fallback) => {
+const setting = (schema: string, key: string, fallback: boolean) => {
   const id = schema + ' ' + key;
   const held = cached.get(id);
   if (held && Date.now() - held.at < CACHE_MS) return held.value;
@@ -97,7 +97,7 @@ const prefersDark = () => {
 /* `gsettings monitor` prints a line per change and costs one idle process, which
    is what following the desktop live is worth. It is a child of this process, so
    it goes away with it. */
-const watch = (keys, onChange) => {
+const watch = (keys: string | string[], onChange: (arg0: string) => void) => {
   let child;
   try {
     child = execFile('gsettings', ['monitor', SCHEMA]);
@@ -106,10 +106,11 @@ const watch = (keys, onChange) => {
   }
 
   let buffer = '';
-  child.stdout.on('data', chunk => {
+  child.stdout?.on('data', (chunk: string) => {
     buffer += chunk;
     const lines = buffer.split('\n');
-    buffer = lines.pop();
+    const lastLine = lines.pop();
+    buffer = lastLine || '';
     for (const line of lines) {
       const key = line.split(':')[0].trim();
       if (keys.includes(key)) onChange(key);

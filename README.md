@@ -105,12 +105,12 @@ State lives in `~/.local/share/whatsapp-desktop`.
 
 | | |
 |---|---|
-| `src/main.js` | window, session, tray, notifications, switches |
-| `src/preload.js` | the bridge — the page's world on one side, IPC on the other |
-| `src/page/inject.js` | the chat-list watcher and the notification shim, in WhatsApp's own world |
-| `src/notify.js` | the banner policy |
-| `src/style.js` | the user stylesheet — the font, and the room Arabic needs |
-| `src/fonts.js`, `src/tray.js`, `src/config.js`, `src/desktop.js`, `src/sound.js`, `src/debug.js` | |
+| `src/main.ts` | window, session, tray, notifications, switches |
+| `src/preload.ts` | the bridge — the page's world on one side, IPC on the other |
+| `src/page/inject.ts` | the chat-list watcher and the notification shim, in WhatsApp's own world |
+| `src/notify.ts` | the banner policy |
+| `src/style.ts` | the user stylesheet — the font, and the room Arabic needs |
+| `src/fonts.ts`, `src/tray.ts`, `src/config.ts`, `src/desktop.ts`, `src/sound.ts`, `src/debug.ts` | |
 | `tools/make-icons.py` | regenerates `data/icons` — `make icons`, never hand-edit the PNGs |
 | `tools/test-inject.js`, `tools/test-style.js` | `make test` |
 

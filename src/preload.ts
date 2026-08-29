@@ -12,9 +12,9 @@
 const { ipcRenderer } = require('electron');
 const page = require('./page/inject.js');
 
-const send = (channel, payload) => ipcRenderer.send('wa:' + channel, payload);
-const on = (channel, handler) =>
-  ipcRenderer.on('wa:' + channel, (event, payload) => handler(payload));
+const send = (channel: string, payload: null) => ipcRenderer.send('wa:' + channel, payload);
+const on = (channel: string, handler: (arg0: any) => void) =>
+  ipcRenderer.on('wa:' + channel, (event: any, payload: any) => handler(payload));
 
 /* WhatsApp calls window.focus() when a notification is clicked, and on a window
    sitting hidden in the tray that does nothing at all -- the window has to be

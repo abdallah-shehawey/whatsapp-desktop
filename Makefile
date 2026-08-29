@@ -38,7 +38,7 @@ $(ELECTRON)/electron:
 	npm install --no-audit --no-fund
 
 # What the app itself is: everything the runtime reads, and nothing else.
-APP_FILES = package.json src data
+APP_FILES = package.json dist data
 
 install: $(ELECTRON)/electron
 	@install -d $(DESTDIR)$(libdir)
@@ -118,7 +118,7 @@ uninstall: no-autostart
 icons:
 	python3 tools/make-icons.py
 
-# Replays a chat list past src/page/inject.js in plain node -- no browser, no
+# Replays a chat list past dist/page/inject.js in plain node -- no browser, no
 # account. Every notification bug this client has had lived in that file.
 test:
 	@node tools/test-inject.js

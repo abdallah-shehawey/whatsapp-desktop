@@ -5,11 +5,13 @@
   "description": "WhatsApp Web desktop client for Linux with tray integration, notifications, and Arabic text fixes",
   "license": "GPL-3.0-only",
   "author": "Abdallah Shehawey <shehawey9@gmail.com>",
-  "main": "src/main.js",
+  "main": "dist/main.js",
   "scripts": {
     "start": "electron ."
   },
   "devDependencies": {
-    "electron": "^40.0.0"
+    "@types/node": "^26.4.0",
+    "electron": "^40.0.0",
+    "typescript": "^7.0.2"
   }
 }

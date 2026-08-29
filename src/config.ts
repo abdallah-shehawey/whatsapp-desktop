@@ -6,8 +6,8 @@
  */
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 const os = require('os');
 
 const CONFIG_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'),
@@ -43,8 +43,8 @@ const DEFAULTS = {
 /* A deliberately small INI reader: sections, key = value, # and ; comments.
    Nothing here is worth a dependency, and a parser that silently accepts a
    half-written file is what a hand-edited config needs. */
-const parse = text => {
-  const out = {};
+const parse = (text: string): Record<string, string> => {
+  const out: Record<string, string> = {};
   let section = '';
   for (const raw of text.split('\n')) {
     const line = raw.trim();
@@ -60,7 +60,7 @@ const parse = text => {
   return out;
 };
 
-const coerce = (value, fallback) => {
+const coerce = (value: string, fallback: string | number | boolean) => {
   if (typeof fallback === 'boolean') return /^(1|true|yes|on)$/i.test(value);
   if (typeof fallback === 'number') {
     const n = Number(value);
@@ -70,6 +70,7 @@ const coerce = (value, fallback) => {
 };
 
 class Config {
+  values: Record<string, any>;
   constructor() {
     this.values = { ...DEFAULTS };
     this.reload();
@@ -84,9 +85,9 @@ class Config {
     }
   }
 
-  get(key) { return this.values[key]; }
+  get(key: string | number) { return this.values[key]; }
 
-  set(key, value) { this.values[key] = value; }
+  set(key: string | number, value: any) { this.values[key] = value; }
 
   /* Only what the client itself decides is written back -- the window size and
      the zoom level. A hand-written config keeps its comments and its layout,
@@ -158,9 +159,9 @@ class Config {
       fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
       fs.writeFileSync(CONFIG_PATH, text);
     } catch (e) {
-      console.warn('could not write %s: %s', CONFIG_PATH, e.message);
+      if (e instanceof Error) console.warn('could not write %s: %s', CONFIG_PATH, e.message);
     }
   }
 }
 
-module.exports = { Config, CONFIG_PATH, CONFIG_DIR };
+export { Config, CONFIG_PATH, CONFIG_DIR };

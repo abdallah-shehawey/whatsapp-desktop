@@ -23,18 +23,18 @@
  */
 'use strict';
 
-const { Notification } = require('electron');
+const Notification = require('electron');
 const crypto = require('crypto');
+const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const path = require('path');
 
 const AVATAR_PREFIX = 'whatsapp-desktop-avatar-';
 const runtimeDir = () => process.env.XDG_RUNTIME_DIR || os.tmpdir();
 
 /* Writes the picture out and answers with its path, or null. Named from the
    bytes, so the same face is written once and never rewritten under a banner. */
-const avatarPath = base64 => {
+const avatarPath = (base64?: string) => {
   if (!base64) return null;
   let bytes;
   try { bytes = Buffer.from(base64, 'base64'); } catch (e) { return null; }
@@ -91,7 +91,12 @@ const SEEN_TTL_MS = 60 * 60 * 1000;
 const SEEN_MAX = 4096;
 
 class Seen {
-  constructor(file) {
+  file: string;
+  at: Map<string, number>;
+  dirty: boolean;
+  flushTimer: NodeJS.Timeout | null;
+
+  constructor(file: string) {
     this.file = file;
     this.at = new Map();                  // digest -> when it was announced
     this.dirty = false;
@@ -99,7 +104,7 @@ class Seen {
     this.load();
   }
 
-  static digest(identity) {
+  static digest(identity: string) {
     return crypto.createHash('sha256').update(String(identity)).digest('hex').slice(0, 24);
   }
 
@@ -124,12 +129,15 @@ class Seen {
       this.dirty = false;
       const cutoff = Date.now() - SEEN_TTL_MS;
       for (const [key, at] of this.at) if (at < cutoff) this.at.delete(key);
-      while (this.at.size > SEEN_MAX) this.at.delete(this.at.keys().next().value);
+      while (this.at.size > SEEN_MAX) {
+        const key = this.at.keys().next().value;
+        if (key) this.at.delete(key);
+      }
       try {
         fs.mkdirSync(path.dirname(this.file), { recursive: true, mode: 0o700 });
         fs.writeFileSync(this.file, JSON.stringify({ seen: Object.fromEntries(this.at) }),
                          { mode: 0o600 });
-      } catch (e) {
+      } catch (e: any) {
         console.warn('could not remember which messages were announced: %s', e.message);
       }
     }, 5000);
@@ -139,12 +147,12 @@ class Seen {
   /* Whether this exact message has been announced inside the window. Identity,
      not resemblance: two people saying the same thing are two messages, and one
      person saying it twice an hour apart is two as well. */
-  has(identity, windowMs) {
+  has(identity: string, windowMs: number) {
     const at = this.at.get(Seen.digest(identity));
     return at !== undefined && Date.now() - at < windowMs;
   }
 
-  add(identity) {
+  add(identity: string) {
     this.at.set(Seen.digest(identity), Date.now());
     this.save();
   }
@@ -156,7 +164,20 @@ class Seen {
  * lets it be withdrawn when that chat is read.
  */
 class Entry {
-  constructor(owner, { key, msgId, title, body, iconPath, onClick }) {
+  owner: any;
+  key: string;
+  title: string;
+  body: string;
+  iconPath: string;
+  onClick: (() => void) | undefined;
+  raisedAt: number;
+  settled: boolean;
+  closedByUs: boolean | undefined;
+  timer: NodeJS.Timeout | null;
+  current: any;
+  msgId: string;
+
+  constructor(owner: any, { key, msgId, title, body, iconPath, onClick }: { key?: string, title: string, msgId: string, body?: string, iconPath?: string, onClick?: () => void }) {
     this.owner = owner;
     this.key = key || title;
     /* The message this banner is, when there is one to name. A withdrawal used
@@ -167,7 +188,7 @@ class Entry {
     this.msgId = msgId || '';
     this.title = title;
     this.body = body || '';
-    this.iconPath = iconPath;
+    this.iconPath = iconPath || '';
     this.onClick = onClick;
     this.raisedAt = Date.now();
     this.settled = false;
@@ -191,10 +212,11 @@ class Entry {
    * So the flag belongs to the notification rather than to the entry, and it is
    * set for good rather than cleared. Whoever wants this one gone calls the
    * retire function that comes with it. */
-  _watch(notification) {
+  
+  _watch(notification: typeof Notification) {
     this.current = notification;
     let ours = false;
-    notification.__retire = () => {
+    (notification as any).__retire = () => {
       ours = true;
       try { notification.close(); } catch (e) {}
     };
@@ -213,11 +235,11 @@ class Entry {
     });
   }
 
-  show(seconds) {
+  show(seconds: number) {
     const banner = new Notification({
       title: this.title,
       body: this.body,
-      icon: this.iconPath,
+      icon: this.iconPath || undefined,
       urgency: 'normal',
       timeoutType: 'default',
     });
@@ -231,10 +253,10 @@ class Entry {
     this.timer = setTimeout(() => {
       this.timer = null;
       if (this.settled) return;
-      banner.__retire();
+      (banner as any).__retire();
 
       const filed = new Notification({
-        title: this.title, body: this.body, icon: this.iconPath,
+        title: this.title, body: this.body, icon: this.iconPath || undefined,
         urgency: 'low', silent: true, timeoutType: 'default',
       });
       this._watch(filed);
@@ -281,7 +303,23 @@ const SAME_MESSAGE_MS = 15000;
 const SAME_ID_MS = SEEN_TTL_MS;
 
 class Banners {
-  constructor({ seconds = 12, appIcon = null, stateFile = null, hidePreview = false } = {}) {
+  seconds: number;
+  appIcon: string | null | undefined;
+  byKey: Map<string, Set<Entry>>;
+  hidePreview: any;
+  seen: any;
+  
+  constructor({
+  seconds = 12,
+  appIcon = null,
+  stateFile = null,
+  hidePreview = false,
+}: {
+  seconds?: number;
+  appIcon?: string | null;
+  stateFile?: string | null;
+  hidePreview?: boolean;
+} = {}) {
     this.seconds = seconds;
     this.appIcon = appIcon;
     this.hidePreview = hidePreview;
@@ -301,7 +339,7 @@ class Banners {
    * icon      base64 image bytes for the sender's picture, or nothing
    * onClick   what to do when the user clicks the banner
    */
-  show({ identity, msgId, key, title, body, icon, onClick, redacted }) {
+  show({ key, title, msgId, body, icon, onClick , redacted, identity}: { key?: string, title: string, msgId: string, body?: string, icon?: string, onClick?: () => void, redacted: string, identity?: string }) {
     if (!this.supported || !title) return null;
 
     if (identity && this.seen) {
@@ -328,7 +366,7 @@ class Banners {
     return entry.show(this.seconds);
   }
 
-  _forget(entry) {
+  _forget(entry: Entry) {
     const set = this.byKey.get(entry.key);
     if (!set) return;
     set.delete(entry);
@@ -339,7 +377,7 @@ class Banners {
      banner raised a moment ago from being withdrawn by the very first report
      that follows it -- WhatsApp draws the unread pill a beat after it moves the
      row, so a fresh arrival can briefly look like a chat with nothing unread. */
-  closeKey(key, minimumAge = 0) {
+  closeKey(key: any, minimumAge = 0) {
     const set = this.byKey.get(key);
     if (!set) return 0;
     let closed = 0;
@@ -355,7 +393,7 @@ class Banners {
      that guard, or 0 when nothing is waiting on it. A caller that was refused
      needs this: the reason it was refused expires, and nothing else will tell
      it when. */
-  guardRemaining(key, minimumAge) {
+  guardRemaining(key: any, minimumAge: number) {
     const set = this.byKey.get(key);
     if (!set) return 0;
     let longest = 0;
@@ -369,7 +407,7 @@ class Banners {
   /* One message, taken back. A message deleted for everyone is the case this
      exists for: the phone withdraws the notification for it and does not raise
      a second one saying it was deleted, and neither does this. */
-  closeMessage(msgId) {
+  closeMessage(msgId: string) {
     if (!msgId) return 0;
     let closed = 0;
     for (const set of [...this.byKey.values()])
@@ -391,7 +429,7 @@ class Banners {
    * with it. No age guard: this is an answer WhatsApp gave, not something
    * inferred from a redrawn list, and the guard that used to sit here is what
    * left a message read on the phone sitting in the notification centre. */
-  trim(key, keep) {
+  trim(key: string, keep: number) {
     const set = this.byKey.get(key);
     if (!set) return 0;
     const live = [...set];
@@ -402,7 +440,7 @@ class Banners {
 
   /* How many are still up for this chat, which is what decides whether a report
      is worth logging. */
-  countFor(key) {
+  countFor(key: string) {
     const set = this.byKey.get(key);
     return set ? set.size : 0;
   }
@@ -410,4 +448,9 @@ class Banners {
   keys() { return [...this.byKey.keys()]; }
 }
 
-module.exports = { Banners, sweepAvatars, avatarPath };
+export { Banners, sweepAvatars, avatarPath };
+
+
+
+
+

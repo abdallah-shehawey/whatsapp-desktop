@@ -21,13 +21,13 @@
  */
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 const os = require('os');
 
 const SNAPSHOT = path.join(os.tmpdir(), 'whatsapp-desktop-snapshot.png');
 
-const install = (getWindow, getBanners) => {
+const install = (getWindow: () => any, getBanners: () => any) => {
   const file = process.env.WHATSAPP_DEBUG_EVAL;
   if (!file) return;
 
@@ -140,7 +140,7 @@ const install = (getWindow, getBanners) => {
         await new Promise(resolve => setTimeout(resolve, 300));
         console.log('debug: scroll %s', await win.webContents.executeJavaScript(REPORT, true));
       } catch (e) {
-        console.warn('debug: scroll probe failed: %s', e.message);
+        console.warn('debug: scroll probe failed: %s', (e as Error).message);
       }
       return;
     }
@@ -164,7 +164,7 @@ const install = (getWindow, getBanners) => {
         full: `* { font-family: ${style.stack(family)} !important; }\nhtml { font-size: 16px !important; }`,
         shipped: style.build({ arabicFix: false, fontSize: 16 }),
       };
-      await require('./main-css.js').set(pieces[which] || '');
+      await require('./main-css.js').set(pieces[which as keyof typeof pieces] || '');
       console.log('debug: stylesheet -> %s', which);
       return;
     }
@@ -252,7 +252,7 @@ const install = (getWindow, getBanners) => {
         if (!win.webContents.debugger.isAttached()) { win.webContents.debugger.attach('1.3'); attached = true; }
         await win.webContents.debugger.sendCommand('HeapProfiler.collectGarbage');
       } catch (err) {
-        console.log('debug: could not collect: %s', err.message);
+        if (err instanceof Error) console.log('debug: could not collect: %s', err.message);
       } finally {
         if (attached) { try { win.webContents.debugger.detach(); } catch (e) {} }
       }
@@ -282,13 +282,13 @@ const install = (getWindow, getBanners) => {
         });
         const { listeners } = await win.webContents.debugger.sendCommand(
           'DOMDebugger.getEventListeners', { objectId: result.objectId, depth: 1 });
-        const keys = (listeners || []).filter(l => /^key/.test(l.type));
+        const keys = (listeners || []).filter((l: { type: string; }) => /^key/.test(l.type));
         console.log('debug: %s has %d listener(s), %d for keys: %s', what,
                     (listeners || []).length, keys.length,
-                    JSON.stringify(keys.map(l => ({ type: l.type, capture: l.useCapture,
+                    JSON.stringify(keys.map((l: { type: any; useCapture: any; scriptId: string; lineNumber: string; }) => ({ type: l.type, capture: l.useCapture,
                                                     at: l.scriptId + ':' + l.lineNumber }))));
       } catch (err) {
-        console.log('debug: could not read listeners: %s', err.message);
+        if (err instanceof Error) console.log('debug: could not read listeners: %s', err.message);
       } finally {
         if (attached) { try { win.webContents.debugger.detach(); } catch (e) {} }
       }
@@ -340,9 +340,9 @@ const install = (getWindow, getBanners) => {
           new Promise(resolve => setTimeout(() => resolve('timed out after 8s'), 8000)),
         ]);
         console.log('debug: [%s] %s', types.join(','), typeof sources === 'string' ? sources :
-          JSON.stringify(sources.map(s => ({ id: s.id, name: s.name }))));
+          JSON.stringify(sources.map((s: { id: any; name: any; }) => ({ id: s.id, name: s.name }))));
       } catch (e) {
-        console.warn('debug: screen sources failed: %s', e.message);
+        if (e instanceof Error) console.warn('debug: screen sources failed: %s', e.message);
       }
       return;
     }
@@ -369,7 +369,7 @@ const install = (getWindow, getBanners) => {
         fs.writeFileSync(SNAPSHOT, image.toPNG());
         console.log('debug: wrote %s', SNAPSHOT);
       } catch (e) {
-        console.warn('debug: could not take a snapshot: %s', e.message);
+        console.warn('debug: could not take a snapshot: %s', (e as Error).message);
       }
       return;
     }
@@ -378,17 +378,18 @@ const install = (getWindow, getBanners) => {
       const result = await win.webContents.executeJavaScript(source, true);
       console.log('debug: %s', typeof result === 'string' ? result : JSON.stringify(result));
     } catch (e) {
-      console.warn('debug: %s', e.message);
+      console.warn('debug: %s', (e as Error).message);
     }
   };
 
   /* Polled rather than watched: an editor writing the file atomically replaces
      the inode, and a watch on the old one hears nothing after the first save. */
   try { fs.writeFileSync(file, fs.existsSync(file) ? fs.readFileSync(file) : ''); } catch (e) {}
-  fs.watchFile(file, { interval: 300 }, (now, before) => {
+  fs.watchFile(file, { interval: 300 }, (now: any, before: any) => {
     if (now.mtimeMs !== before.mtimeMs) run();
   });
   console.log('debug: watching %s', file);
 };
 
-module.exports = { install, SNAPSHOT };
+export { install, SNAPSHOT };
+

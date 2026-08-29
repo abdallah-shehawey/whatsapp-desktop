@@ -85,7 +85,7 @@ const KINDS = wording.MARKS;
    remembered, and announced when it turns into something. */
 const PENDING = 'ciphertext';
 
-const start = ({ send, log, fetchAvatar, faceFor }) => {
+const start = ({ send, log, fetchAvatar, faceFor }: { send: any, log: any, fetchAvatar: any, faceFor: any}) => {
   /* `window` itself is checked, not just the registry on it. This module is a
      plain CommonJS file and the test rig loads it as one, outside the sandbox it
      builds for the page -- so the first thing it meets is a world with no window
@@ -93,9 +93,9 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      registry away. Both answer "no store", which is the right answer to both. */
   const R = () => (typeof window !== 'undefined' && typeof window.require === 'function'
                    ? window.require : null);
-  const grab = name => { const r = R(); if (!r) return null; try { return r(name); } catch (e) { return null; } };
+  const grab = (name: string) => { const r = R(); if (!r) return null; try { return r(name); } catch (e) { return null; } };
 
-  let S = null;                 // the resolved store, or null
+  let S: { chats: any; msgs: any; contacts: any; contactNames: any; reactions: any; pics: any; cmd: any; me: any; } | null = null;                 // the resolved store, or null
   let liveAt = 0;               // when it came up
   let focused = false;
   let enabled = true;
@@ -139,7 +139,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
    * keyed on it would have missed the one event it exists for, a message being
    * deleted. The parts are always there, and WhatsApp's own format for joining
    * them is what is written here. */
-  const keyOf = id => {
+  const keyOf = (id: Msg['id']) => {
     if (!id) return '';
     try {
       if (typeof id._serialized === 'string' && id._serialized) return id._serialized;
@@ -154,16 +154,16 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     } catch (e) { return ''; }
   };
 
-  const widOf = wid => {
+  const widOf = (wid: { _serialized: any; }) => {
     if (!wid) return '';
     try { return wid._serialized || String(wid); } catch (e) { return ''; }
   };
 
-  const isMe = wid => {
+  const isMe = (wid: any) => {
     const serialized = widOf(wid);
     if (!serialized) return false;
     try {
-      if (S.me && typeof S.me.isSerializedWidMe === 'function')
+      if (S?.me && typeof S.me.isSerializedWidMe === 'function')
         return !!S.me.isSerializedWidMe(serialized);
     } catch (e) {}
     /* The registry answers this itself on every build measured; the comparison
@@ -171,17 +171,17 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
        account has a phone-number jid and a lid and WhatsApp uses either. */
     for (const get of ['getMaybeMeLidUser', 'getMaybeMePnUser']) {
       try {
-        if (S.me && widOf(S.me[get]()) === serialized) return true;
+        if (S?.me && widOf(S.me[get]()) === serialized) return true;
       } catch (e) {}
     }
     return false;
   };
 
-  const chatOf = id => {
-    try { return S.chats.get(id) || null; } catch (e) { return null; }
+  const chatOf = (id: any) => {
+    try { return S?.chats.get(id) || null; } catch (e) { return null; }
   };
 
-  const titleOf = chat => {
+  const titleOf = (chat: { formattedTitle?: any; name?: any; id: any; }) => {
     if (!chat) return '';
     try {
       return String(chat.formattedTitle || chat.name || widOf(chat.id) || '').trim();
@@ -190,7 +190,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
 
   /* A group, a community subgroup, a newsletter -- anything where the message
      carries an author of its own and the banner has to say who wrote. */
-  const isGroup = chat => {
+  const isGroup = (chat: { id: any; isGroup?: any; }) => {
     try {
       const server = chat && chat.id && chat.id.server;
       return server === 'g.us' || server === 'newsletter' || server === 'broadcast' ||
@@ -200,7 +200,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
 
   /* WhatsApp writes -1 for "until I turn it off" and a unix time in SECONDS for
      everything else; 0 and undefined are not muted. */
-  const isMuted = chat => {
+  const isMuted = (chat: { mute: any; muteExpiration: any; }) => {
     try {
       const mute = chat && chat.mute;
       const until = mute ? mute.expiration : chat && chat.muteExpiration;
@@ -231,7 +231,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
    *
    * `fallback` is the push name WhatsApp wrote onto the message itself, which a
    * group message carries even for a sender with no contact row at all. */
-  const clean = value => String(value == null ? '' : value).replace(/^~\s*/, '').trim();
+  const clean = (value: any) => String(value == null ? '' : value).replace(/^~\s*/, '').trim();
 
   /* Somebody's telephone number, which is what goes on the banner when there is
      no name to put there -- the owner asked for this outright, and it is what the
@@ -243,7 +243,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      for any account the client has ever exchanged messages with. When toPn
      answers undefined WhatsApp does not know the number either, and nothing else
      on the page does. */
-  const numberOf = (contact, wid, serialized) => {
+  const numberOf = (contact: { phoneNumber: any; }, wid: any, serialized: string) => {
     let digits = '';
     if (/@c\.us$/.test(serialized)) digits = serialized.replace(/@.*$/, '');
     if (!digits) {
@@ -259,16 +259,16 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     return /^\d{6,}$/.test(digits) ? '+' + digits : '';
   };
 
-  const nameOf = (wid, fallback) => {
+  const nameOf = (wid: any, fallback?: any) => {
     const serialized = widOf(wid);
     let contact = null;
-    try { contact = (S.contacts && S.contacts.get(wid)) || null; } catch (e) {}
+    try { contact = (S?.contacts && S.contacts.get(wid)) || null; } catch (e) {}
 
     if (contact) {
       const saved = clean(contact.name);
       if (saved) return saved;
       try {
-        if (S.contactNames && typeof S.contactNames.getNotifyName === 'function') {
+        if (S?.contactNames && typeof S.contactNames.getNotifyName === 'function') {
           const known = clean(S.contactNames.getNotifyName(contact));
           if (known) return known;
         }
@@ -315,7 +315,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      shouldEnableReactionsNotificationGranular reads them -- the same names live
      on WAWebUserPrefsNotifications and the two agreed on every switch when
      compared, but the one WhatsApp consults is the one to consult. */
-  const asks = (name, fallback) => {
+  const asks = (name: string, fallback: boolean) => {
     for (const where of ['WAWebMuteCollection', 'WAWebUserPrefsNotifications']) {
       try {
         const module = grab(where);
@@ -330,7 +330,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
   };
 
   /* Whether WhatsApp itself would announce a message in this chat. */
-  const wanted = chat => {
+  const wanted = (chat: any) => {
     if (!asks('getGlobalNotificationsEnabled', true)) return false;
     if (!isGroup(chat)) return true;
     return asks('getGlobalGroupNotificationsEnabled', true);
@@ -342,7 +342,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
   /* And the one that was being ignored outright. WhatsApp keeps a separate
      answer for a direct chat, a group and a status; the first two are the ones a
      reaction can land in here. */
-  const reactionsWanted = chat =>
+  const reactionsWanted = (chat: any) =>
     asks(isGroup(chat) ? 'getGlobalGroupNotificationReactionsEnabled'
                        : 'getGlobalNotificationReactionsEnabled', false);
 
@@ -353,10 +353,10 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      list keeps a 1x1 transparent GIF in the <img> of a row whose picture has not
      loaded, and reading the face off the DOM read that. The store holds the URL
      whether or not anything has drawn it. */
-  const pictureFor = async chat => {
+  const pictureFor = async (chat: { id: any; formattedTitle?: any; name?: any; }) => {
     let url = '';
     try {
-      const thumb = S.pics && S.pics.get(chat.id);
+      const thumb = S?.pics && S.pics.get(chat.id);
       if (thumb) url = thumb.img || thumb.imgFull || thumb.eurl || '';
     } catch (e) {}
     if (url) {
@@ -381,7 +381,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      * mention into a muted group -- measured: a mention at 46331826 with
      * mentionedJidList set, then a plain message at 46339758 with an empty one,
      * and the row's badge identical for both. */
-  const aimedAtUs = msg => {
+  const aimedAtUs = (msg: Msg) => {
     try {
       for (const wid of (msg.mentionedJidList || [])) if (isMe(wid)) return wording.MENTION_MARK;
     } catch (e) {}
@@ -391,7 +391,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
       if (msg.quotedParticipant && isMe(msg.quotedParticipant)) return wording.REPLY_MARK;
       const quoted = msg.quotedMsg;
       if (quoted && quoted.id && quoted.id.fromMe) return wording.REPLY_MARK;
-      if (msg.quotedStanzaID && msg.quotedRemoteJid && !isGroup({ id: msg.id.remote }) &&
+      if (msg.quotedStanzaID && msg.quotedRemoteJid && !isGroup({ id: msg.id?.remote }) &&
           msg.quotedParticipant === undefined) return '';
     } catch (e) {}
     return '';
@@ -420,7 +420,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      contact is named that. WhatsApp has the same problem and solves it in
      addAtPrefixForMention: strip a leading @, then add exactly one. The local
      copy below is that function, kept for the day the name goes away. */
-  const atPrefix = name => {
+  const atPrefix = (name: string) => {
     try {
       const mod = grab('WAWebMentionDisplayUtils');
       if (mod && typeof mod.addAtPrefixForMention === 'function') {
@@ -431,14 +431,14 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     return '@' + (name.startsWith('@') ? name.slice(1) : name);
   };
 
-  const withNames = (said, msg) => {
+  const withNames = (said: string, msg: Msg) => {
     let out = said;
     let list = [];
     try { list = msg.mentionedJidList || []; } catch (e) { return out; }
     const users = [];
     for (const wid of list) {
       const user = widOf(wid).replace(/@.*$/, '');
-      if (user) users.push({ user, name: nameOf(wid) });
+      if (user) users.push({ user, name: nameOf(wid, null) });
     }
     users.sort((a, b) => b.user.length - a.user.length);
     for (const { user, name } of users) {
@@ -448,7 +448,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     return out;
   };
 
-  const textOf = msg => {
+  const textOf = (msg: Msg) => {
     let said = '';
     try { said = msg.body || msg.caption || ''; } catch (e) {}
     said = withNames(String(said == null ? '' : said), msg)
@@ -459,11 +459,11 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
   /* The mark for what arrived. A voice note gets its length, the way the phone
      writes it, because "Voice message" alone loses the one fact about it that
      the chat list bothers to show. */
-  const markOf = msg => {
-    const label = KINDS[msg.type];
+  const markOf = (msg: Msg) => {
+    const label = KINDS[msg.type || ''];
     if (label === undefined) return null;                    // not a message
     if (msg.type !== 'ptt' && msg.type !== 'audio') return label;
-    const seconds = parseInt(msg.duration, 10);
+    const seconds = parseInt(msg.duration || '', 10);
     if (!label || !seconds || !isFinite(seconds)) return label;
     const clock = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
     return label + ' (' + clock + ')';
@@ -476,19 +476,36 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      to which chat is open -- it beats reading aria-selected, and it is right
      while the window is hidden, when nothing is drawn to read -- and a window
      the user is not in front of is not one they are reading. */
-  const onScreen = chat => {
+  const onScreen = (chat: { active: boolean; }) => {
     try { return chat.active === true && focused; } catch (e) { return false; }
   };
 
   const pending = new Set();          // ciphertext ids waiting to become messages
   const announced = new Set();        // ids already sent over, so a retype is not a repeat
 
-  const remember = id => {
+  const remember = (id: unknown) => {
     announced.add(id);
     if (announced.size > 512) announced.delete(announced.values().next().value);
   };
 
-  const arrived = async (msg, why) => {
+  type Msg = {
+  id?: { _serialized?: any; remote?: any; id?: any; fromMe?: any; participant?: any };
+  type?: string;
+  t?: any;
+  author?: any;
+  from?: any;
+  notifyName?: any;
+  duration?: string;
+  body?: any;
+  caption?: any;
+  mentionedJidList?: any[];
+  quotedParticipant?: any;
+  quotedMsg?: any;
+  quotedStanzaID?: any;
+  quotedRemoteJid?: any;
+};
+
+  const arrived = async (msg: Msg, why: string) => {
     if (!enabled || !S) return;
     if (Date.now() - liveAt < SETTLE_MS) return;
 
@@ -496,7 +513,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     try {
       if (!msg || !msg.id || msg.id.fromMe) return;
       id = keyOf(msg.id);
-      chatId = widOf(msg.id.remote);
+      chatId = widOf(msg.id?.remote);
     } catch (e) { return; }
     if (!id || !chatId || announced.has(id)) return;
 
@@ -561,7 +578,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
   /* Every seat this parent message still has an unread reaction for. WhatsApp's
      own answer: unreadSenders filters out anything the user has seen, wherever
      they saw it, and anything that has since been taken back. */
-  const unreadSeats = row => {
+  const unreadSeats = (row: { unreadSenders: () => any; }) => {
     let senders = [];
     try {
       const unread = typeof row.unreadSenders === 'function' ? row.unreadSenders() : row.unreadSenders;
@@ -571,7 +588,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
   };
 
   /* Every banner raised for a reaction on this message, taken down. */
-  const dropReactions = (parentKey, chatId) => {
+  const dropReactions = (parentKey: string, chatId: any) => {
     for (const [seat, emoji] of [...reacted]) {
       if (!seat.startsWith(parentKey + '|')) continue;
       reacted.delete(seat);
@@ -595,7 +612,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
    * carrying the rest -- leaves hasReaction true and does move the collection,
    * and that is reconciled seat by seat in reaction() below.
    */
-  const reactionsGone = msg => {
+  const reactionsGone = (msg: { id: { fromMe: any; remote: any; }; }) => {
     let parentKey, chatId;
     try {
       if (!msg || !msg.id || !msg.id.fromMe) return;
@@ -606,7 +623,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     dropReactions(parentKey, chatId);
   };
 
-  const reaction = async row => {
+  const reaction = async (row: { id: { fromMe: any; remote: any; }; unreadSenders: () => any }) => {
     if (!enabled || !S) return;
     let parentKey, chatId;
     try {
@@ -720,7 +737,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      conversations, and a muted chat contributes only the mentions inside it --
      because a badge counts what the user was told about, and a muted chat is one
      they asked not to be told about. */
-  let countTimer = 0;
+  let countTimer: number | NodeJS.Timeout = 0;
   let lastCount = '';
   const recount = () => {
     if (countTimer) return;
@@ -751,9 +768,10 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
   /* ---------------------------------------------------------------- wiring */
 
   const wire = () => {
+    if(!S) return;
     const { chats, msgs, reactions } = S;
 
-    msgs.on('add', msg => { arrived(msg, 'add'); });
+    msgs.on('add', (msg: any) => { arrived(msg, 'add'); });
 
     /* Two things arrive on this one. A message that has just decrypted, which is
        an arrival that was held; and a message deleted for everyone, which is a
@@ -761,9 +779,9 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
        withdraws the notification for a message that is taken back; it does not
        raise a second one saying so. */
     /* The last reaction on a message going away, which nothing else reports. */
-    msgs.on('change:hasReaction', (msg, has) => { if (!has) reactionsGone(msg); });
+    msgs.on('change:hasReaction', (msg: any, has: any) => { if (!has) reactionsGone(msg); });
 
-    msgs.on('change:type', (msg, type) => {
+    msgs.on('change:type', (msg: { id: { remote: any; }; }, type: string) => {
       let id = '';
       try { id = keyOf(msg.id); } catch (e) { return; }
       if (!id) return;
@@ -776,7 +794,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
 
     /* Read -- here, or on the phone, or on another desktop. One event, no
        inference, and measured at 16ms behind the arrival it cancels. */
-    chats.on('change:unreadCount', (chat, unread) => {
+    chats.on('change:unreadCount', (chat: { id: any; }, unread: any) => {
       const id = widOf(chat && chat.id);
       if (!id) return;
       send('store-read', { chat: id, unread: Number(unread) || 0 });
@@ -790,7 +808,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
        directions -- and being late on the way OUT is what left a chat "still
        open" after the user had closed it, so the next message in it was
        swallowed. */
-    chats.on('change:active', (chat, active) => {
+    chats.on('change:active', (chat: { id: any; }, active: any) => {
       if (!active) {
         /* Which chat became active is what matters; a chat going inactive is
            either a close or the other half of a switch, and the switch reports
@@ -807,9 +825,9 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
          `remove` is the row going away entirely -- the last reaction on a
          message taken back -- and it has to withdraw as surely as a change
          that empties unreadSenders does. */
-      reactions.on('add', row => { reaction(row); });
-      reactions.on('change', row => { reaction(row); });
-      reactions.on('remove', row => { reaction(row); });
+      reactions.on('add', (row: any) => { reaction(row); });
+      reactions.on('change', (row: any) => { reaction(row); });
+      reactions.on('remove', (row: any) => { reaction(row); });
     } else {
       log('the reactions collection is not where it was; reactions will not be announced');
     }
@@ -823,7 +841,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      interface. A click on a banner used to press the deepest node inside a
      chat-list row -- which works, and which needs the row to still be in the
      list and the name to be unambiguous. The chat id is neither. */
-  const open = chatId => {
+  const open = (chatId: any) => {
     if (!S || !S.cmd) return false;
     const chat = chatOf(chatId);
     if (!chat) return false;
@@ -864,7 +882,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      coming out of suspend, or a socket that dropped. */
   const unreadNow = () => {
     if (!S) return null;
-    const out = {};
+    const out: { [chatId: string]: number } = {};
     try {
       for (const chat of S.chats.getModelsArray()) {
         const waiting = Number(chat.unreadCount) || 0;
@@ -892,7 +910,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     liveAt = Date.now();
     try { wire(); } catch (e) {
       S = null;
-      log('could not listen to WhatsApp\'s store: ' + e.message);
+      if(e instanceof Error) log('could not listen to WhatsApp\'s store: ' + e.message);
       send('store-ready', { ready: false });
       return;
     }
@@ -912,13 +930,14 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     open,
     activeChat,
     unreadNow,
-    setFocus: value => {
+    setFocus: (value: any) => {
       const was = focused;
       focused = !!value;
       if (S && focused && !was) sayActive();
     },
-    setEnabled: value => { enabled = !!value; },
+    setEnabled: (value: any) => { enabled = !!value; },
   };
 };
 
 module.exports = { start, KINDS };
+export {}

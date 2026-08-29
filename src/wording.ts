@@ -49,7 +49,7 @@
  * Symbols 2, Font Awesome, DejaVu and Adwaita Mono, four designs that do not
  * belong together, and it changes shapes the user already recognises. */
 const TEXT = '︎';
-const mono = character => character + TEXT;
+const mono = (character: string) => character + TEXT;
 
 const STICKER = mono('\u{1F49F}') + ' Sticker';
 /* The selector is on the three whose default presentation is text -- the label,
@@ -91,7 +91,7 @@ const MEDIA_WORDS = [
  * it.
  *
  * Anchored, because a message about a photo is a message and not a photo. */
-const mediaFromWords = text => {
+const mediaFromWords = (text: null) => {
   const said = String(text == null ? '' : text).trim();
   if (!said) return '';
   for (const kind of MEDIA_WORDS) if (kind.text.test(said)) return kind.label;
@@ -108,7 +108,7 @@ const mediaFromWords = text => {
    recognising -- which is the whole label, so nothing broke visibly and the
    hidden-preview banner quietly said "New message" for everything. */
 const KIND = /^([\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{FE0E}\u{FE0F}]+\s*[A-Za-z ]+)/u;
-const kindOf = message => {
+const kindOf = (message: any) => {
   const body = String(message || '');
   /* The whole body first, and only then the body with a sender taken off it.
      The other way round, "\u{1F3A4} Voice message (0:41)" had "(0:" read as a
@@ -123,7 +123,7 @@ const kindOf = message => {
    rather than from the user's contacts -- "~Ahmed" -- and it is a footnote to
    the reader, not part of anybody's name. The phone does not show it and neither
    does this. */
-const pushName = name => String(name == null ? '' : name).replace(/^~\s*/, '').trim();
+const pushName = (name: null) => String(name == null ? '' : name).replace(/^~\s*/, '').trim();
 
 /* What WhatsApp puts in front of the sender when a message is aimed at the user
    in particular. It is not a name, and the split below read it as one: a banner
@@ -150,7 +150,7 @@ const AIMED_AT_US = [
  * scheme in every case there is. */
 const NAME_WORDS = 4;
 const NAME_CHARS = 40;
-const nameLike = (candidate, rest) => {
+const nameLike = (candidate: string, rest: string) => {
   if (rest.startsWith('/')) return false;
   if (candidate.length > NAME_CHARS) return false;
   return candidate.trim().split(/\s+/).length <= NAME_WORDS;
@@ -165,7 +165,7 @@ const nameLike = (candidate, rest) => {
  * The marks come off first either way. They sit in front of the sender in a
  * group and in front of the message in a direct chat, and they are not part of
  * either. */
-const readBody = (raw, group) => {
+const readBody = (raw: null, group: boolean) => {
   let rest = String(raw == null ? '' : raw);
   let mark = '';
   for (const aimed of AIMED_AT_US) {
@@ -185,7 +185,7 @@ const readBody = (raw, group) => {
   if (group !== true && !nameLike(split[1], split[2])) {
     return { sender: '', message: rest, mark };
   }
-  return { sender: pushName(split[1]), message: split[2], mark };
+  return { sender: pushName((split[1] as unknown as null)), message: split[2], mark };
 };
 
 
@@ -230,3 +230,4 @@ const REPLY_MARK = mono('↩');
 
 module.exports = { kindOf, pushName, readBody, mediaFromWords, STICKER,
                    MARKS, MENTION_MARK, REPLY_MARK, TEXT, mono };
+export {}

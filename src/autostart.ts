@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const APP_ID = 'io.github.shehawey.whatsapp-desktop';
+export const APP_ID = 'io.github.shehawey.whatsapp-desktop';
 const USER_AUTOSTART_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'autostart');
 const USER_DESKTOP_PATH = path.join(USER_AUTOSTART_DIR, `${APP_ID}.desktop`);
 const SYS_DESKTOP_PATH = path.join('/etc', 'xdg', 'autostart', `${APP_ID}.desktop`);
@@ -41,7 +41,7 @@ const isEnabled = () => {
   return false;
 };
 
-const setEnabled = enable => {
+const setEnabled = (enable: any) => {
   try {
     fs.mkdirSync(USER_AUTOSTART_DIR, { recursive: true, mode: 0o700 });
   } catch (e) {}
@@ -65,7 +65,7 @@ const setEnabled = enable => {
       fs.writeFileSync(USER_DESKTOP_PATH, desktopEntry, { mode: 0o644 });
       return true;
     } catch (e) {
-      console.warn('autostart: could not write %s: %s', USER_DESKTOP_PATH, e.message);
+      if (e instanceof Error) console.warn('autostart: could not write %s: %s', USER_DESKTOP_PATH, e.message);
       return false;
     }
   } else {
@@ -82,7 +82,7 @@ const setEnabled = enable => {
         fs.writeFileSync(USER_DESKTOP_PATH, maskEntry, { mode: 0o644 });
         return true;
       } catch (e) {
-        console.warn('autostart: could not mask %s: %s', USER_DESKTOP_PATH, e.message);
+        if (e instanceof Error) console.warn('autostart: could not mask %s: %s', USER_DESKTOP_PATH, e.message);
         return false;
       }
     } else {
@@ -98,4 +98,4 @@ const setEnabled = enable => {
   }
 };
 
-module.exports = { isEnabled, setEnabled, USER_DESKTOP_PATH };
+export { isEnabled, setEnabled, USER_DESKTOP_PATH };

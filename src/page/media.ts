@@ -45,32 +45,32 @@ const SWEEP_BACK = 60;
 const WAIT_MS = 120000;
 const POLL_MS = 500;
 
-const start = ({ log }) => {
-  const grab = name => {
+const start = ({ log }: { log: any }) => {
+  const grab = (name: string) => {
     if (typeof window === 'undefined' || typeof window.require !== 'function') return null;
     try { return window.require(name); } catch (e) { return null; }
   };
 
-  let msgs = null;
-  let chats = null;
+  let msgs: { on: (arg0: string, arg1: { (msg: any): void; (msg: any): void; }) => void; } | null = null;
+  let chats: { on: (arg0: string, arg1: (chat: any, active: any) => void) => void; getActive: () => any; length: any; } | null = null;
   let enabled = true;
 
   const inFlight = new Set();
-  const queue = [];
+  const queue: any[] = [];
   let asked = 0;
 
-  const keyOf = msg => {
+  const keyOf = (msg: { id: { _serialized: any; }; }) => {
     try { return (msg.id && (msg.id._serialized || String(msg.id))) || ''; } catch (e) { return ''; }
   };
 
-  const stageOf = msg => {
+  const stageOf = (msg: { mediaData: { mediaStage: any; }; }) => {
     try { return (msg.mediaData && msg.mediaData.mediaStage) || ''; } catch (e) { return ''; }
   };
 
   /* Worth asking for: a sticker, not already here, not already being fetched,
      and small enough to be what it says it is. A message with no mediaKey has
      nothing to decrypt with and no request would succeed. */
-  const worthIt = msg => {
+  const worthIt = (msg: { type: string; mediaKey: any; directPath: any; mediaData: { size: any; mediaStage: any; }; id: { _serialized: any; };}) => {
     try {
       if (!enabled || !msg || msg.type !== 'sticker') return false;
       if (!msg.mediaKey || !msg.directPath) return false;
@@ -113,7 +113,7 @@ const start = ({ log }) => {
     }
   };
 
-  const want = msg => {
+  const want = (msg: any) => {
     if (!worthIt(msg)) return;
     queue.push(msg);
     if (queue.length > 200) queue.splice(0, queue.length - 200);
@@ -123,7 +123,7 @@ const start = ({ log }) => {
   /* Everything already loaded in the conversation the user just opened. An
      arrival is caught by the listener below; this is for the stickers that were
      already there, sitting at INIT since whenever the switch was turned off. */
-  const sweep = chat => {
+  const sweep = (chat: { msgs: any; }) => {
     try {
       const held = chat && chat.msgs;
       const all = held && (held.getModelsArray ? held.getModelsArray() : held.models);
@@ -133,15 +133,15 @@ const start = ({ log }) => {
   };
 
   const wire = () => {
-    msgs.on('add', want);
+    msgs?.on('add', want);
     /* A sticker that arrived before its key did shows up as ciphertext and
        becomes a sticker later, which is an arrival the listener above would
        never see. */
-    msgs.on('change:type', msg => want(msg));
-    chats.on('change:active', (chat, active) => { if (active) sweep(chat); });
+    msgs?.on('change:type', (msg: any) => want(msg));
+    chats?.on('change:active', (chat: any, active: any) => { if (active) sweep(chat); });
 
     try {
-      const open = chats.getActive && chats.getActive();
+      const open = chats?.getActive && chats?.getActive();
       if (open) sweep(open);
     } catch (e) {}
   };
@@ -159,7 +159,7 @@ const start = ({ log }) => {
       return;
     }
     try { wire(); } catch (e) {
-      log('could not arrange for stickers to download: ' + e.message);
+      if (e instanceof Error) log('could not arrange for stickers to download: ' + e.message);
       return;
     }
     log('stickers will download whether or not photos do');
@@ -167,7 +167,7 @@ const start = ({ log }) => {
 
   setTimeout(attempt, 800);
 
-  return { setEnabled: value => { enabled = !!value; } };
+  return { setEnabled: (value: any) => { enabled = !!value; } };
 };
 
 module.exports = { start };

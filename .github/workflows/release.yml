@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in src/*.js src/page/*.js tools/*.js; do
+          for file in dist/*.js dist/page/*.js tools/*.js; do
             node --check "$file"
           done
 

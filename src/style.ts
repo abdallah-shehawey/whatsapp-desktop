@@ -19,10 +19,10 @@ const FALLBACKS = [
   'sans-serif',
 ];
 
-const quote = family => `"${String(family).replace(/"/g, '')}"`;
+const quote = (family: any) => `"${String(family).replace(/"/g, '')}"`;
 /* `lead` is put in front and dropped from the tail, so naming the Arabic face
    first for right-to-left text does not leave it named twice. */
-const stack = (family, lead) => {
+const stack = (family: any, lead: any) => {
   const wanted = [quote(family), ...FALLBACKS];
   const list = lead ? [quote(lead), ...wanted.filter(f => f !== quote(lead))] : wanted;
   return list.join(', ');
@@ -162,7 +162,7 @@ const GENERIC = new Set([
    cover falls through to, and aliasing them draws blank boxes. */
 const KEEP = /emoji|symbol|arabic|hebrew|thai|devanagari|cjk|noto sans (?!$)/i;
 
-const aliasSheet = (stack, family) => {
+const aliasSheet = (stack: any, family: string) => {
   if (!stack || !family) return '';
 
   const wanted = String(stack).split(',')
@@ -190,7 +190,7 @@ const aliasSheet = (stack, family) => {
 }`).join('\n');
 };
 
-const build = ({ arabicFix, fontSize }) => {
+const build = ({ arabicFix, fontSize }: { arabicFix: Element; fontSize: Element}) => {
   const rules = [CONVERSATION_SCROLL];
 
   /* There is no font rule here any more, and that is the point. Forcing the

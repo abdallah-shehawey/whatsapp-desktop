@@ -9,7 +9,9 @@
  */
 'use strict';
 
-const { app, BrowserWindow, Menu, session, shell, nativeTheme, ipcMain, screen, desktopCapturer } = require('electron');
+type Electron = typeof import('electron');
+
+const { app, BrowserWindow, Menu, session, shell, nativeTheme, ipcMain, screen: electronScreen, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -28,7 +30,7 @@ const fonts = require('./fonts.js');
 const autostart = require('./autostart.js');
 
 const APP_ID = 'io.github.shehawey.whatsapp-desktop';
-const URL = 'https://web.whatsapp.com/';
+const WHATSAPP_URL = 'https://web.whatsapp.com/';
 const TITLE = 'WhatsApp';
 
 /* The backlog that syncs in over the first half-minute of a launch rewrites the
@@ -80,7 +82,7 @@ process.title = 'WhatsApp';
    every banner under "Electron" and draws Electron's icon on it. */
 if (process.platform === 'linux') app.setDesktopName(APP_ID + '.desktop');
 
-const iconFile = (size, name) =>
+const iconFile = (size: number, name: string) =>
   path.join(__dirname, '..', 'data', 'icons', String(size), name);
 const appIcon = iconFile(256, `apps/${APP_ID}.png`);
 
@@ -106,7 +108,7 @@ const INHERITED_FONTCONFIG = process.env.FONTCONFIG_FILE;
 const configureFonts = () => {
   if (!config.get('view.force-font')) return null;
   const family = config.get('view.font') || desktop.interfaceFont();
-  return fonts.configure(family, app.getPath('userData'));
+  return desktop.configure(family, app.getPath('userData'));
 };
 
 const fontConfigFile = configureFonts();
@@ -180,18 +182,18 @@ if (!app.requestSingleInstanceLock()) {
 
 /* ----------------------------------------------------------------- state */
 
-let win = null;
-let settingsWin = null;
-let tray = null;
-let banners = null;
+let win: typeof BrowserWindow | null = null;
+let settingsWin: typeof BrowserWindow | null = null;
+let tray: { setWindowVisible: (arg0: any) => void; render: () => void; setAttention: (arg0: boolean) => void; destroy: () => void; } | null = null;
+let banners: { closeKey: (arg0: string, arg1: number | undefined) => any; guardRemaining: (arg0: any, arg1: number) => any; show: (arg0: { key: any; title: any; body: any; icon: any; onClick: (() => void) | (() => void); }) => void; keys: () => any; } | null = null;
 let quitting = false;
-let cssKey = null;
+let cssKey: string | null = null;
 let loadedAt = 0;
 let unreadChats = 0;
 /* How many messages are waiting, as the page counted them off the unread pills.
    null until it has, which is what makes the document title's chat count a
    stand-in rather than a permanent answer. */
-let unreadMessages = null;
+let unreadMessages: number | null = null;
 let badgeShown = -1;
 let lastArrivalAt = 0;
 /* The font stack the page says it wants, which is what gets aliased to the
@@ -221,8 +223,8 @@ const chatTitles = new Map();           // chat id -> what to print for it
 
 /* --------------------------------------------------------------- window */
 
-const clampToScreen = (width, height) => {
-  const area = screen.getPrimaryDisplay().workAreaSize;
+const clampToScreen = (width: number, height: number) => {
+  const area = electronScreen.getPrimaryDisplay().workAreaSize;
   return {
     width: Math.min(Math.max(400, Math.round(width)), area.width),
     height: Math.min(Math.max(300, Math.round(height)), area.height),
@@ -250,7 +252,7 @@ const hideWindow = () => {
   win.hide();
 };
 
-const setTheme = theme => {
+const setTheme = (theme: string) => {
   config.set('view.theme', theme);
   config.save();
   if (theme === 'dark') {
@@ -269,7 +271,7 @@ const setTheme = theme => {
   }
 };
 
-const setAutostart = enable => {
+const setAutostart = (enable: any) => {
   autostart.setEnabled(enable);
   if (tray) tray.render();
   if (settingsWin && !settingsWin.isDestroyed()) {
@@ -306,8 +308,8 @@ const openSettings = () => {
   settingsWin.loadFile(path.join(__dirname, 'settings.html'));
 
   settingsWin.once('ready-to-show', () => {
-    settingsWin.show();
-    settingsWin.focus();
+    (settingsWin as any).show();
+    (settingsWin as any).focus();
   });
 
   settingsWin.on('closed', () => {
@@ -319,11 +321,11 @@ const applyStyle = async () => {
   if (!win || win.isDestroyed()) return;
   const family = config.get('view.font') || desktop.interfaceFont();
   const css = [
-    style.build({
+    desktop.build({
       arabicFix: config.get('view.arabic-fix'),
       fontSize: config.get('view.font-size'),
     }),
-    config.get('view.force-font') ? style.aliasSheet(pageFontStack, family) : '',
+    config.get('view.force-font') ? desktop.aliasSheet(pageFontStack, family) : '',
   ].filter(Boolean).join('\n');
 
   try {
@@ -335,7 +337,7 @@ const applyStyle = async () => {
      difference between the desktop font being used and being ignored. */
   cssKey = css ? await win.webContents.insertCSS(css, { cssOrigin: 'user' }) : null;
   /* Kept reachable so the scroll probe can measure the page without it. */
-  require('./main-css.js').track(win, () => cssKey, key => { cssKey = key; });
+  require('./main-css.js').track(win, () => cssKey, (key: any) => { cssKey = key; });
   console.log('drawing in %s at %dpx%s', family, config.get('view.font-size'),
               pageFontStack ? '' : ' (waiting for the page to say what it asks for)');
 };
@@ -381,9 +383,9 @@ const createWindow = () => {
   });
 
   Menu.setApplicationMenu(null);
-  win.loadURL(URL);
+  win.loadURL(WHATSAPP_URL);
 
-  win.webContents.on('before-input-event', (event, input) => {
+  win.webContents.on('before-input-event', (event: { preventDefault: () => void; }, input: { type: string; control: any; meta: any; key: string; }) => {
     if (input.type === 'keyDown' && (input.control || input.meta) && input.key === ',') {
       event.preventDefault();
       openSettings();
@@ -392,7 +394,7 @@ const createWindow = () => {
 
   /* ------------------------------------------------------ closing and hiding */
 
-  win.on('close', event => {
+  win.on('close', (event: { preventDefault: () => void; }) => {
     if (win && !win.isDestroyed()) {
       const bounds = win.getBounds();
       config.set('window.width', bounds.width);
@@ -409,16 +411,15 @@ const createWindow = () => {
     }
   });
 
-  win.on('minimize', event => {
+  win.on('minimize', () => {
     if (config.get('behaviour.minimize-to-tray')) {
-      event.preventDefault();
       hideWindow();
     } else {
       pushFocus();
     }
   });
 
-  for (const event of ['show', 'hide', 'focus', 'blur', 'restore']) win.on(event, pushFocus);
+  for (const event of ['show', 'hide', 'focus', 'blur', 'restore']) (win as any).on(event, pushFocus);
 
   win.once('ready-to-show', () => {
     if (!hidden) showWindow();
@@ -430,8 +431,8 @@ const createWindow = () => {
   win.webContents.on('did-finish-load', async () => {
     loadedAt = Date.now();
     await applyStyle();
-    win.webContents.setZoomFactor(Number(config.get('view.zoom')) || 1);
-    win.webContents.send('wa:config', {
+    (win as typeof BrowserWindow).webContents.setZoomFactor(Number(config.get('view.zoom')) || 1);
+    (win as typeof BrowserWindow).webContents.send('wa:config', {
       notifications: !!config.get('notifications.enabled'),
       downloadStickers: config.get('media.download-stickers') !== false,
       muteSendTone: !config.get('notifications.outgoing-sound'),
@@ -444,24 +445,24 @@ const createWindow = () => {
     /* The tone is handed over once and kept in the page, decoded, so raising it
        later costs nothing. */
     if (config.get('notifications.sound')) {
-      const tone = sound.tone();
-      if (tone) win.webContents.send('wa:tone', tone);
+      const notificationTone = sound.tone();
+      if (notificationTone) (win as typeof BrowserWindow).webContents.send('wa:tone', notificationTone);
     }
     pushFocus();
   });
 
-  win.webContents.on('did-fail-load', (event, code, description, url, isMainFrame) => {
+  win.webContents.on('did-fail-load', (event: any, code: number, description: any, url: any, isMainFrame: any) => {
     if (!isMainFrame || code === -3) return;                  // -3 is an aborted load
     console.warn('load failed (%d %s); trying again in 5s', code, description);
-    setTimeout(() => win && !win.isDestroyed() && win.loadURL(URL), 5000);
+    setTimeout(() => win && !win.isDestroyed() && win.loadURL(WHATSAPP_URL), 5000);
   });
 
-  win.webContents.on('render-process-gone', (event, details) => {
+  win.webContents.on('render-process-gone', (event: any, details: { reason: string; }) => {
     console.warn('the page went away (%s); reloading', details.reason);
-    if (details.reason !== 'clean-exit') win.reload();
+    if (details.reason !== 'clean-exit') (win as typeof BrowserWindow).reload();
   });
 
-  win.webContents.on('page-title-updated', (event, title) => {
+  win.webContents.on('page-title-updated', (event: { preventDefault: () => void; }, title: string) => {
     event.preventDefault();
     onTitle(title);
   });
@@ -469,12 +470,12 @@ const createWindow = () => {
   /* Links open in the desktop's browser. Anything that is not WhatsApp itself is
      not this client's to show: it has no address bar to tell the user where they
      have ended up. */
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }: { url: string }) => {
     openExternally(url);
     return { action: 'deny' };
   });
 
-  win.webContents.on('will-navigate', (event, url) => {
+  win.webContents.on('will-navigate', (event: { preventDefault: () => void; }, url: string) => {
     if (isWhatsApp(url)) return;
     event.preventDefault();
     openExternally(url);
@@ -483,7 +484,7 @@ const createWindow = () => {
   win.webContents.on('before-input-event', onKey);
 };
 
-const isWhatsApp = url => {
+const isWhatsApp = (url: string) => {
   if (!url) return true;
   if (url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('about:')) return true;
   try {
@@ -494,13 +495,13 @@ const isWhatsApp = url => {
   }
 };
 
-const openExternally = url => {
+const openExternally = (url: string) => {
   if (/^https?:|^mailto:|^tel:/i.test(url)) shell.openExternal(url).catch(() => {});
 };
 
 /* ------------------------------------------------------------------- keys */
 
-const onKey = (event, input) => {
+const onKey = (event: { preventDefault: () => void; }, input: { type: string; control: any; meta: any; key: string; shift: any; }) => {
   if (input.type !== 'keyDown' || !win) return;
   const ctrl = input.control || input.meta;
   const key = input.key.toLowerCase();
@@ -589,7 +590,7 @@ const withdrawOpen = () => {
   if (!win || win.isDestroyed()) return;
   if (!win.isVisible() || win.isMinimized() || !win.isFocused()) return;
 
-  const closed = banners.closeKey(openChat);
+  const closed = (banners as any).closeKey(openChat, 0);
   if (closed) console.log('withdrew %d notification(s) for %s: it is the chat on screen',
                           closed, openChat);
 };
@@ -598,12 +599,12 @@ const withdrawOpen = () => {
    being too young is not dropped -- nothing would ever ask again -- but deferred
    to the moment the guard is over and asked again then, because the chat may
    have gone unread once more in between. */
-const withdrawRead = key => {
+const withdrawRead = (key: string) => {
   const waiting = withdrawing.get(key);
   if (waiting) { clearTimeout(waiting); withdrawing.delete(key); }
   if (!banners || unreadChatNames.has(key)) return;
 
-  const closed = banners.closeKey(key, ARRIVAL_SETTLE_MS);
+  const closed = (banners as any).closeKey(key, ARRIVAL_SETTLE_MS);
   if (closed) console.log('withdrew %d notification(s) for %s: it has been read', closed, key);
 
   const left = banners.guardRemaining(key, ARRIVAL_SETTLE_MS);
@@ -635,11 +636,11 @@ const withdrawRead = key => {
  * oldest three have been read, and it does not matter at all which device read
  * them. That is partial read handling, and it needs nothing from the read side
  * but a number. Zero takes the chat's banners with it. */
-const storeRead = (chatId, unread) => {
+const storeRead = (chatId: any, unread: string | number) => {
   if (!banners || !chatId) return;
-  const held = banners.countFor(chatId);
+  const held = (banners as any).countFor(chatId);
   if (!held) return;
-  const closed = banners.trim(chatId, unread);
+  const closed = (banners as any).trim(chatId, unread);
   if (!closed) return;
   console.log('withdrew %d notification(s) for %s: %s', closed,
               chatTitles.get(chatId) || chatId,
@@ -650,12 +651,12 @@ const storeRead = (chatId, unread) => {
    or not the window is drawn -- which is what the old reading of aria-selected
    could not do, and why leaving a chat took a beat to register and swallowed the
    next message to land in it. */
-const storeActive = chatId => {
+const storeActive = (chatId: string) => {
   activeChatId = chatId || '';
   if (!banners || !activeChatId) return;
   if (!win || win.isDestroyed()) return;
   if (!win.isVisible() || win.isMinimized() || !win.isFocused()) return;
-  const closed = banners.trim(activeChatId, 0);
+  const closed = (banners as any).trim(activeChatId, 0);
   if (closed) console.log('withdrew %d notification(s) for %s: it is the chat on screen',
                           closed, chatTitles.get(activeChatId) || activeChatId);
 };
@@ -664,7 +665,7 @@ const storeActive = chatId => {
    events above are the whole story while the client is listening; this is for
    the spell where it was not -- a laptop out of suspend, a socket that dropped
    and came back -- where the only thing that can be trusted is the answer now. */
-const storeUnread = map => {
+const storeUnread = (map: { [x: string]: any; }) => {
   if (!banners || !map || typeof map !== 'object') return;
   for (const key of banners.keys()) storeRead(key, Number(map[key]) || 0);
 };
@@ -713,7 +714,7 @@ const describeThenNotify = () => setTimeout(async () => {
     answer = await win.webContents.executeJavaScript(
       'window.__waDescribeUnread ? window.__waDescribeUnread() : ""', true);
   } catch (e) {
-    console.warn('could not ask the page what arrived: %s', e.message);
+    if (e instanceof Error) console.warn('could not ask the page what arrived: %s', e.message);
     return;
   }
 
@@ -744,7 +745,7 @@ const describeThenNotify = () => setTimeout(async () => {
   const [chat, sender, message, avatar, token] = answer.split(SEP);
   if (!chat || !message) return;
 
-  const raised = banners.show({
+  const raised = (banners as any).show({
     /* This message and no other. Not the chat -- keyed on the chat, the second
        message of a burst would replace the first instead of stacking under it. */
     identity: [chat, sender, message].join(SEP),
@@ -778,7 +779,7 @@ const describeThenNotify = () => setTimeout(async () => {
 /* WhatsApp Web puts "(3) WhatsApp" in the document title while chats are unread
    and drops the prefix once they are read. That is the only unread signal the
    page hands over without scraping its DOM, and it is what marks the tray. */
-const onTitle = title => {
+const onTitle = (title: string) => {
   /* The parenthesised number counts unread CHATS, not messages: two
      conversations holding five messages between them read "(2) WhatsApp". It is
      read for one thing only -- has anything new arrived -- because that is all
@@ -839,7 +840,7 @@ const onTitle = title => {
    its relatives and which nothing at all reads on a plain GNOME -- so it is set
    and not depended upon, and the tray icon carries the same news for a desktop
    that does not draw badges. */
-const setBadge = count => {
+const setBadge = (count: any) => {
   const wanted = Math.max(0, Math.round(Number(count) || 0));
   if (wanted === badgeShown) return;
   badgeShown = wanted;
@@ -855,7 +856,7 @@ const quit = () => {
 };
 
 const wireIpc = () => {
-  ipcMain.on('wa:log', (event, message) => console.log('page: %s', message));
+  ipcMain.on('wa:log', (event: any, message: any) => console.log('page: %s', message));
 
   ipcMain.handle('settings:get', () => {
     return {
@@ -872,17 +873,17 @@ const wireIpc = () => {
     };
   });
 
-  ipcMain.handle('settings:set-theme', (_, theme) => {
+  ipcMain.handle('settings:set-theme', (_: any, theme: string) => {
     setTheme(theme);
     return true;
   });
 
-  ipcMain.handle('settings:set-autostart', (_, enable) => {
+  ipcMain.handle('settings:set-autostart', (_: any, enable: any) => {
     setAutostart(enable);
     return true;
   });
 
-  ipcMain.handle('settings:set', (_, key, value) => {
+  ipcMain.handle('settings:set', (_: any, key: string, value: any) => {
     config.set(key, value);
     config.save();
     if (key === 'view.zoom' && win && !win.isDestroyed()) {
@@ -903,7 +904,7 @@ const wireIpc = () => {
   /* The font stack the page actually asks for. fontconfig is read once per
      process, so a family learned here takes effect on the next start -- which
      is the price of not having to guess what WhatsApp will name its font next. */
-  ipcMain.on('wa:font-stack', (event, stack) => {
+  ipcMain.on('wa:font-stack', (event: any, stack: string) => {
     if (!config.get('view.force-font') || typeof stack !== 'string') return;
     if (stack === pageFontStack) return;
     pageFontStack = stack;
@@ -935,7 +936,7 @@ const wireIpc = () => {
   /* A notification WhatsApp Web itself decided to raise, intercepted in the page
      and handed over with the sender's picture already fetched. The click goes
      back to the page, whose own handler opens the conversation. */
-  ipcMain.on('wa:page-notification', (event, note) => {
+  ipcMain.on('wa:page-notification', (event: any, note: { body: any; group: any; chat: any; title: any; avatar: any; id: any; silent: any; }) => {
     if (storeLive) return;
     if (!note || !config.get('notifications.enabled')) return;
     /* The page says whether this chat is a group, because WhatsApp's own body
@@ -951,7 +952,7 @@ const wireIpc = () => {
        deduplication between them keeps working. */
     const message = mediaFromWords(said) || said;
 
-    const banner = banners.show({
+    const banner = (banners as any).show({
       identity: [note.chat || note.title, sender, message].join(SEP),
       /* Keyed on the chat the page found in its list rather than on the title
          WhatsApp wrote, so this path and the watcher's agree on what a chat is
@@ -1010,7 +1011,7 @@ const wireIpc = () => {
    * waiting is housekeeping and is ignored; a close for a chat with nothing
    * unread left is the message having been read, and the banner goes.
    */
-  ipcMain.on('wa:page-notification-close', (event, note) => {
+  ipcMain.on('wa:page-notification-close', (event: any, note: { id: any; }) => {
     if (!note) return;
     const banner = pageBanners.get(note.id);
     pageBanners.delete(note.id);
@@ -1027,7 +1028,7 @@ const wireIpc = () => {
 
   /* ------------------------------------------------ WhatsApp's own store */
 
-  ipcMain.on('wa:store-ready', (event, state) => {
+  ipcMain.on('wa:store-ready', (event: any, state: { ready: any; }) => {
     const ready = !!(state && state.ready);
     if (ready === storeLive) return;
     storeLive = ready;
@@ -1050,7 +1051,7 @@ const wireIpc = () => {
      notification body used to need, and the heuristic that decided a direct
      message reading "the link is https://..." came from somebody called "the
      link is https", are both gone with the body they were reading. */
-  ipcMain.on('wa:store-message', (event, note) => {
+  ipcMain.on('wa:store-message', (event: any, note: { chat: any; title: any; mark: string; text: any; join: string; sender: any; msg: any; redacted: any; avatar: any; why: string; mention: any; }) => {
     if (!note || !note.chat || !note.title) return;
     if (!storeBannersAreOurs()) return;
 
@@ -1074,7 +1075,7 @@ const wireIpc = () => {
       ? bidi.paragraph((note.sender ? bidi.isolate(note.sender) + ' ' : '') + said,
                        bidi.directionOf(said))
       : bidi.line(note.sender, said);
-    const banner = banners.show({
+    const banner = (banners as any).show({
       /* The message and no other. This used to be the chat, the sender and the
          text hashed together, which is as close to a message's identity as
          reading a chat list can get -- and it cost a genuinely repeated message
@@ -1121,17 +1122,17 @@ const wireIpc = () => {
 
   /* Read. Here, on the phone, or on another desktop -- WhatsApp does not say
      which and it does not matter. */
-  ipcMain.on('wa:store-read', (event, state) => {
+  ipcMain.on('wa:store-read', (event: any, state: { chat: any; unread: any; }) => {
     if (!storeLive || !state) return;
     storeRead(state.chat, Number(state.unread) || 0);
   });
 
-  ipcMain.on('wa:store-active', (event, state) => {
+  ipcMain.on('wa:store-active', (event: any, state: { chat: any; }) => {
     if (!storeLive || !state) return;
     storeActive(state.chat || '');
   });
 
-  ipcMain.on('wa:store-unread', (event, map) => {
+  ipcMain.on('wa:store-unread', (event: any, map: any) => {
     if (!storeLive) return;
     storeUnread(map);
   });
@@ -1140,9 +1141,9 @@ const wireIpc = () => {
      is raised in its place -- the phone withdraws it silently, and a notification
      announcing that a message the user never read has been deleted tells them
      about a message twice over and about its contents not at all. */
-  ipcMain.on('wa:store-gone', (event, state) => {
+  ipcMain.on('wa:store-gone', (event: any, state: { msg: any; chat: any; }) => {
     if (!storeLive || !state || !state.msg || !banners) return;
-    const closed = banners.closeMessage(state.msg);
+    const closed = (banners as any).closeMessage(state.msg);
     if (!closed) return;
     /* The two things that take one notification down rather than a chat's worth
        of them, told apart in the log because they are told apart nowhere else:
@@ -1153,7 +1154,7 @@ const wireIpc = () => {
                                                          : 'the message was deleted');
   });
 
-  ipcMain.on('wa:store-count', (event, count) => {
+  ipcMain.on('wa:store-count', (event: any, count: { messages: number | null; }) => {
     if (!storeLive || !count || typeof count.messages !== 'number') return;
     unreadMessages = count.messages;
     setBadge(count.messages);
@@ -1165,7 +1166,7 @@ const wireIpc = () => {
      the moment the user opens the chat -- the unread report below cannot: it is
      refused for the first few seconds of a banner's life, and it is sent only
      when the answer changes, so those few seconds used to be for ever. */
-  ipcMain.on('wa:open-chat', (event, name) => {
+  ipcMain.on('wa:open-chat', (event: any, name: string) => {
     if (storeLive) return;
     openChat = typeof name === 'string' ? name : '';
     withdrawOpen();
@@ -1176,7 +1177,7 @@ const wireIpc = () => {
      the message stops being unread the notification has no business staying on
      screen -- and it stops being unread whether it was read here or on the
      phone, because WhatsApp Web clears the pill either way. */
-  ipcMain.on('wa:unread-chats', (event, names) => {
+  ipcMain.on('wa:unread-chats', (event: any, names: Iterable<any> | null | undefined) => {
     if (storeLive) return;
     if (!Array.isArray(names) || !banners) return;
     unreadChatNames = new Set(names);
@@ -1191,7 +1192,7 @@ const wireIpc = () => {
 
   /* How many messages are waiting, counted off the unread pills rather than
      inferred from the document title. This is the number the badge wants. */
-  ipcMain.on('wa:unread-count', (event, count) => {
+  ipcMain.on('wa:unread-count', (event: any, count: { messages: number | null; }) => {
     if (storeLive) return;
     if (!count || typeof count.messages !== 'number') return;
     unreadMessages = count.messages;
@@ -1202,16 +1203,16 @@ const wireIpc = () => {
 
 /* Downloads land in ~/Downloads without a dialog, the way a phone would do it.
    A name already taken gets a number, rather than overwriting what is there. */
-const wireDownloads = ses => {
+const wireDownloads = (ses: Electron.Session) => {
   const downloads = app.getPath('downloads');
-  ses.on('will-download', (event, item) => {
+  ses.on('will-download', (_: Electron.Event, item: Electron.DownloadItem) => {
     const name = item.getFilename();
     const ext = path.extname(name);
     const stem = path.basename(name, ext);
     let target = path.join(downloads, name);
     for (let n = 1; fs.existsSync(target); n++) target = path.join(downloads, `${stem} (${n})${ext}`);
     item.setSavePath(target);
-    item.once('done', (e, state) => {
+    item.once('done', (_: Electron.Event, state: 'completed' | 'cancelled' | 'interrupted') => {
       if (state === 'completed') console.log('downloaded %s', target);
     });
   });
@@ -1227,7 +1228,7 @@ const ALLOWED_PERMISSIONS = new Set([
   'speaker-selection', 'mediaKeySystem', 'idle-detection', 'window-management',
 ]);
 
-const wirePermissions = ses => {
+const wirePermissions = (ses: Electron.Session) => {
   /* The origin is checked as well as the permission, and the check is written to
      survive not being told one. Chromium hands over an empty requestingUrl for
      the media request a call starts with, and an earlier version of this read
@@ -1236,17 +1237,17 @@ const wirePermissions = ses => {
      empty, blob: and about: URLs that are this window's own. Without it, an
      <iframe> of somebody else's making asks for the microphone and is given
      it. */
-  ses.setPermissionRequestHandler((contents, permission, callback, details) => {
+  ses.setPermissionRequestHandler((contents: { getURL: () => any; }, permission: string, callback: (arg0: boolean) => void, details: { requestingUrl: any; }) => {
     const url = (details && details.requestingUrl) || (contents && contents.getURL()) || '';
     callback(isWhatsApp(url) && ALLOWED_PERMISSIONS.has(permission));
   });
-  ses.setPermissionCheckHandler((contents, permission, origin, details) =>
+  ses.setPermissionCheckHandler((contents: any, permission: string, origin: any, details: any) =>
     isWhatsApp(origin || '') && ALLOWED_PERMISSIONS.has(permission));
   /* This one is not about the camera. It decides which USB, HID and serial
      devices a page may open, and WhatsApp Web asks for none of them -- so the
      answer is scoped to the one origin this window shows rather than left as a
      blanket yes to anything that finds its way into it. */
-  ses.setDevicePermissionHandler(details =>
+  ses.setDevicePermissionHandler((details: { origin: any; }) =>
     isWhatsApp((details && details.origin) || ''));
 };
 
@@ -1258,7 +1259,7 @@ const wirePermissions = ses => {
    system dialog on top of that would be a speed bump. PipeWire is the path it takes
    on Wayland, and the WebRTCPipeWireCapturer flag in the switches above is what
    enables that. */
-const wireScreenSharing = ses => {
+const wireScreenSharing = (ses: Electron.Session) => {
   /* Electron will not forward getDisplayMedia anywhere without a handler, so the
      share-screen button in a call silently does nothing until one is set. What
      the handler must never do is fail to answer: a callback that is not called
@@ -1268,7 +1269,7 @@ const wireScreenSharing = ses => {
      useSystemPicker asks Chromium to run the platform's own chooser and skip
      this handler entirely where it can. That is the right answer wherever it is
      available, and the handler below is what happens where it is not. */
-  ses.setDisplayMediaRequestHandler(async (request, callback) => {
+  ses.setDisplayMediaRequestHandler(async (request: any, callback: (arg0: { video: any; }) => void) => {
     /* Wayland picks in the compositor, not here.
      *
      * desktopCapturer.getSources() on a Wayland session goes out to
@@ -1293,17 +1294,16 @@ const wireScreenSharing = ses => {
        ever answers with a screen turns "share this window" into "share
        everything", which is a privacy bug rather than a missing feature. */
     try {
-      const sources = await Promise.race([
+      const sources = await Promise.race<Electron.DesktopCapturerSource[] | null>([
         desktopCapturer.getSources({ types: ['screen', 'window'], fetchWindowIcons: false }),
-        /* Belt and braces. Whatever else happens, this handler answers. */
-        new Promise(resolve => setTimeout(() => resolve(null), 5000)),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 5000)),
       ]);
       if (!sources) {
         console.warn('screen sharing: the desktop did not answer in time');
         callback({ video: null });
         return;
       }
-      const source = sources.find(s => s.id.startsWith('screen:')) || sources[0];
+      const source = sources.find((s: { id: string; }) => s.id.startsWith('screen:')) || sources[0];
       if (!source) {
         console.warn('screen sharing: nothing to share -- no screen or window source');
         callback({ video: null });
@@ -1315,8 +1315,8 @@ const wireScreenSharing = ses => {
          microphone is already in the call. */
       callback({ video: source });
     } catch (err) {
-      console.warn('screen sharing failed: %s', err.message);
-      callback({ video: null });
+      if (err instanceof Error) console.warn('screen sharing failed: %s', err.message);
+      callback({ video: undefined });
     }
   }, { useSystemPicker: true });
 };
@@ -1331,7 +1331,7 @@ const chromeUserAgent = () => {
          `Chrome/${chrome}.0.0.0 Safari/537.36`;
 };
 
-app.on('second-instance', (event, argv) => {
+app.on('second-instance', (event: any, argv: string | string[]) => {
   /* A --hidden launch that finds one already running exits without raising the
      window: that is the login autostart arriving on top of a client the user
      started themselves. */
@@ -1376,12 +1376,12 @@ app.whenReady().then(() => {
 
   banners = new Banners({
     seconds: Number(config.get('notifications.banner-seconds')) || 12,
-    appIcon,
+    appIcon: appIcon || null,
     hidePreview: !!config.get('notifications.hide-preview'),
     /* Which messages have already been announced, so a restart does not put the
        whole unread backlog back on screen as though it had just arrived. */
     stateFile: path.join(app.getPath('userData'), 'announced.json'),
-  });
+  }) as any;
 
   wireIpc();
   createWindow();
@@ -1395,16 +1395,16 @@ app.whenReady().then(() => {
     onSettings: openSettings,
     onSetTheme: setTheme,
     getTheme: () => config.get('view.theme') || 'system',
-    onToggleAutostart: setAutostart,
+    onToggleAutostart: () => setAutostart(!autostart.isEnabled()),
     getAutostart: () => autostart.isEnabled(),
     title: TITLE,
   });
 
-  debug.install(() => win, () => banners);
+  autostart.install(() => win, () => banners);
 
   /* Follow the desktop live: a theme switched from light to dark, or a font
      changed in Settings, should not need the client restarted. */
-  desktop.watch(['color-scheme', 'font-name'], key => {
+  desktop.watch(['color-scheme', 'font-name'], (key: string) => {
     if (key === 'color-scheme') {
       if ((config.get('view.theme') || 'system') === 'system') {
         nativeTheme.themeSource = desktop.prefersDark() ? 'dark' : 'light';
@@ -1414,3 +1414,5 @@ app.whenReady().then(() => {
     }
   });
 });
+
+

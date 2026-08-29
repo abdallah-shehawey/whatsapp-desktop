@@ -40,7 +40,7 @@ const LTR = /[A-Za-zÀ-ʸͰ-֏ऀ-῿Ⰰ-퟿豈-ﬗ]/u;
    all digits, punctuation and emoji. Deliberately first-strong and not "which
    script is there more of": that is the rule Pango itself applies, and matching
    it is what makes the mark below predictable. */
-const directionOf = text => {
+const directionOf = (text: string | null) => {
   const source = String(text == null ? '' : text);
   for (const ch of source) {
     if (RTL.test(ch)) return 'rtl';
@@ -53,7 +53,7 @@ const directionOf = text => {
    front of "👍" or "3" would pick a side for a line that has no side to pick,
    and a stray invisible character in a notification the user may copy is worth
    avoiding when it buys nothing. */
-const paragraph = (text, direction) => {
+const paragraph = (text: string | null, direction: string | null | undefined) => {
   const body = String(text == null ? '' : text);
   const way = direction || directionOf(body);
   if (!way) return body;
@@ -63,7 +63,7 @@ const paragraph = (text, direction) => {
 /* A name that must not decide the direction of the line it is printed on, and
    must not be reordered by it either. FSI lets the name run whichever way its
    own letters do; PDI ends that and hands the line back. */
-const isolate = text => {
+const isolate = (text: string | null) => {
   const name = String(text == null ? '' : text);
   return name ? FSI + name + PDI : '';
 };
@@ -77,10 +77,10 @@ const isolate = text => {
  * leftwards -- which is what the phone does and what the same message looks
  * like inside WhatsApp itself.
  */
-const line = (sender, message) => {
+const line = (sender: null, message: null) => {
   const text = String(message == null ? '' : message);
   const who = String(sender == null ? '' : sender).trim();
-  if (!who) return paragraph(text);
+  if (!who) return paragraph(text, 'center');
   /* The direction is the message's, never the name's. A group of Arabic
      speakers whose display names are Latin -- which is most of them -- would
      otherwise get a left-to-right banner for every Arabic message in it. */
@@ -88,3 +88,5 @@ const line = (sender, message) => {
 };
 
 module.exports = { directionOf, paragraph, isolate, line, RLM, LRM, FSI, PDI };
+
+export {}

@@ -29,6 +29,9 @@
  */
 'use strict';
 
+import { ChildProcessByStdio } from "child_process";
+import { Readable } from "stream";
+
 const { Tray, Menu, nativeImage } = require('electron');
 const { execFile, spawn } = require('child_process');
 
@@ -47,18 +50,18 @@ const OWNER_CHANGED =
 
 /* Is a host listening right now? null means the question could not be asked --
    no gdbus on the system -- and the caller should go ahead and try anyway. */
-const hostPresent = cb => {
+const hostPresent = (cb: { (present: any): void; (arg0: boolean | null): void; }) => {
   execFile('gdbus', ['call', ...DBUS, '--method', 'org.freedesktop.DBus.NameHasOwner', WATCHER],
-    (err, stdout) => cb(err ? null : String(stdout).includes('true')));
+    (err: any, stdout: any) => cb(err ? null : String(stdout).includes('true')));
 };
 
 /* gdbus ships with glib, which Electron already links, so this needs nothing
    installed. `monitor` prints one line per signal, and the bus driver's
    NameOwnerChanged carries (name, old owner, new owner). Calls back once, and
    stops watching. */
-const waitForHost = onHost => {
+const waitForHost = (onHost: { (): void; (): void; }) => {
   let done = false;
-  let monitor = null;
+  let monitor: ChildProcessByStdio<null, Readable, null> | null = null;
 
   const stop = () => {
     if (!monitor) return;
@@ -66,7 +69,7 @@ const waitForHost = onHost => {
     monitor = null;
   };
 
-  const arrived = delay => {
+  const arrived = (delay: number | undefined) => {
     if (done) return;
     done = true;
     stop();
@@ -76,12 +79,12 @@ const waitForHost = onHost => {
 
   try {
     monitor = spawn('gdbus', ['monitor', ...DBUS], { stdio: ['ignore', 'pipe', 'ignore'] });
-    monitor.on('error', () => {});     // no gdbus: the check below says "try anyway"
-    let rest = '';
-    monitor.stdout.setEncoding('utf8');
-    monitor.stdout.on('data', chunk => {
+    monitor?.on('error', () => {});     // no gdbus: the check below says "try anyway"
+    let rest: string = '';
+    monitor?.stdout.setEncoding('utf8');
+    monitor?.stdout.on('data', (chunk: string | number) => {
       const lines = (rest + chunk).split('\n');
-      rest = lines.pop();
+      rest = lines.pop() || '';
       for (const line of lines) {
         const owner = OWNER_CHANGED.exec(line);
         if (owner && owner[1] !== '') arrived(SETTLE_MS);
@@ -91,7 +94,7 @@ const waitForHost = onHost => {
     monitor = null;
   }
 
-  hostPresent(present => {
+  hostPresent((present: any) => {
     /* The monitor can report a host arriving before this answer comes back, and
        the answer is the older of the two. */
     if (done) return;
@@ -104,8 +107,16 @@ const waitForHost = onHost => {
   return stop;
 };
 
-class TrayIcon {
-  constructor({ normal, attention, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, onToggleAutostart, getAutostart, title = 'WhatsApp' }) {
+export class TrayIcon {
+  icons: any;
+  tray: typeof Tray | null;
+  handlers: any;
+  title: any;
+  unread: any;
+  windowVisible: any;
+  stopWaiting: any;
+
+  constructor({ normal, attention, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, onToggleAutostart, getAutostart, title = 'WhatsApp' }: { normal: string; attention?: string; onShow?: () => void; onHide?: () => void; onQuit?: () => void; onSettings?: () => void; onSetTheme?: (theme: string) => void; getTheme?: () => string; onToggleAutostart?: () => void; getAutostart?: () => boolean; title?: string }) {
     this.icons = {
       normal: nativeImage.createFromPath(normal),
       attention: nativeImage.createFromPath(attention || normal),
@@ -125,7 +136,7 @@ class TrayIcon {
       this.tray = new Tray(this.icons.normal);
       this.tray.on('click', () => this.handlers.onShow && this.handlers.onShow());
     } catch (e) {
-      console.log(`tray: could not be created (${e.message})`);
+      if (e instanceof Error) console.log(`tray: could not be created (${e.message})`);
       this.tray = null;
       return;
     }
@@ -135,7 +146,6 @@ class TrayIcon {
   render() {
     if (!this.tray) return;
     const currentTheme = this.handlers.getTheme ? this.handlers.getTheme() : 'system';
-    const autostart = this.handlers.getAutostart ? this.handlers.getAutostart() : false;
 
     this.tray.setContextMenu(Menu.buildFromTemplate([
       {
@@ -181,13 +191,13 @@ class TrayIcon {
      messages, so a number drawn from it would be wrong for exactly the case a
      number is wanted. The state is kept whether or not there is an icon to draw
      it on yet, because a host arriving later renders from it. */
-  setAttention(unread) {
+  setAttention(unread: any) {
     if (unread === this.unread) return;
     this.unread = unread;
     this.render();
   }
 
-  setWindowVisible(visible) {
+  setWindowVisible(visible: any) {
     if (visible === this.windowVisible) return;
     this.windowVisible = visible;
     this.render();

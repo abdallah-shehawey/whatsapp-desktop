@@ -18,8 +18,8 @@
  */
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 const { execFileSync } = require('child_process');
 
 /* The freedesktop sound naming spec calls it this; `message` is the fallback
@@ -65,7 +65,7 @@ const find = () => {
   return null;
 };
 
-let cached;
+let cached: { data: string; mime: string; file: string; } | null | undefined;
 
 /* Read once and kept: it is a few kilobytes, and re-reading it in front of every
    banner would put a disk seek where a sound should be. */
@@ -84,9 +84,9 @@ const tone = () => {
     if (bytes.length && bytes.length < 2 * 1024 * 1024)
       cached = { data: bytes.toString('base64'), mime: hit.mime, file: hit.file };
   } catch (e) {
-    console.warn('could not read %s: %s', hit.file, e.message);
+    if (e instanceof Error) console.warn('could not read %s: %s', hit.file, e.message);
   }
   return cached;
 };
 
-module.exports = { tone };
+export { tone };

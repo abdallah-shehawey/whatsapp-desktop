@@ -18,8 +18,8 @@
  */
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 
 /* What WhatsApp Web's own stack names, plus the two generic faces fontconfig
    would otherwise answer with on a Linux desktop. Emoji families are absent on
@@ -51,16 +51,16 @@ const NEVER = new Set([
    the page reports what it actually asks for and it is added here. fontconfig
    is read once per process, so a family learned now takes effect on the next
    start; there is no way to make that live, and it costs one launch. */
-const learn = (dir, families) => {
+const learn = (dir: string , families: any[]) => {
   const file = path.join(dir, 'learned-fonts.json');
-  let known = [];
+  let known: any[] = [];
   try { known = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { /* first run */ }
 
   const wanted = families
-    .map(name => name.trim().replace(/^["']|["']$/g, ''))
-    .filter(name => name && !NEVER.has(name.toLowerCase()))
-    .filter(name => !REPLACED.some(k => k.toLowerCase() === name.toLowerCase()))
-    .filter(name => !known.some(k => k.toLowerCase() === name.toLowerCase()));
+    .map((name: string) => name.trim().replace(/^["']|["']$/g, ''))
+    .filter((name: string) => name && !NEVER.has(name.toLowerCase()))
+    .filter((name: string) => !REPLACED.some(k => k.toLowerCase() === name.toLowerCase()))
+    .filter((name: string) => !known.some(k => k.toLowerCase() === name.toLowerCase()));
 
   if (!wanted.length) return [];
   known = [...known, ...wanted].slice(-32);
@@ -71,15 +71,15 @@ const learn = (dir, families) => {
   return wanted;
 };
 
-const learned = dir => {
+const learned = (dir: string) => {
   try { return JSON.parse(fs.readFileSync(path.join(dir, 'learned-fonts.json'), 'utf8')); }
   catch (e) { return []; }
 };
 
-const escapeXml = value => String(value)
+const escapeXml = (value: string) => String(value)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-const document_ = (family, extra = []) => {
+const document_ = (family: string, extra = []) => {
   const target = escapeXml(family);
   const rules = [...REPLACED, ...extra]
     .filter(name => name.toLowerCase() !== family.toLowerCase())
@@ -112,7 +112,7 @@ ${rules}
  * -- in which case the caller simply does not set FONTCONFIG_FILE and the page
  * is drawn in WhatsApp's own fonts, which is a cosmetic loss and nothing worse.
  */
-const configure = (family, dir) => {
+const configure = (family: any, dir: string) => {
   if (!family) return null;
   const file = path.join(dir, 'fonts.conf');
   try {
@@ -125,9 +125,9 @@ const configure = (family, dir) => {
     if (current !== wanted) fs.writeFileSync(file, wanted);
     return file;
   } catch (e) {
-    console.warn('could not write %s: %s', file, e.message);
+    if (e instanceof Error) console.warn('could not write %s: %s', file, e.message);
     return null;
   }
 };
 
-module.exports = { configure, learn, REPLACED };
+export { configure, learn, REPLACED };

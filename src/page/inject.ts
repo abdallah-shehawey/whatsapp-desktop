@@ -22,14 +22,16 @@
  */
 'use strict';
 
+import { TIMEOUT } from "node:dns";
+
 const wording = require('../wording.js');
 const store = require('./store.js');
 const media = require('./media.js');
 
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
-const start = ({ send, on }) => {
-  const log = message => send('log', String(message));
+export const start = ({ send, on }: { send: (channel: string, payload: any) => void, on: (channel: string, handler: (payload: any) => void) => void }) => {
+  const log = (message: string) => send('log', String(message));
 
   /* WebGPU on Linux/Wayland has a broken CreateExternalTexture implementation in
      Chromium for video streams (generating "Invalid ExternalTexture is invalid" and
@@ -51,14 +53,14 @@ const start = ({ send, on }) => {
      Web raises its own notifications, which the app dresses, and the watcher
      below stays out of it -- two paths reporting one message is two banners. */
   let focused = false;
-  let arrivals = [];
+  let arrivals: any[] = [];
 
   /* WhatsApp's own store, once it answers. Everything below it in this file --
      the chat-list watcher, the shim over the notifications WhatsApp raises --
      is what happens when it does not. See store.js: those two paths read a
      picture drawn for a person and infer from it, and the store is asked. */
-  let waStore = null;
-  let waMedia = null;
+  let waStore: { ready: any; setFocus: (arg0: boolean) => void; open: (arg0: any) => any; activeChat: () => any; } | null = null;
+  let waMedia: null = null;
   const storeLive = () => !!(waStore && waStore.ready);
 
   on('focus', state => {
@@ -87,22 +89,26 @@ const start = ({ send, on }) => {
      The tone is played here rather than by spawning a player, so it belongs to
      the application's own audio stream, follows its volume in the mixer, and
      needs nothing installed. Decoded once, on arrival. */
-  let toneBuffer = null;
-  let audio = null;
+  let toneBuffer: AudioBuffer | null = null;
+  let audio: AudioContext | null = null;
 
-  const decodeTone = async payload => {
+  const decodeTone = async (payload: { data: string; }) => {
     if (!payload || !payload.data) return;
     try {
-      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      audio = audio || new (window.AudioContext)();
       const binary = atob(payload.data);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       toneBuffer = await audio.decodeAudioData(bytes.buffer);
       log('tone ready (' + Math.round(toneBuffer.duration * 1000) + 'ms)');
     } catch (err) {
+      if (err instanceof Error) {
       log('could not decode the tone: ' + err.message);
+    } else {
+      log("could not decode the tone: unknown error");
     }
-  };
+  }
+};
 
   const playTone = async () => {
     if (!toneBuffer || !audio) return;
@@ -115,10 +121,12 @@ const start = ({ send, on }) => {
       source.connect(audio.destination);
       /* Ours, and so exempt from the muting of the tone WhatsApp plays for a
          message going out. */
-      source.__waOurs = true;
+      (source as any).__waOurs = true;
       source.start();
     } catch (err) {
+      if (err instanceof Error) {
       log('could not play the tone: ' + err.message);
+      }
     }
   };
 
@@ -153,16 +161,16 @@ const start = ({ send, on }) => {
 
   /* Chat names and message previews arrive wrapped in bidi control characters,
      which have to come off before anything is compared or displayed. */
-  const strip = t => (t || '').replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim();
+  const strip = (t: any) => (t || '').replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim();
 
-  const titlesIn = row => [...row.querySelectorAll('span[title]')];
-  const nameOf = row => {
+  const titlesIn = (row: Element) => [...row.querySelectorAll('span[title]')];
+  const nameOf = (row: Element) => {
     if (!row) return '';
     const first = titlesIn(row)[0];
     const fromTitle = strip(first && first.getAttribute('title'));
     if (fromTitle) return fromTitle;
     const dirAuto = row.querySelector('span[dir="auto"], div[dir="auto"]');
-    if (dirAuto && dirAuto.innerText) return strip(dirAuto.innerText.split('\n')[0]);
+    if (dirAuto && dirAuto.textContent) return strip(dirAuto.textContent.split('\n')[0]);
     return '';
   };
 
@@ -178,7 +186,7 @@ const start = ({ send, on }) => {
      older ones put data-icon on the element. Both are read, which is what this
      costs -- looking only at data-icon found nothing at all and every message
      sent from the phone raised a banner on the desktop. */
-  const iconNames = el => {
+  const iconNames = (el: { querySelectorAll: (arg0: string) => any; }) => {
     const names = [...el.querySelectorAll('[data-icon]')].map(i => i.getAttribute('data-icon') || '');
     for (const svg of el.querySelectorAll('svg')) {
       names.push(svg.getAttribute('title') || '');
@@ -197,8 +205,8 @@ const start = ({ send, on }) => {
      groups yield "You", "+20 11 18856364", "@eng_mahmoudmajed", and direct chats
      correctly yield nothing. Reading the position of that ":" beats matching
      WhatsApp's class names, which are obfuscated and rotate every build. */
-  const senderIn = row => {
-    const lines = ((row && row.innerText) || '').split('\n').map(strip);
+  const senderIn = (row: Element) => {
+    const lines = ((row && row.textContent) || '').split('\n').map(strip);
     const colon = lines.indexOf(':');
     /* WhatsApp marks a name it took from the sender's profile rather than from
        the user's contacts with a leading tilde -- "~Amr Mostafa". That is a note
@@ -228,7 +236,7 @@ const start = ({ send, on }) => {
      that text, and a glyph here would be a second emoji beside it. */
   const REACTION_PREVIEW = /\b(reacted|تفاعل)\b/i;
 
-  const isOutgoing = el => {
+  const isOutgoing = (el: Element) => {
     if (!el) return false;
     if (iconNames(el).some(n => OUTGOING_ICON.test(n))) return true;
     if ([...el.querySelectorAll('[aria-label]')]
@@ -239,7 +247,7 @@ const start = ({ send, on }) => {
   /* WhatsApp leaves muted chats out of its own notifications, so this client
      does too -- with the one exception the phone makes as well. */
   const MUTED_LABEL = /muted|مكتوم|كتم/i;
-  const isMuted = row => [...row.querySelectorAll('[aria-label]')]
+  const isMuted = (row: Element) => [...row.querySelectorAll('[aria-label]')]
       .some(e => MUTED_LABEL.test(e.getAttribute('aria-label') || ''));
 
   /* A message addressed to the user by name, which is the one thing that gets
@@ -262,7 +270,7 @@ const start = ({ send, on }) => {
      is supposed to be an exception to. */
   const MENTION_ICON  = /alternate-email|mention|reply|quoted|\bat-sign\b/i;
   const MENTION_LABEL = /mention|منشن|إشارة|اشارة|رد على|replied to you/i;
-  const isMention = row => {
+  const isMention = (row: { querySelectorAll: any; }) => {
     if (!row) return false;
     if (iconNames(row).some(name => MENTION_ICON.test(name))) return true;
     return [...row.querySelectorAll('[aria-label]')]
@@ -284,7 +292,7 @@ const start = ({ send, on }) => {
    * name is excluded because a direct chat does write "You:" in front of the
    * last message when it was theirs. */
   const GROUP_ICON = /group|communit/i;
-  const isGroupRow = row => {
+  const isGroupRow = (row: Element) => {
     if (!row) return false;
     if (iconNames(row).some(name => GROUP_ICON.test(name))) return true;
     if (titlesIn(row).length >= 3) return true;
@@ -294,10 +302,10 @@ const start = ({ send, on }) => {
 
   /* Whether this row is one the client should stay quiet about. Muted, unless
      the user was named in it. */
-  const isSilenced = row => isMuted(row) && !isMention(row);
+  const isSilenced = (row: Element) => isMuted(row) && !isMention(row);
 
   const UNREAD_LABEL = /unread|غير مقروء/i;
-  const unreadCount = row => {
+  const unreadCount = (row: Element) => {
     if (!row) return 0;
     for (const el of row.querySelectorAll('[aria-label]')) {
       const label = el.getAttribute('aria-label') || '';
@@ -308,7 +316,7 @@ const start = ({ send, on }) => {
     for (const el of row.querySelectorAll('[data-icon]')) {
       const icon = el.getAttribute('data-icon') || '';
       if (/unread/i.test(icon)) {
-        const digits = (el.innerText || el.getAttribute('aria-label') || '').match(/\d+/);
+        const digits = (el.textContent || el.getAttribute('aria-label') || '').match(/\d+/);
         return digits ? parseInt(digits[0], 10) : 1;
       }
     }
@@ -368,7 +376,7 @@ const start = ({ send, on }) => {
     '^.{1,40}?\\s+(?:is|are)\\s+(?:' + TYPING_VERB + ')' + TYPING_END,
     '^.{1,40}?\\s+(?:' + TYPING_VERB_AR + ')' + TYPING_END,
   ].join('|'), 'i');
-  const isTyping = preview => TYPING_PREVIEW.test(preview || '');
+  const isTyping = (preview: any) => TYPING_PREVIEW.test(preview || '');
 
   /* What a row says when the message on it is not made of words.
    *
@@ -400,20 +408,20 @@ const start = ({ send, on }) => {
   /* The kind of a row, from its icons and then from whatever text it carries.
      Answers '' when nothing says: an empty preview is a row mid-render, and the
      caller has to be able to tell that from a row with nothing to say. */
-  const mediaLabel = row => {
+  const mediaLabel = (row: { innerText?: any; querySelectorAll?: (arg0: string) => any; }) => {
     if (!row) return '';
-    const icons = iconNames(row);
+    const icons = iconNames((row as Element));
     for (const kind of MEDIA_KINDS)
       if (icons.some(name => kind.icon.test(name))) return kind.label;
 
-    const text = strip((row.innerText || '').split('\n').find(line => strip(line)) || '');
+    const text = strip((row.innerText || '').split('\n').find((line: any) => strip(line)) || '');
     return wording.mediaFromWords(text);
   };
 
   /* A preview WhatsApp handed over as words, given its glyph when the words name
      a kind of media rather than say something. The sender prefix rides along
      untouched -- it is put back on by the caller, not read from here. */
-  const labelled = (preview, row) => {
+  const labelled = (preview: any, row: Element) => {
     const said = strip(preview);
     if (!said) return said;
     const named = wording.mediaFromWords(said);
@@ -446,7 +454,7 @@ const start = ({ send, on }) => {
    * unread pill instead, and the ones that moved neither were never announced at
    * all. Measured on the live list: seventy rows, and every community group in
    * it carried three. */
-  const previewIn = (row, titles) => {
+  const previewIn = (row: Element, titles: Element[]) => {
     const list = titles || titlesIn(row);
     if (list.length < 2) return '';
     const last = strip(list[list.length - 1].getAttribute('title'));
@@ -455,7 +463,7 @@ const start = ({ send, on }) => {
     return last === strip(list[0] && list[0].getAttribute('title')) ? '' : last;
   };
 
-  const readRow = row => {
+  const readRow = (row: Element) => {
     const titles = titlesIn(row);
     const name = (titles[0] && strip(titles[0].getAttribute('title'))) || nameOf(row);
     let preview = labelled(previewIn(row, titles), row);
@@ -463,11 +471,12 @@ const start = ({ send, on }) => {
     if (!preview) preview = mediaLabel(row);
 
     return {
-      name,
-      preview: preview || '',
-      badge:   unreadCount(row),
-      when:    ((row.innerText || '').match(/\b\d{1,2}:\d{2}(?:\s*[AP]M)?\b/) || [''])[0],
-    };
+     name,
+     preview: preview || '',
+     badge:   unreadCount(row),
+     when:    ((row.textContent || '').match(/\b\d{1,2}:\d{2}(?:\s*[AP]M)?\b/) || [''])[0],
+     changedAt: 0,
+   };
   };
 
   /* Whether the time a row shows is the time it is now. WhatsApp stamps a row
@@ -481,15 +490,15 @@ const start = ({ send, on }) => {
      locale that writes its clock in digits the regex above cannot match falls back
      to the unread count instead of going silent. */
   const FRESH_MS = 3 * 60 * 1000;
-  const freshness = when => {
+  const freshness = (when: any) => {
     const m = /^(\d{1,2}):(\d{2})(?:\s*([AP])\.?M\.?)?$/i.exec(when || '');
     if (!m) return null;
 
     let hour = parseInt(m[1], 10);
     if (m[3]) hour = (hour % 12) + (/p/i.test(m[3]) ? 12 : 0);
 
-    const now = new Date();
-    const stamp = new Date(now);
+    const now: any = new Date();
+    const stamp: any = new Date(now);
     stamp.setHours(hour, parseInt(m[2], 10), 0, 0);
 
     let age = now - stamp;
@@ -504,7 +513,7 @@ const start = ({ send, on }) => {
      exactly like an arrival. An unread count going DOWN is the user catching up,
      and is never news; a row whose clock says half an hour ago is WhatsApp
      rewriting it, not somebody writing to it. */
-  const isArrival = (before, now) => {
+  const isArrival = (before: { preview: any; when: any; badge: number; }, now: { name?: any; preview: any; badge: any; when: any; }) => {
     const changed = now.preview !== before.preview ||
                     now.when !== before.when ||
                     now.badge > before.badge;
@@ -558,7 +567,7 @@ const start = ({ send, on }) => {
   let nextToken = 1;
   const openable = new Map();             // token -> { row, name, preview, at }
 
-  const rememberOpenable = (row, name, preview) => {
+  const rememberOpenable = (row: any, name: any, preview: any) => {
     const token = String(nextToken++);
     openable.set(token, { row, name, preview, at: Date.now() });
     if (openable.size > 64) {
@@ -572,13 +581,13 @@ const start = ({ send, on }) => {
     return token;
   };
 
-  const sweepStamped = (map, ttl) => {
+  const sweepStamped = (map: Map<any, any>, ttl: number) => {
     const now = Date.now();
     if (map.size <= 128) return;
     for (const [key, value] of map) if (now - value.at > ttl) map.delete(key);
   };
 
-  const sweep = (map, ttl) => {
+  const sweep = (map: Map<any, any>, ttl: number) => {
     const now = Date.now();
     if (map.size > 128)
       for (const [key, at] of map) if (now - at > ttl) map.delete(key);
@@ -586,20 +595,20 @@ const start = ({ send, on }) => {
   /* Deliberately without the unread count: the pill is drawn a beat after the
      preview, so the same message can be read once with a badge and once without,
      and a key that disagreed with itself would let the guess through. */
-  const readingKey = state => [state.name, state.preview, state.when].join(SEP);
+  const readingKey = (state: { name: any; preview: any; when: any; }) => [state.name, state.preview, state.when].join(SEP);
 
-  const wasAnnounced = state => {
+  const wasAnnounced = (state: { name: any; preview: any; when: any;}) => {
     const now   = Date.now();
     const said  = announced.get(readingKey(state));
     const named = announcedNames.get(state.name);
     return (said  !== undefined && now - said  < ANNOUNCED_TTL_MS) ||
            (named !== undefined && now - named < NAME_TTL_MS);
   };
-  const rememberAnnounced = state => {
+  const rememberAnnounced = (state: { name: any; preview: any; when: any; badge?: number; }) => {
     announced.set(readingKey(state), Date.now());
     sweep(announced, ANNOUNCED_TTL_MS);
   };
-  const rememberName = name => {
+  const rememberName = (name: any) => {
     const wanted = strip(name);
     if (!wanted) return;
     announcedNames.set(wanted, Date.now());
@@ -642,7 +651,7 @@ const start = ({ send, on }) => {
    * loading, which is not a reason to reject it: the fetch below asks the network
    * and the cache, not this element.
    */
-  const faceUrlIn = row => {
+  const faceUrlIn = (row: { querySelectorAll: (arg0: string) => any; }) => {
     for (const img of (row ? row.querySelectorAll('img') : [])) {
       const src = img.src || '';
       if (!/^https?:|^blob:/.test(src)) continue;
@@ -652,7 +661,7 @@ const start = ({ send, on }) => {
     return '';
   };
 
-  const rememberFace = (name, row) => {
+  const rememberFace = (name: any, row: Element) => {
     if (!name) return;
     const url = faceUrlIn(row);
     /* The picture may not have loaded, and the answer to "is this a group" does
@@ -780,8 +789,8 @@ const start = ({ send, on }) => {
      here, because WhatsApp Web clears the pill for both. Reported only when the
      answer changes, which is a handful of messages an hour rather than one
      message per scan. */
-  let lastUnread = null;
-  let lastCount = null;
+  let lastUnread: string | null = null;
+  let lastCount: string | null = null;
   const knownUnread = new Map();          // chat -> { at, count }
   const UNREAD_GRACE_MS = 2500;
   /* How long a chat that has stopped being rendered is still believed to be
@@ -827,9 +836,9 @@ const start = ({ send, on }) => {
     }, SWEEP_MS);
   };
 
-  let regrade = 0;
+  let regrade: number | NodeJS.Timeout = 0;
   let regradeAt = 0;
-  const scanSoon = ms => {
+  const scanSoon = (ms: number) => {
     const when = Date.now() + ms;
     if (regrade && regradeAt <= when) return;
     if (regrade) clearTimeout(regrade);
@@ -837,7 +846,7 @@ const start = ({ send, on }) => {
     regrade = setTimeout(() => { regrade = 0; scanList(); }, ms);
   };
 
-  const reportUnread = pane => {
+  const reportUnread = (pane: Element) => {
     const now = Date.now();
     const currentUnread = new Set();
     const renderedNames = new Set();
@@ -863,7 +872,7 @@ const start = ({ send, on }) => {
     /* The soonest moment at which one of the names below stops being held and
        becomes a decision. Zero when nothing is being held. */
     let judgeIn = 0;
-    const hold = until => {
+    const hold = (until: number) => {
       const left = Math.max(0, until - now);
       if (!judgeIn || left < judgeIn) judgeIn = left;
     };
@@ -935,7 +944,7 @@ const start = ({ send, on }) => {
      Reported on change, and again whenever the window comes back: a chat that
      was already open when the window went away is being read the moment it
      returns, and nothing about the chat itself changes to say so. */
-  let lastOpen = null;
+  let lastOpen: string | null = null;
   const reportOpen = () => {
     /* A picture opened full-screen, or a call, takes the whole chat list off the
        page -- and a list that is not rendered is not a chat that has been
@@ -953,11 +962,11 @@ const start = ({ send, on }) => {
 
   const watchList = () => {
     const pane = document.querySelector('#pane-side');
-    if (!pane || pane.__waWatched) return;
-    pane.__waWatched = true;
+    if (!pane || (pane as any).__waWatched) return;
+    (pane as any).__waWatched = true;
 
     scanList();                       // seed first, so the opening pass is silent
-    let timer = 0;
+    let timer: number | NodeJS.Timeout = 0;
     new MutationObserver(() => {
       clearTimeout(timer);
       timer = setTimeout(scanList, 150);
@@ -980,7 +989,7 @@ const start = ({ send, on }) => {
      a banner reading "You have a new message" over a conversation the user was
      already reading. The message rides along with the name, so a chat that shares
      its name with another is still told apart. */
-  const findRow = (name, preview) => {
+  const findRow = (name: any, preview: any) => {
     const pane = document.querySelector('#pane-side');
     for (const row of (pane ? pane.querySelectorAll('[role="row"]') : [])) {
       const titles = titlesIn(row);
@@ -996,14 +1005,14 @@ const start = ({ send, on }) => {
     const main = document.querySelector('#main');
     const rows = main ? main.querySelectorAll('[role="row"]') : [];
     const last = rows[rows.length - 1];
-    return last ? strip(last.innerText) : '';
+    return last ? strip(last.textContent) : '';
   };
 
   /* Whether this row is the conversation the user is looking at. Element identity
      answers it whenever the row survived; when WhatsApp recycled it the name has
      to, and the name alone is not enough -- this account has four pairs of chats
      that share one -- so the message has to be on screen as well. */
-  const isOpen = (row, preview) => {
+  const isOpen = (row: Element, preview: string) => {
     const open = openRow();
     if (!open) return false;
 
@@ -1035,20 +1044,20 @@ const start = ({ send, on }) => {
   const AVATAR_MAX_BYTES = 200000;
   const AVATAR_TIMEOUT_MS = 1200;
 
-  const bytesToBase64 = bytes => {
+  const bytesToBase64 = (bytes: Uint8Array<ArrayBuffer>) => {
     let binary = '';
     /* In chunks: fromCharCode.apply over the whole array blows the argument limit,
        and a character at a time over 200 KB is slow enough to be felt as a
        stutter, since this runs on the page's own thread. */
     for (let i = 0; i < bytes.length; i += 8192)
-      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 8192)));
     return btoa(binary);
   };
 
   /* The <img> is already on screen but its canvas is tainted, so the bytes are
      re-fetched instead -- the CDN answers a plain fetch with CORS, verified
      against a live avatar (200 image/jpeg). */
-  const fetchAvatar = async src => {
+  const fetchAvatar = async (src: RequestInfo | URL) => {
     if (avatars.has(src)) return avatars.get(src);
 
     let encoded = '';
@@ -1066,12 +1075,12 @@ const start = ({ send, on }) => {
   };
 
   /* A picture must never hold a notification up. Better plain than late. */
-  const withTimeout = promise => Promise.race([
+  const withTimeout = (promise: Promise<any>) => Promise.race([
     promise,
     new Promise(resolve => setTimeout(() => resolve(''), AVATAR_TIMEOUT_MS)),
   ]);
 
-  const avatarOf = async (row, name) => {
+  const avatarOf = async (row: Element, name: any) => {
     const url = faceUrlIn(row) ||
                 (chatFaces.get(strip(name) || nameOf(row)) || {}).url || '';
     if (!url) return '';
@@ -1081,7 +1090,7 @@ const start = ({ send, on }) => {
   /* The row a notification WhatsApp raised belongs to. WhatsApp titles a group
      notification with the group name and a direct one with the contact, so an
      exact match is tried first and a containing one after it. */
-  const rowFor = name => {
+  const rowFor = (name: any) => {
     const wanted = strip(name);
     if (!wanted) return null;
 
@@ -1103,7 +1112,7 @@ const start = ({ send, on }) => {
      filed under WhatsApp's own wording of who wrote is one nothing can take
      down again -- and while the list is unmounted, WhatsApp's wording was all
      there used to be. */
-  const chatNameFor = name => {
+  const chatNameFor = (name: string) => {
     const wanted = strip(name);
     if (!wanted) return '';
 
@@ -1121,7 +1130,7 @@ const start = ({ send, on }) => {
      when it comes to read WhatsApp's wording of the body. Answers null when
      there is nothing on record, which is not the same as "no": the app has a
      cautious reading for that case and a decisive one for this. */
-  const chatKindFor = name => {
+  const chatKindFor = (name: string) => {
     const row = rowFor(strip(name));
     if (row) return isGroupRow(row);
     /* From memory, "yes" is worth having and "no" is not. The signals for a
@@ -1142,7 +1151,7 @@ const start = ({ send, on }) => {
      Web announced something while the window was away, and without it the guess
      in describeUnread would announce the same chat again the moment the window
      came back and anything asked. */
-  const avatarFor = async name => {
+  const avatarFor = async (name: any) => {
     const wanted = strip(name);
     if (!wanted) return '';
     rememberName(wanted);
@@ -1183,7 +1192,7 @@ const start = ({ send, on }) => {
    * The whole press goes out and not a bare .click(): the row answers to pointer
    * and mouse events both, and which of them opens a conversation is WhatsApp's
    * business rather than something to depend on. */
-  const press = (element, target) => {
+  const press = (element: Element, target: { dispatchEvent: (arg0: MouseEvent) => void; }) => {
     if (!element) return;
     target = target || element;
     const box = element.getBoundingClientRect();
@@ -1202,7 +1211,7 @@ const start = ({ send, on }) => {
     }
   };
 
-  const pressRow = row => press(row, row.querySelector('span[title]') || row);
+  const pressRow = (row: { querySelector: (arg0: string) => any; }) => press((row as Element), row.querySelector('span[title]') || row);
 
   on('open-chat-request', request => {
     /* A bare name is still accepted: it is what the click carried before the
@@ -1277,7 +1286,7 @@ const start = ({ send, on }) => {
     document.querySelector('footer [contenteditable="true"]');
 
   /* The name of an icon, wherever this build happens to keep it. */
-  const iconTitle = el => {
+  const iconTitle = (el: Element) => {
     const own = el.getAttribute('data-icon');
     if (own) return own;
     const inner = el.querySelector('[data-icon]');
@@ -1296,7 +1305,7 @@ const start = ({ send, on }) => {
   };
 
   /* The node an event has to be aimed at for a handler above it to see it. */
-  const deepestIn = el => {
+  const deepestIn = (el: Element) => {
     let node = el;
     while (node.firstElementChild) node = node.firstElementChild;
     return node;
@@ -1446,7 +1455,7 @@ const start = ({ send, on }) => {
     };
   };
 
-  const same = (a, b) => a.menus === b.menus && a.dialogs === b.dialogs &&
+  const same = (a: { menus: any; dialogs: any; panels: any; nodes: any; }, b: { menus: any; dialogs: any; panels: any; nodes: any; }) => a.menus === b.menus && a.dialogs === b.dialogs &&
                          a.panels === b.panels && Math.abs(a.nodes - b.nodes) <= DRIFT;
 
   /* The item that closes a chat, found by its icon and not by its words: this
@@ -1524,7 +1533,7 @@ const start = ({ send, on }) => {
     }
   };
 
-  const gone = async ms => {
+  const gone = async (ms: number) => {
     const until = Date.now() + ms;
     while (conversation() && Date.now() < until) await new Promise(r => setTimeout(r, 4));
     return !conversation();
@@ -1602,7 +1611,7 @@ const start = ({ send, on }) => {
     /* And the caret back in the composer, so the next keystroke is a message
        rather than a search in a panel that is no longer on screen. */
     const box = composer();
-    if (box) { try { box.focus(); } catch (err) {} }
+    if (box) { try { (box as any).focus(); } catch (err) {} }
   }, true);
 
   /* ------------------------------------------------------------ the question */
@@ -1614,7 +1623,7 @@ const start = ({ send, on }) => {
      nothing to say and the app should say nothing. There is deliberately no third
      answer: a banner whose text the app had to invent is the phantom this client
      kept raising. */
-  window.__waDescribeUnread = async () => {
+  (window as any).__waDescribeUnread = async () => {
     scanList();                       // collect whatever the debounce still owes us
 
     /* Oldest first, one per call. The app raises a banner for every message, so
@@ -1735,7 +1744,7 @@ const start = ({ send, on }) => {
      notification question -- why was this announced, why was that one not -- comes
      down to these values, and reading them out of a live session beats inferring
      them from which banners did and did not appear. */
-  window.__waWatcherState = () => JSON.stringify({
+  (window as any).__waWatcherState = () => JSON.stringify({
     focused,
     settled: seeded && Date.now() - seededAt >= SETTLE_MS,
     open: (() => { const row = openRow(); return row ? nameOf(row) : null; })(),
@@ -1785,11 +1794,11 @@ const start = ({ send, on }) => {
      never by its class: class names are obfuscated and rotate every build. */
   const SEND_ICON  = /send/i;
   const SEND_LABEL = /^(send|إرسال|ارسال)\b/i;
-  const isSendClick = target => {
-    if (!target || !target.closest) return false;
-    const icon = target.closest('[data-icon]');
+  const isSendClick = (target: EventTarget | null) => {
+    if (!target || !(target as Element).closest) return false;
+    const icon = (target as Element).closest('[data-icon]');
     if (icon && SEND_ICON.test(icon.getAttribute('data-icon') || '')) return true;
-    const labelled = target.closest('[aria-label]');
+    const labelled = (target as Element).closest('[aria-label]');
     return !!labelled && SEND_LABEL.test(strip(labelled.getAttribute('aria-label')));
   };
 
@@ -1800,7 +1809,7 @@ const start = ({ send, on }) => {
       if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey) return;
       if (event.isComposing || event.keyCode === 229) return;
       const target = event.target;
-      if (target && target.closest && target.closest('[contenteditable="true"]')) noteSend();
+      if (target && (target as Element).closest && (target as Element).closest('[contenteditable="true"]')) noteSend();
     }, true);
     addEventListener('pointerdown', event => {
       if (isSendClick(event.target)) noteSend();
@@ -1824,7 +1833,7 @@ const start = ({ send, on }) => {
     if (window.AudioBufferSourceNode) {
       const start = AudioBufferSourceNode.prototype.start;
       AudioBufferSourceNode.prototype.start = function (...args) {
-        if (!this.__waOurs && muted(this)) return;
+        if (!(this as any).__waOurs && muted(this)) return;
         return start.apply(this, args);
       };
     }
@@ -1834,7 +1843,7 @@ const start = ({ send, on }) => {
      Unknown -- an <audio> whose metadata has not loaded -- answers 0, which is
      the answer that does not exempt anything: the loop test below is what a ring
      is actually caught by. */
-  const lengthOf = source => {
+  const lengthOf = (source: { buffer: { duration: any; }; duration: any; }) => {
     const seconds = source && source.buffer ? source.buffer.duration
                   : source ? source.duration : 0;
     return typeof seconds === 'number' && isFinite(seconds) ? seconds : 0;
@@ -1846,17 +1855,17 @@ const start = ({ send, on }) => {
      out a second ago would be a bug of its own, and silencing a call would be a
      worse one -- so a ring, which loops and goes on long after any tone would
      have finished, is exempt before anything else is decided. */
-  const muted = source => {
+  const muted = (source: AudioBufferSourceNode | HTMLMediaElement) => {
     if (!source) return false;
     /* Video elements (camera stream, remote caller video, chat video) must never be muted or blocked */
     if ((typeof HTMLVideoElement !== 'undefined' && source instanceof HTMLVideoElement) ||
-        (source.tagName && source.tagName.toUpperCase() === 'VIDEO')) return false;
+        ((source as HTMLVideoElement).tagName && (source as HTMLVideoElement).tagName.toUpperCase() === 'VIDEO')) return false;
     /* WebRTC media streams (video/audio calls) have srcObject, never mute them */
-    if (source.srcObject) return false;
+    if ((source as HTMLVideoElement).srcObject) return false;
     /* Elements inside conversation or call overlay/modals */
-    if (source.closest && (source.closest('#main') || source.closest('[role="dialog"]') || source.closest('[data-testid*="call"]') || source.closest('[class*="call"]'))) return false;
+    if ((source as HTMLVideoElement).closest && ((source as HTMLVideoElement).closest('#main') || (source as HTMLVideoElement).closest('[role="dialog"]') || (source as HTMLVideoElement).closest('[data-testid*="call"]') || (source as HTMLVideoElement).closest('[class*="call"]'))) return false;
     /* Ringing or looped sounds */
-    if (source.loop === true || lengthOf(source) > RINGING_S) return false;
+    if ((source as HTMLVideoElement).loop === true || lengthOf(source as any) > RINGING_S) return false;
 
     /* Voice notes and media playback. WhatsApp plays voice messages, audio files
        and video messages through <audio>/<video> elements whose src is a blob: URL
@@ -1865,7 +1874,7 @@ const start = ({ send, on }) => {
        and must never be silenced. Their duration is often NaN when .play() is first
        called -- the metadata has not loaded yet -- so the RINGING_S check above
        cannot catch them. */
-    const src = source.currentSrc || source.src || '';
+    const src = (source as HTMLVideoElement).currentSrc || (source as HTMLVideoElement).src || '';
     if (/^blob:|mmg\.whatsapp\.net|pps\.whatsapp\.net|media[\w-]*\.cdn\.whatsapp\.net/i.test(src)) return false;
 
     /* Within a beat of a keystroke or a click on send: their own message. */
@@ -1904,15 +1913,26 @@ const start = ({ send, on }) => {
     let nextId = 1;
     const raised = new Map();
 
+    type ShimmedOptions = { body?: string; icon?: string; tag?: string; data?: unknown; silent?: boolean };
+
     class Shimmed {
-      constructor(title, options = {}) {
+      __id: number;
+      title: string;
+      body: string;
+      icon: string;
+      tag: string;
+      data: unknown;
+      silent: boolean;
+      __handlers: { click: unknown[]; close: unknown[]; show: unknown[]; error: unknown[]}
+
+      constructor(title: string | null, options: ShimmedOptions = {}) {
         this.__id = nextId++;
         this.title = String(title == null ? '' : title);
-        this.body = options.body || '';
-        this.icon = options.icon || '';
-        this.tag = options.tag || '';
-        this.data = options.data;
-        this.silent = !!options.silent;
+        this.body = options .body || '';
+        this.icon = options .icon || '';
+        this.tag = options .tag || '';
+        this.data = options .data;
+        this.silent = !!options .silent;
         this.__handlers = { click: [], close: [], show: [], error: [] };
         raised.set(this.__id, this);
 
@@ -1936,9 +1956,9 @@ const start = ({ send, on }) => {
         log('WhatsApp raised a notification of its own');
         Promise.resolve()
           .then(() => {
-            if (!this.icon) return avatarFor(this.title);
-            rememberName(this.title);
-            return withTimeout(fetchAvatar(this.icon));
+            if (!(this as any).icon) return avatarFor((this as any).title);
+            rememberName((this as any).title);
+            return withTimeout(fetchAvatar((this as any).icon));
           })
           .catch(() => '')
           .then(avatar => send('page-notification', {
@@ -1950,28 +1970,28 @@ const start = ({ send, on }) => {
       }
 
       close() {
-        raised.delete(this.__id);
-        send('page-notification-close', { id: this.__id });
+        raised.delete((this as any).__id);
+        send('page-notification-close', { id: (this as any).__id });
         this.__fire('close');
       }
 
-      addEventListener(type, fn) { (this.__handlers[type] || (this.__handlers[type] = [])).push(fn); }
-      removeEventListener(type, fn) {
-        const list = this.__handlers[type] || [];
+      addEventListener(type: string | number, fn: any) { ((this as any).__handlers[type] || ((this as any).__handlers[type] = [])).push(fn); }
+      removeEventListener(type: string | number, fn: any) {
+        const list = (this as any).__handlers[type] || [];
         const at = list.indexOf(fn);
         if (at >= 0) list.splice(at, 1);
       }
 
-      __fire(type) {
+      __fire(type: string) {
         const event = new Event(type);
         try { Object.defineProperty(event, 'target', { value: this, configurable: true }); } catch (e) {}
-        const inline = this['on' + type];
+        const inline = (this as any)['on' + type];
         if (typeof inline === 'function') { try { inline.call(this, event); } catch (e) {} }
-        for (const fn of (this.__handlers[type] || [])) { try { fn.call(this, event); } catch (e) {} }
+        for (const fn of ((this as any).__handlers[type] || [])) { try { fn.call(this, event); } catch (e) {} }
       }
 
       static get permission() { return 'granted'; }
-      static requestPermission(callback) {
+      static requestPermission(callback: (arg0: string) => void) {
         if (typeof callback === 'function') callback('granted');
         return Promise.resolve('granted');
       }
@@ -1980,30 +2000,35 @@ const start = ({ send, on }) => {
     /* The click is handed back to the page, because WhatsApp's own handler is what
        opens the conversation the message came from. Bringing the window back from
        the tray is the app's half. */
-    on('notification-clicked', id => {
+    on('notification-clicked', (id: any) => {
       const note = raised.get(id);
       if (note) note.__fire('click');
     });
-    on('notification-closed', id => {
+    on('notification-closed', (id: any) => {
       const note = raised.get(id);
       if (!note) return;
       raised.delete(id);
       note.__fire('close');
     });
 
-    window.Notification = Shimmed;
+    (window as any).Notification = Shimmed;
     /* Some builds reach for the service worker path instead. Same treatment:
        WhatsApp keeps a websocket in the page, so nothing here is web push. */
     try {
       const proto = window.ServiceWorkerRegistration && window.ServiceWorkerRegistration.prototype;
       if (proto && proto.showNotification) {
         proto.showNotification = function (title, options) {
-          new Shimmed(title, options);
+          new Shimmed(title, (options as any));
           return Promise.resolve();
         };
         proto.getNotifications = function () { return Promise.resolve([]); };
       }
-    } catch (e) { log('could not shim the service worker notifications: ' + e.message); }
+    } catch (e) { 
+      if (e instanceof Error) { log('could not shim the service worker notifications: ' + e.message); 
+     } else {
+      log('could not shim the service worker notifications: unknown error')
+     }
+    }
   };
 
   /* Opening a conversation the app asked for by chat id -- the identity a
@@ -2034,10 +2059,10 @@ const start = ({ send, on }) => {
     if (!waStore) {
       waStore = store.start({
         send, log,
-        fetchAvatar: url => withTimeout(fetchAvatar(url)),
-        faceFor: name => avatarFor(name),
+        fetchAvatar: (url: URL | RequestInfo) => withTimeout(fetchAvatar(url)),
+        faceFor: (name: any) => avatarFor(name),
       });
-      waStore.setFocus(focused);
+      waStore?.setFocus(focused);
     }
 
     /* And the stickers, which are nothing to do with notifications and are
@@ -2063,5 +2088,3 @@ const start = ({ send, on }) => {
     else addEventListener('DOMContentLoaded', report, { once: true });
   });
 };
-
-module.exports = { start, SEP };
