@@ -174,13 +174,66 @@ const start = ({ send, on }) => {
     }
     return names;
   };
-  const isOutgoing = el => iconNames(el).some(n => OUTGOING_ICON.test(n));
+  /* The same thing said in words rather than in a glyph. Some builds label the
+     tick instead of naming it, and a label is not obfuscated. */
+  const OUTGOING_LABEL =
+    /^(sent|delivered|read|pending|تم الإرسال|تم الارسال|تم التسليم|تمت القراءة|قيد الانتظار)$/i;
+
+  /* Who spoke, in a group row: the sender is its own element followed by a bare
+     ":" element, and a one-to-one row has neither. Verified against live rows:
+     groups yield "You", "+20 11 18856364", "@eng_mahmoudmajed", and direct chats
+     correctly yield nothing. Reading the position of that ":" beats matching
+     WhatsApp's class names, which are obfuscated and rotate every build. */
+  const senderIn = row => {
+    const lines = ((row && row.innerText) || '').split('\n').map(strip);
+    const colon = lines.indexOf(':');
+    return colon > 0 ? lines[colon - 1] : '';
+  };
+
+  /* WhatsApp writes the sender in front of the preview, and for a message of our
+     own it writes the localised word for "you". That is the signal the delivery
+     tick could not be: the tick is an <svg> whose only marking is a name that
+     rotates with the build, so a build that renames it puts a banner over every
+     message the user sends -- which is what "sometimes I send a message to a
+     group and I get a notification of it" was, with "You:" printed in the banner
+     for anyone to read. The word is checked in the languages the client is
+     likely to be run in, and it costs nothing when it does not match. */
+  const SELF_SENDER = /^(you|أنت|انت|أنتَ|أنتِ)$/i;
+
+  const isOutgoing = el => {
+    if (!el) return false;
+    if (iconNames(el).some(n => OUTGOING_ICON.test(n))) return true;
+    if ([...el.querySelectorAll('[aria-label]')]
+          .some(e => OUTGOING_LABEL.test(strip(e.getAttribute('aria-label'))))) return true;
+    return SELF_SENDER.test(senderIn(el));
+  };
 
   /* WhatsApp leaves muted chats out of its own notifications, so this client
-     does too. */
+     does too -- with the one exception the phone makes as well. */
   const MUTED_LABEL = /muted|مكتوم|كتم/i;
   const isMuted = row => [...row.querySelectorAll('[aria-label]')]
       .some(e => MUTED_LABEL.test(e.getAttribute('aria-label') || ''));
+
+  /* A message addressed to the user by name, which is the one thing that gets
+     through a muted group -- on the phone and here. WhatsApp marks such a row in
+     the chat list with an @ badge of its own, so this reads the badge rather than
+     trying to find the user's own name inside the message text: a partial match
+     against a display name would call every "@everyone" and every mention of
+     somebody else a mention of the user, and the spec is explicit that it must
+     not. A reply to one of the user's own messages is marked the same way. */
+  const MENTION_ICON  = /mention|reply|quoted/i;
+  const MENTION_LABEL = /mention|منشن|إشارة|اشارة|رد على|replied to you/i;
+  const isMention = row => {
+    if (!row) return false;
+    if ([...row.querySelectorAll('[data-icon]')]
+          .some(e => MENTION_ICON.test(e.getAttribute('data-icon') || ''))) return true;
+    return [...row.querySelectorAll('[aria-label]')]
+      .some(e => MENTION_LABEL.test(e.getAttribute('aria-label') || ''));
+  };
+
+  /* Whether this row is one the client should stay quiet about. Muted, unless
+     the user was named in it. */
+  const isSilenced = row => isMuted(row) && !isMention(row);
 
   const UNREAD_LABEL = /unread|غير مقروء/i;
   const unreadCount = row => {
@@ -253,6 +306,73 @@ const start = ({ send, on }) => {
   ].join('|'), 'i');
   const isTyping = preview => TYPING_PREVIEW.test(preview || '');
 
+  /* What a row says when the message on it is not made of words.
+   *
+   * Each label carries the glyph of its kind, and that is not decoration. A
+   * banner reading "Sticker" is indistinguishable from a banner over somebody
+   * who typed the word sticker -- which is the whole complaint -- and the same
+   * goes for "Photo", "Video" and every other one of these. The glyph is the one
+   * thing a message of plain text can never produce here, because plain text
+   * comes through with WhatsApp's own preview and never reaches this table.
+   *
+   * Ordered, and the order is load-bearing: a voice note's icon is named "ptt"
+   * on some builds and "audio" on others, and "audio" would otherwise be read as
+   * a music file; a GIF is a video to every icon set that does not name it. */
+  const MEDIA_KINDS = [
+    { icon: /sticker|ملصق/i,                         label: '🏷 Sticker' },
+    { icon: /\bgif\b/i,                              label: '🎞 GIF' },
+    { icon: /ptt|mic\b|headset|voice|رسالة صوتية/i,  label: '🎤 Voice message' },
+    { icon: /image|photo|camera|صورة/i,              label: '📷 Photo' },
+    { icon: /video|فيديو/i,                          label: '🎥 Video' },
+    { icon: /audio|music|أغنية|صوت/i,                label: '🎵 Audio' },
+    { icon: /poll|استطلاع/i,                         label: '📊 Poll' },
+    { icon: /location|pin\b|موقع/i,                  label: '📍 Location' },
+    { icon: /contact|vcard|جهة اتصال/i,              label: '👤 Contact' },
+    { icon: /document|\bdoc\b|مستند|ملف/i,           label: '📄 Document' },
+  ];
+
+  /* The words WhatsApp itself writes in a preview for the same things, so a
+     preview that arrived as text still gets its glyph. Anchored, and the sender
+     prefix is allowed in front: "Mega: Photo" is a photo, "photo of the lab" is
+     a message about one. */
+  const MEDIA_WORDS = [
+    { text: /^(sticker|ملصق)$/i,                            label: '🏷 Sticker' },
+    { text: /^(gif)$/i,                                     label: '🎞 GIF' },
+    { text: /^(voice message|رسالة صوتية)$/i,               label: '🎤 Voice message' },
+    { text: /^(photo|image|صورة)$/i,                        label: '📷 Photo' },
+    { text: /^(video|فيديو)$/i,                             label: '🎥 Video' },
+    { text: /^(audio|أغنية|ملف صوتي)$/i,                    label: '🎵 Audio' },
+    { text: /^(poll|استطلاع)$/i,                            label: '📊 Poll' },
+    { text: /^(location|live location|موقع)$/i,             label: '📍 Location' },
+    { text: /^(contact|جهة اتصال)$/i,                       label: '👤 Contact' },
+    { text: /^(document|مستند)$/i,                          label: '📄 Document' },
+    { text: /^(this message was deleted|تم حذف هذه الرسالة)$/i, label: '🚫 Deleted message' },
+  ];
+
+  /* The kind of a row, from its icons and then from whatever text it carries.
+     Answers '' when nothing says: an empty preview is a row mid-render, and the
+     caller has to be able to tell that from a row with nothing to say. */
+  const mediaLabel = row => {
+    if (!row) return '';
+    const icons = iconNames(row);
+    for (const kind of MEDIA_KINDS)
+      if (icons.some(name => kind.icon.test(name))) return kind.label;
+
+    const text = strip((row.innerText || '').split('\n').find(line => strip(line)) || '');
+    for (const kind of MEDIA_WORDS) if (kind.text.test(text)) return kind.label;
+    return '';
+  };
+
+  /* A preview WhatsApp handed over as words, given its glyph when the words name
+     a kind of media rather than say something. The sender prefix rides along
+     untouched -- it is put back on by the caller, not read from here. */
+  const labelled = preview => {
+    const said = strip(preview);
+    if (!said) return said;
+    for (const kind of MEDIA_WORDS) if (kind.text.test(said)) return kind.label;
+    return said;
+  };
+
   /* What is read off a row on every pass. Three things move when a message lands,
      and it takes all three to catch every one: the preview, because that is the
      message; the timestamp, because a second "tamam" under the first leaves the
@@ -261,23 +381,9 @@ const start = ({ send, on }) => {
   const readRow = row => {
     const titles = titlesIn(row);
     const name = (titles[0] && strip(titles[0].getAttribute('title'))) || nameOf(row);
-    let preview = strip(titles[1] && titles[1].getAttribute('title'));
+    let preview = labelled(strip(titles[1] && titles[1].getAttribute('title')));
 
-    if (!preview && row) {
-      const icons = iconNames(row);
-      if (icons.some(i => /sticker|ملصق/i.test(i))) preview = 'Sticker';
-      else if (icons.some(i => /image|photo|camera|صورة/i.test(i))) preview = 'Photo';
-      else if (icons.some(i => /audio|ptt|mic|headset|صوت|voice/i.test(i))) preview = 'Voice message';
-      else if (icons.some(i => /video|فيديو/i.test(i))) preview = 'Video';
-      else if (icons.some(i => /document|doc|مستند/i.test(i))) preview = 'Document';
-      else if (icons.some(i => /gif/i.test(i))) preview = 'GIF';
-      else {
-        const text = row.innerText || '';
-        if (/ملصق|sticker/i.test(text)) preview = 'Sticker';
-        else if (/صورة|photo|image/i.test(text)) preview = 'Photo';
-        else if (/رسالة صوتية|صوت|voice message/i.test(text)) preview = 'Voice message';
-      }
-    }
+    if (!preview) preview = mediaLabel(row);
 
     return {
       name,
@@ -285,17 +391,6 @@ const start = ({ send, on }) => {
       badge:   unreadCount(row),
       when:    ((row.innerText || '').match(/\b\d{1,2}:\d{2}(?:\s*[AP]M)?\b/) || [''])[0],
     };
-  };
-
-  /* Who spoke, in a group row: the sender is its own element followed by a bare
-     ":" element, and a one-to-one row has neither. Verified against live rows:
-     groups yield "You", "+20 11 18856364", "@eng_mahmoudmajed", and direct chats
-     correctly yield nothing. Reading the position of that ":" beats matching
-     WhatsApp's class names, which are obfuscated and rotate every build. */
-  const senderIn = row => {
-    const lines = (row.innerText || '').split('\n').map(strip);
-    const colon = lines.indexOf(':');
-    return colon > 0 ? lines[colon - 1] : '';
   };
 
   /* Whether the time a row shows is the time it is now. WhatsApp stamps a row
@@ -361,6 +456,19 @@ const start = ({ send, on }) => {
   const announced      = new Map();
   const announcedNames = new Map();
 
+  /* The last thing said about each chat, and how long a repeat of it is read as
+     the same message rather than as a new one. See the note at the bottom of
+     describeUnread: a reply inside a community thread moves the group with the
+     parent message still in its preview, and that is not an arrival. */
+  const REPEAT_MS = 2 * 60 * 1000;
+  const lastAnnounced = new Map();        // chat -> { preview, at }
+
+  const sweepStamped = (map, ttl) => {
+    const now = Date.now();
+    if (map.size <= 128) return;
+    for (const [key, value] of map) if (now - value.at > ttl) map.delete(key);
+  };
+
   const sweep = (map, ttl) => {
     const now = Date.now();
     if (map.size > 128)
@@ -389,6 +497,49 @@ const start = ({ send, on }) => {
     sweep(announcedNames, NAME_TTL_MS);
   };
 
+  /*
+   * Where each chat's face was, the last time its row was on screen.
+   *
+   * #pane-side is not always there. Opening a picture full-screen unmounts the
+   * whole chat list, and so does a call: a notification that arrives in that
+   * moment finds no row to take a face from, and goes out wearing the app's own
+   * icon instead of the group's. That is the report -- a message from a group
+   * that plainly has a picture, announced without one, while a picture happened
+   * to be open in another chat. It cost the chat name as well, which is worse
+   * than a missing face: the key a notification is filed under is what withdraws
+   * it when the message is read, and a key nothing recognises never comes down.
+   *
+   * The URL is what is kept, not the bytes. Reading it off a row costs one
+   * property access per scan, the bytes are in the page's own HTTP cache
+   * already, and a face that has genuinely changed is re-fetched the next time
+   * the row is drawn.
+   */
+  const chatFaces = new Map();            // chat name -> { url, at }
+  const FACES_TTL_MS = 12 * 60 * 60 * 1000;
+  const FACES_MAX = 256;
+
+  const faceUrlIn = row => {
+    const img = row && row.querySelector(
+      'img[src^="http"], img[src^="blob:"], img[src^="data:"]');
+    return (img && img.src) || '';
+  };
+
+  const rememberFace = (name, row) => {
+    const url = faceUrlIn(row);
+    if (!name || !url) return;
+    chatFaces.set(name, { url, at: Date.now() });
+    if (chatFaces.size > FACES_MAX) {
+      const cutoff = Date.now() - FACES_TTL_MS;
+      for (const [key, seen] of chatFaces) if (seen.at < cutoff) chatFaces.delete(key);
+      /* Still over after the sweep: the oldest go, in insertion order, which is
+         the order a Map iterates. */
+      for (const key of chatFaces.keys()) {
+        if (chatFaces.size <= FACES_MAX) break;
+        chatFaces.delete(key);
+      }
+    }
+  };
+
   const scanList = () => {
     const pane = document.querySelector('#pane-side');
     if (!pane) return;
@@ -396,6 +547,11 @@ const start = ({ send, on }) => {
     for (const row of pane.querySelectorAll('[role="row"]')) {
       const now = readRow(row);
       if (!now.name) continue;
+
+      /* Kept on every pass, arrival or not: this is the only moment the list is
+         guaranteed to be on screen, and a notification that arrives once it is
+         not has nowhere else to find the chat's picture. */
+      rememberFace(now.name, row);
 
       const before = rowState.get(row);
 
@@ -427,7 +583,7 @@ const start = ({ send, on }) => {
       if (!seeded || before === undefined) continue;
       if (Date.now() - seededAt < SETTLE_MS) continue;
       if (!isArrival(before, now)) continue;
-      if (isMuted(row)) continue;
+      if (isSilenced(row)) continue;
       if (isOutgoing(row)) continue;
 
       /* Nothing is queued while the window is away: WhatsApp raises its own
@@ -462,7 +618,8 @@ const start = ({ send, on }) => {
      answer changes, which is a handful of messages an hour rather than one
      message per scan. */
   let lastUnread = null;
-  const knownUnread = new Map();
+  let lastCount = null;
+  const knownUnread = new Map();          // chat -> { at, count }
   const UNREAD_GRACE_MS = 2500;
 
   const reportUnread = pane => {
@@ -474,36 +631,53 @@ const start = ({ send, on }) => {
       const name = nameOf(row);
       if (!name) continue;
       renderedNames.add(name);
-      if (unreadCount(row) > 0) {
+      const waiting = unreadCount(row);
+      if (waiting > 0) {
         currentUnread.add(name);
-        knownUnread.set(name, now);
+        knownUnread.set(name, { at: now, count: waiting });
       }
     }
 
     if (!renderedNames.size && !pane.querySelector('[role="row"]')) return;
 
     const names = [];
-    for (const [name, lastSeen] of knownUnread.entries()) {
+    for (const [name, seen] of knownUnread.entries()) {
       if (currentUnread.has(name)) {
         names.push(name);
       } else if (renderedNames.has(name)) {
         const open = openRow();
         const isOpenChat = open && nameOf(open) === name && focused;
-        if (!isOpenChat && (now - lastSeen < UNREAD_GRACE_MS)) {
+        if (!isOpenChat && (now - seen.at < UNREAD_GRACE_MS)) {
           names.push(name);
         } else {
           knownUnread.delete(name);
         }
       } else {
-        if (now - lastSeen < 60000) names.push(name);
+        if (now - seen.at < 60000) names.push(name);
         else knownUnread.delete(name);
       }
     }
 
     const key = names.sort().join(SEP);
-    if (key === lastUnread) return;
-    lastUnread = key;
-    send('unread-chats', names);
+    if (key !== lastUnread) {
+      lastUnread = key;
+      send('unread-chats', names);
+    }
+
+    /* And the number the launcher draws on the icon. The document title cannot
+       supply it: its "(3)" counts unread CHATS, so three conversations holding
+       eleven messages between them put a 3 on the icon while the phone shows 11.
+       The pills carry the real number, and they are already being read. */
+    let messages = 0;
+    for (const name of names) {
+      const seen = knownUnread.get(name);
+      messages += (seen && seen.count) || 1;
+    }
+    const counted = names.length + SEP + messages;
+    if (counted !== lastCount) {
+      lastCount = counted;
+      send('unread-count', { chats: names.length, messages });
+    }
   };
 
   /* Which chat the user is looking at. The unread report above is an inference
@@ -517,6 +691,12 @@ const start = ({ send, on }) => {
      returns, and nothing about the chat itself changes to say so. */
   let lastOpen = null;
   const reportOpen = () => {
+    /* A picture opened full-screen, or a call, takes the whole chat list off the
+       page -- and a list that is not rendered is not a chat that has been
+       closed. Reporting "nothing is open" for it would withdraw the banner for
+       the conversation the user is still sitting in, and then have nothing to
+       say when it came back, because this only speaks when the answer changes. */
+    if (!document.querySelector('#pane-side')) return;
     const row = openRow();
     const name = row ? nameOf(row) : '';
     if (name === lastOpen) return;
@@ -645,10 +825,11 @@ const start = ({ send, on }) => {
     new Promise(resolve => setTimeout(() => resolve(''), AVATAR_TIMEOUT_MS)),
   ]);
 
-  const avatarOf = async row => {
-    const img = row && row.querySelector('img[src^="http"], img[src^="blob:"]');
-    if (!img || !img.src) return '';
-    return withTimeout(fetchAvatar(img.src));
+  const avatarOf = async (row, name) => {
+    const url = faceUrlIn(row) ||
+                (chatFaces.get(strip(name) || nameOf(row)) || {}).url || '';
+    if (!url) return '';
+    return withTimeout(fetchAvatar(url));
   };
 
   /* The row a notification WhatsApp raised belongs to. WhatsApp titles a group
@@ -670,6 +851,26 @@ const start = ({ send, on }) => {
     }) || null;
   };
 
+  /* The chat-list name for a notification WhatsApp titled itself, found in the
+     rendered list when there is one and in the names this client has seen when
+     there is not. Every withdrawal speaks chat-list names, so a notification
+     filed under WhatsApp's own wording of who wrote is one nothing can take
+     down again -- and while the list is unmounted, WhatsApp's wording was all
+     there used to be. */
+  const chatNameFor = name => {
+    const wanted = strip(name);
+    if (!wanted) return '';
+
+    const row = rowFor(wanted);
+    if (row) return nameOf(row);
+
+    if (chatFaces.has(wanted)) return wanted;
+    for (const known of chatFaces.keys())
+      if (known.length > 2 && (wanted.indexOf(known) >= 0 || known.indexOf(wanted) >= 0))
+        return known;
+    return '';
+  };
+
   /* Asked by name when the notification is one the page raised.
 
      This is only ever asked while a banner for that chat is on its way out, so
@@ -683,7 +884,13 @@ const start = ({ send, on }) => {
     rememberName(wanted);
 
     const match = rowFor(wanted);
-    return match ? avatarOf(match) : '';
+    if (match) return avatarOf(match, wanted);
+
+    /* No row -- the list is not rendered. The face this chat wore the last time
+       it was is the right one; a group's picture does not change between one
+       message and the next. */
+    const remembered = chatFaces.get(chatNameFor(wanted) || wanted);
+    return remembered ? withTimeout(fetchAvatar(remembered.url)) : '';
   };
 
   /* Opening a chat from a banner raised on this side.
@@ -712,9 +919,10 @@ const start = ({ send, on }) => {
    * The whole press goes out and not a bare .click(): the row answers to pointer
    * and mouse events both, and which of them opens a conversation is WhatsApp's
    * business rather than something to depend on. */
-  const pressRow = row => {
-    const target = row.querySelector('span[title]') || row;
-    const box = row.getBoundingClientRect();
+  const press = (element, target) => {
+    if (!element) return;
+    target = target || element;
+    const box = element.getBoundingClientRect();
     const where = {
       bubbles: true, cancelable: true, view: window, button: 0, buttons: 1,
       clientX: Math.round(box.left + box.width / 2),
@@ -730,6 +938,8 @@ const start = ({ send, on }) => {
     }
   };
 
+  const pressRow = row => press(row, row.querySelector('span[title]') || row);
+
   on('open-chat-request', name => {
     const row = rowFor(name);
     if (!row) { log('cannot open "' + name + '": no row for it in the rendered list'); return; }
@@ -739,6 +949,56 @@ const start = ({ send, on }) => {
        report it on its own fires a beat later than the click does. */
     setTimeout(refreshOpen, 400);
   });
+
+  /* ------------------------------------------------------- Escape and panels */
+
+  /*
+   * Escape closes the emoji panel, whether or not an emoji has been picked.
+   *
+   * WhatsApp's own Escape handler is bound to the composer. Opening the panel
+   * leaves the composer focused and Escape reaches it; picking an emoji moves
+   * focus into the panel, and from there the key never gets there -- so the
+   * panel stayed open and the only way out was pressing its button a second
+   * time. Which is exactly the report: "if I don't pick an emoji it closes, if I
+   * do it doesn't".
+   *
+   * What is done about it is the same thing the user would do: the button that
+   * opened the panel is pressed. It is found by being the one that says it is
+   * expanded, so a build that renames its icon still closes -- and if nothing on
+   * the page says a panel is open, the key is left entirely alone and WhatsApp's
+   * own handler gets it as before.
+   */
+  const PANEL_ICON  = /smil|emoji|sticker|gif|avatar/i;
+  const PANEL_LABEL = /^(emoji|sticker|gif|avatar|رموز|ملصق|إيموجي|ايموجي)/i;
+
+  const openPanelButton = () => {
+    for (const el of document.querySelectorAll('[aria-expanded="true"]')) {
+      const own = el.getAttribute('data-icon') || '';
+      const inner = el.querySelector('[data-icon]');
+      const icon = own || (inner && inner.getAttribute('data-icon')) || '';
+      const label = strip(el.getAttribute('aria-label'));
+      if (PANEL_ICON.test(icon) || PANEL_LABEL.test(label)) return el;
+    }
+    return null;
+  };
+
+  const composer = () =>
+    document.querySelector('#main [contenteditable="true"]') ||
+    document.querySelector('footer [contenteditable="true"]');
+
+  addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    const button = openPanelButton();
+    if (!button) return;                    // nothing open: WhatsApp's key, not ours
+
+    event.preventDefault();
+    event.stopPropagation();
+    press(button);
+    /* And the caret back where it was, so the next keystroke is a message and
+       not a shortcut aimed at whatever the panel left focused. */
+    const box = composer();
+    if (box) { try { box.focus(); } catch (err) {} }
+  }, true);
 
   /* ------------------------------------------------------------ the question */
 
@@ -786,7 +1046,7 @@ const start = ({ send, on }) => {
       const pane = document.querySelector('#pane-side');
       for (const candidate of (pane ? pane.querySelectorAll('[role="row"]') : [])) {
         if (!unreadCount(candidate)) continue;
-        if (isOpen(candidate, '') || isMuted(candidate) || isOutgoing(candidate)) continue;
+        if (isOpen(candidate, '') || isSilenced(candidate) || isOutgoing(candidate)) continue;
 
         const state = rowState.get(candidate);
         if (!state || isTyping(state.preview)) continue;
@@ -812,16 +1072,57 @@ const start = ({ send, on }) => {
                   : (fromQueue && !isTyping(queued.preview) ? queued.preview : '');
     if (!state.name || !preview) return '';
 
-    /* Said once, and the guess will not say it again. */
-    rememberAnnounced({ name: state.name, preview: preview, when: state.when });
-    if (preview !== state.preview) rememberAnnounced(state);
-
     /* Read off the row, unless the row has moved on and the message is the one that
        was queued -- then so is the sender, or a group message would go out with
        nobody's name on it. */
     const sender = moved ? (queued.sender || '') : senderIn(row);
 
-    return [state.name, sender, preview, await avatarOf(row)].join(SEP);
+    /* A message of the user's own, caught here as well as at the row.
+     *
+     * The row test runs at scan time, and the sender WhatsApp prints in front of
+     * a preview can arrive a beat after the preview itself -- so a row that
+     * looked like anybody's when it was queued can read "You:" by the time it is
+     * described. That gap is what put a banner over a message the user had just
+     * sent to a group, with "You:" printed in it for them to read. */
+    if (SELF_SENDER.test(sender)) {
+      log('not announced: "' + state.name + '" moved for a message of our own');
+      return '';
+    }
+
+    /* The same words for the same chat again, moments after they were announced.
+     *
+     * A reply in a community lands in a thread, and WhatsApp answers by moving
+     * the group to the top of the chat list with the PARENT message still in the
+     * preview and a fresh clock on it. Every test an arrival has to pass, it
+     * passes -- and the banner it produces names a message the user was told
+     * about already, not the reply that actually arrived. Of the two ways out,
+     * announcing the reply is not available: the chat list is not told what the
+     * reply said, only that the thread moved. So the second banner is dropped.
+     * A banner naming the wrong message is worse than no banner: it is the one
+     * thing a notification must not be, and the reply is still counted in the
+     * unread pill, the tray and the badge.
+     *
+     * Narrow on purpose. Only the identical text, only for the same chat, and
+     * only inside two minutes -- two people saying "tamam" a quarter of an hour
+     * apart are two messages and both are announced. */
+    const said = lastAnnounced.get(state.name);
+    if (said && said.preview === preview && Date.now() - said.at < REPEAT_MS) {
+      /* The chat is named and the message is not. What was said belongs in the
+         banner and nowhere else -- a log is read over a shoulder, pasted into an
+         issue and kept in the journal, and none of those is a place for
+         somebody's messages. */
+      log('not announced: "' + state.name + '" moved for the message already ' +
+          'announced -- a thread reply, not a new message');
+      return '';
+    }
+    lastAnnounced.set(state.name, { preview, at: Date.now() });
+    sweepStamped(lastAnnounced, REPEAT_MS);
+
+    /* Said once, and the guess will not say it again. */
+    rememberAnnounced({ name: state.name, preview: preview, when: state.when });
+    if (preview !== state.preview) rememberAnnounced(state);
+
+    return [state.name, sender, preview, await avatarOf(row, state.name)].join(SEP);
   };
 
   /* What the watcher is holding, for the devtools console and the test rig. Every
@@ -1019,7 +1320,7 @@ const start = ({ send, on }) => {
            title, because the title is WhatsApp's wording of who wrote and the
            withdrawals all speak in chat-list names. A notification keyed on
            anything else is one nothing can take down again. */
-        const row = rowFor(this.title);
+        const chat = chatNameFor(this.title);
         Promise.resolve()
           .then(() => {
             if (!this.icon) return avatarFor(this.title);
@@ -1029,7 +1330,7 @@ const start = ({ send, on }) => {
           .catch(() => '')
           .then(avatar => send('page-notification', {
             id: this.__id, title: this.title, body: this.body,
-            chat: row ? nameOf(row) : '',
+            chat: chat,
             avatar: avatar || '', silent: this.silent,
           }));
       }

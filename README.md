@@ -19,14 +19,23 @@ nothing, not even a state directory.
 - **Draws everything in the desktop's font**, applied live when you change it.
 - **One notification per message**, with the sender, the text and the sender's
   picture, a click that opens that conversation, and a withdrawal the moment you
-  open the chat or read it on your phone. No tone for the messages you send.
+  open the chat or read it on your phone. Each message is its own entry rather
+  than a replacement for the last, media says what kind it is (`📷 Photo`,
+  `🏷 Sticker`, `🎤 Voice message`) so it cannot be mistaken for somebody typing
+  the word, and Arabic reads right to left in the banner instead of wrapping
+  the wrong way under a Latin name. Nothing is announced for a message you sent
+  yourself, a muted group is silent unless you were mentioned in it, and
+  do-not-disturb silences the tone as well as the banner.
 - **Banners come down on the client's own clock.** GNOME shows one at a time,
   queues three behind it and drops the rest, so each banner is closed after
   twelve seconds and refiled silently in the notification centre.
 - **Voice and video calls work out of the box.** Full WebRTC support for microphone and camera with automatic device permissions and Linux-specific rendering fixes.
 - **Built-in Settings & Theme Switcher.** Switch between System Default, Dark Mode, and Light Mode, toggle Autostart at login, and configure tray behavior from the dedicated Settings window (`Ctrl+,`) or directly from the tray menu.
+- **Screen sharing in a call**, over PipeWire on Wayland, offering windows as
+  well as whole screens.
 - Dark or light follows the desktop, links open in your browser, downloads land
   in `~/Downloads`, `Ctrl` `+`/`-`/`0` zoom and the window size is remembered.
+  `Esc` closes the emoji panel whether or not you picked one.
 
 <p align="center">
   <img src="screenshots/settings.png" alt="WhatsApp Desktop Settings" width="420" />

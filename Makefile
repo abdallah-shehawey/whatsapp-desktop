@@ -122,6 +122,7 @@ icons:
 # account. Every notification bug this client has had lived in that file.
 test:
 	@node tools/test-inject.js
+	@node tools/test-bidi.js
 	@node tools/test-style.js
 
 run:

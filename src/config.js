@@ -31,6 +31,7 @@ const DEFAULTS = {
   'notifications.outgoing-sound': false,  // WhatsApp's own tone for a message you send
   'notifications.whatsapp-sound': false,  // let WhatsApp play its own tone for a message arriving
   'notifications.banner-seconds': 12,
+  'notifications.hide-preview': false,    // the chat and the kind of message, never the words
 };
 
 /* A deliberately small INI reader: sections, key = value, # and ; comments.
@@ -135,6 +136,9 @@ class Config {
       '# banner under an idle pointer for ever, and one parked banner swallows',
       '# every message behind it.',
       `banner-seconds = ${v['notifications.banner-seconds']}`,
+      '# Keep the message itself off the screen: a banner then says which chat it',
+      '# came from and what kind of thing arrived, and nothing of what was said.',
+      `hide-preview = ${v['notifications.hide-preview']}`,
       '',
     ].join('\n');
 

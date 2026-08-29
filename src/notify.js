@@ -66,6 +66,91 @@ const sweepAvatars = () => {
 };
 
 /*
+ * What has already been announced, and what the user has already dealt with.
+ *
+ * A notification is one message made visible, so the thing that identifies it is
+ * the message -- the chat it landed in, who wrote it and what it said -- and not
+ * the chat alone. Keyed on the chat, a second message from one person replaces
+ * the first; keyed on the message, the two stack, which is what the phone does
+ * and what the specification asks for.
+ *
+ * The identity is kept as a digest and never as the message. It has to survive a
+ * restart -- a client that came back and re-announced everything still unread
+ * would be a client nobody leaves running -- and a file of everybody's messages
+ * sitting in the state directory is not a price worth paying for that. A digest
+ * answers the only question asked of it ("has this one been said?") and answers
+ * nothing else, so the file is a list of hashes, written with no permissions for
+ * anyone but its owner.
+ */
+/* How long a row is worth keeping. What is actually asked of this list is a
+   window of seconds (SAME_MESSAGE_MS below) -- the hour is simply how long a row
+   is worth the bytes, so a client restarted twice in a minute does not re-raise
+   what it raised just before it went down, and a client started tomorrow reads
+   an empty file rather than yesterday's. */
+const SEEN_TTL_MS = 60 * 60 * 1000;
+const SEEN_MAX = 4096;
+
+class Seen {
+  constructor(file) {
+    this.file = file;
+    this.at = new Map();                  // digest -> when it was announced
+    this.dirty = false;
+    this.flushTimer = null;
+    this.load();
+  }
+
+  static digest(identity) {
+    return crypto.createHash('sha256').update(String(identity)).digest('hex').slice(0, 24);
+  }
+
+  load() {
+    let raw;
+    try { raw = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch (e) { return; }
+    if (!raw || typeof raw !== 'object' || !raw.seen) return;
+    const cutoff = Date.now() - SEEN_TTL_MS;
+    for (const [key, at] of Object.entries(raw.seen))
+      if (typeof at === 'number' && at > cutoff) this.at.set(key, at);
+    console.log('carried %d announced message(s) over from the last session', this.at.size);
+  }
+
+  /* Written on a timer rather than per notification: a burst is a dozen messages
+     in a few seconds and each one would otherwise be a synchronous write. */
+  save() {
+    this.dirty = true;
+    if (this.flushTimer) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      if (!this.dirty) return;
+      this.dirty = false;
+      const cutoff = Date.now() - SEEN_TTL_MS;
+      for (const [key, at] of this.at) if (at < cutoff) this.at.delete(key);
+      while (this.at.size > SEEN_MAX) this.at.delete(this.at.keys().next().value);
+      try {
+        fs.mkdirSync(path.dirname(this.file), { recursive: true, mode: 0o700 });
+        fs.writeFileSync(this.file, JSON.stringify({ seen: Object.fromEntries(this.at) }),
+                         { mode: 0o600 });
+      } catch (e) {
+        console.warn('could not remember which messages were announced: %s', e.message);
+      }
+    }, 5000);
+    if (this.flushTimer.unref) this.flushTimer.unref();
+  }
+
+  /* Whether this exact message has been announced inside the window. Identity,
+     not resemblance: two people saying the same thing are two messages, and one
+     person saying it twice an hour apart is two as well. */
+  has(identity, windowMs) {
+    const at = this.at.get(Seen.digest(identity));
+    return at !== undefined && Date.now() - at < windowMs;
+  }
+
+  add(identity) {
+    this.at.set(Seen.digest(identity), Date.now());
+    this.save();
+  }
+}
+
+/*
  * One banner and everything that outlives it: the timer that takes it down, the
  * silent copy filed in its place, and the key -- the chat it belongs to -- that
  * lets it be withdrawn when that chat is read.
@@ -151,27 +236,54 @@ class Entry {
   }
 }
 
+/* How long one message stays recognisable as itself.
+ *
+ * Two internal watchers can report one arrival -- the chat-list watcher and the
+ * shim over the notifications WhatsApp Web raises -- and the specification
+ * allows exactly one kind of deduplication: the same message arriving twice.
+ * Not "a banner that looks like the last one", which would swallow the second
+ * "tamam" of a pair, but this message, in this chat, from this person. The
+ * window is short because that is the only case it is for: the two watchers
+ * report within a second of each other or not at all. */
+const SAME_MESSAGE_MS = 15000;
+
 class Banners {
-  constructor({ seconds = 12, appIcon = null } = {}) {
+  constructor({ seconds = 12, appIcon = null, stateFile = null, hidePreview = false } = {}) {
     this.seconds = seconds;
     this.appIcon = appIcon;
+    this.hidePreview = hidePreview;
     this.byKey = new Map();             // chat name -> Set of live entries
+    this.seen = stateFile ? new Seen(stateFile) : null;
   }
 
   get supported() { return Notification.isSupported(); }
 
   /*
-   * key     the chat, so the notification can be withdrawn when it is read
-   * title   the chat
-   * body    "sender: message", or the message on its own in a direct chat
-   * icon    base64 image bytes for the sender's picture, or nothing
-   * onClick what to do when the user clicks the banner
+   * identity  what makes this message this message -- chat, sender and text --
+   *           so a second message from one person stacks instead of replacing
+   *           the first, and the same one reported twice is raised once
+   * key       the chat, so the notification can be withdrawn when it is read
+   * title     the chat
+   * body      "sender: message", or the message on its own in a direct chat
+   * icon      base64 image bytes for the sender's picture, or nothing
+   * onClick   what to do when the user clicks the banner
    */
-  show({ key, title, body, icon, onClick }) {
+  show({ identity, key, title, body, icon, onClick, redacted }) {
     if (!this.supported || !title) return null;
 
+    if (identity && this.seen) {
+      if (this.seen.has(identity, SAME_MESSAGE_MS)) {
+        console.log('already announced: the same message reported twice');
+        return null;
+      }
+      this.seen.add(identity);
+    }
+
     const entry = new Entry(this, {
-      key, title, body,
+      key, title,
+      /* With previews hidden the banner says which chat and what kind of thing
+         arrived, and never a word of it. */
+      body: this.hidePreview ? (redacted || 'New message') : body,
       iconPath: avatarPath(icon) || this.appIcon || undefined,
       onClick,
     });

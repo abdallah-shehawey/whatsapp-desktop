@@ -26,7 +26,7 @@ APP_ID = "io.github.shehawey.whatsapp-desktop"
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ICONS = ROOT / "data" / "icons"
 APP_MASTER = ICONS / "app-master.svg"
-TRAY_MASTER = ICONS / "tray-master.png"
+TRAY_MASTER = ICONS / "tray-master.svg"
 
 
 def render(master: pathlib.Path, size: int) -> GdkPixbuf.Pixbuf:
@@ -36,6 +36,14 @@ def render(master: pathlib.Path, size: int) -> GdkPixbuf.Pixbuf:
 
 
 def with_badge(pixbuf: GdkPixbuf.Pixbuf, size: int) -> GdkPixbuf.Pixbuf:
+    """The same mark with the unread dot on it.
+
+    The gutter is the part that matters. The mark is a solid white silhouette,
+    and a dot painted straight onto it shares an edge with it: at 22px the two
+    merge into one blob and the badge stops being a badge. So the pixels under
+    the dot are cleared first, which cuts a ring of panel out of the white and
+    leaves the dot standing on its own however dark or light that panel is.
+    """
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
     ctx = cairo.Context(surface)
 
@@ -43,14 +51,14 @@ def with_badge(pixbuf: GdkPixbuf.Pixbuf, size: int) -> GdkPixbuf.Pixbuf:
     Gdk.cairo_set_source_pixbuf(ctx, pixbuf, 0, 0)
     ctx.paint()
 
-    radius = max(2.0, size * 0.22)
-    cx = cy = size - radius - max(0.0, size * 0.02)
+    radius = max(2.0, size * 0.19)
+    cx = cy = size - radius
 
-    if size >= 24:
-        ctx.set_source_rgba(1, 1, 1, 1)
-        ctx.arc(cx, cy, radius, 0, 6.28318)
-        ctx.fill()
-        radius *= 0.78
+    # A hole the badge sits in, so nothing of the mark touches it.
+    ctx.set_operator(cairo.OPERATOR_CLEAR)
+    ctx.arc(cx, cy, radius + max(1.0, size * 0.055), 0, 6.28318)
+    ctx.fill()
+    ctx.set_operator(cairo.OPERATOR_OVER)
 
     ctx.set_source_rgba(1.0, 0.23, 0.19, 1.0)
     ctx.arc(cx, cy, radius, 0, 6.28318)
@@ -87,7 +95,7 @@ def main() -> int:
         write(with_badge(tray, size), size, "status", f"{APP_ID}-tray-attention.png")
         write(with_badge(tray, size), size, "status", "whatsapp-desktop-tray-attention.png")
 
-    total = sum(1 for _ in ICONS.rglob("*.png")) - 1   # the tray master is one
+    total = sum(1 for _ in ICONS.rglob("*.png"))
     print(f"generated {total} icons across {len(SIZES)} sizes")
     return 0
 

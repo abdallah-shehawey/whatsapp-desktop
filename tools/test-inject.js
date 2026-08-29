@@ -129,6 +129,7 @@ const mkRow = spec => {
   row.append(el('span', { title: spec.name }), el('span', { title: spec.preview }));
   if (spec.badge) row.append(el('div', { 'aria-label': spec.badge + ' unread messages' }));
   if (spec.muted) row.append(el('div', { 'aria-label': 'muted' }));
+  if (spec.mention) row.append(el('span', { 'data-icon': 'mention' }));
   if (spec.outgoing) {
     const svg = el('svg', {});
     svg.append(el('title', {}, 'wds-ic-read'));
@@ -434,9 +435,81 @@ const check = (label, got, want) => {
   const stickerIcon = el('span', { 'data-icon': 'ic-sticker' });
   pdf.append(stickerIcon);
   await scan();
-  check('a sticker message is announced as Sticker',
-        await describe(), 'Pdf & Assignments | Mega: Sticker');
+  check('a sticker message is announced as a sticker, glyph and all',
+        await describe(), 'Pdf & Assignments | Mega: \u{1f3f7} Sticker');
   stickerIcon.remove();
+
+
+  /* --------------------------------------------- what is not ours to announce */
+
+  /* A message the user sent themselves. The delivery tick is one signal and the
+     word WhatsApp writes in front of the preview is the other, and the second is
+     what catches a build that has renamed the first -- which is how a banner
+     reading "You: ..." ended up over a message the user had just sent. */
+  await describe();
+  update(pdf, { badge: 0, preview: 'تمام يا معلم', sender: 'You', when: clock() });
+  await scan();
+  check('a message the user sent is not announced, tick or no tick',
+        await describe(), '');
+
+  /* And the same message with somebody else's name on it is. */
+  update(pdf, { badge: 1, preview: 'تمام يا معلم', sender: 'Salah', when: clock() });
+  await scan();
+  check('the same message from somebody else is announced',
+        await describe(), 'Pdf & Assignments | Salah: تمام يا معلم');
+
+  /* A reply inside a community thread moves the group to the top of the list
+     with the PARENT message still in its preview and a fresh clock on it. Every
+     test an arrival has to pass, it passes -- and the banner would name a
+     message the user has already been told about. */
+  update(pdf, { badge: 2, preview: 'تمام يا معلم', sender: 'Salah', when: clock() });
+  await scan();
+  check('a thread reply re-surfacing the same message is not announced twice',
+        await describe(), '');
+
+  /* Two minutes on, the same words are a new message and are announced again. */
+  advance(3 * 60 * 1000);
+  update(pdf, { badge: 3, preview: 'تمام يا معلم', sender: 'Salah', when: clock() });
+  await scan();
+  check('and the same words a quarter of an hour later are a message again',
+        await describe(), 'Pdf & Assignments | Salah: تمام يا معلم');
+
+  /* ------------------------------------------------------- muting and mentions */
+
+  const club = mkRow({ name: 'Study Group', preview: 'كلام كتير', when: clock(), badge: 1,
+                       sender: 'Ahmed', muted: true });
+  pane.append(club);
+  await scan();                                   // seen for the first time: not news
+  update(club, { badge: 2, preview: 'كلام تاني', when: clock() });
+  await scan();
+  check('a muted group says nothing', await describe(), '');
+
+  /* Unless the user was named in it, which is the one thing that gets through a
+     muted group on the phone as well. */
+  update(club, { badge: 3, preview: 'يا عبدالله شوف دا', when: clock(), mention: true });
+  club.append(el('span', { 'data-icon': 'mention' }));
+  await scan();
+  check('a mention gets through the muting',
+        await describe(), 'Study Group | Ahmed: يا عبدالله شوف دا');
+  club.remove();
+
+  /* ------------------------------------------------------------ kinds of media */
+
+  /* WhatsApp writes "Photo" into the preview itself when it has one, and a
+     banner reading Photo is indistinguishable from somebody who typed the word.
+     The glyph is what tells them apart, and it is put on the label rather than
+     on the message. */
+  await describe();
+  update(pdf, { badge: 4, preview: 'Photo', sender: 'Mega', when: clock() });
+  await scan();
+  check('a photo is announced as a photo, not as the word',
+        await describe(), 'Pdf & Assignments | Mega: \u{1f4f7} Photo');
+
+  update(pdf, { badge: 5, preview: 'the sticker you sent is great', sender: 'Mega',
+                when: clock() });
+  await scan();
+  check('and a message that merely mentions one is left as it was written',
+        await describe(), 'Pdf & Assignments | Mega: the sticker you sent is great');
 
   /* ----------------------------------------------- the tone of a message out */
 

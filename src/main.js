@@ -9,7 +9,7 @@
  */
 'use strict';
 
-const { app, BrowserWindow, Menu, session, shell, nativeTheme, ipcMain, screen, desktopCapturer, systemPreferences } = require('electron');
+const { app, BrowserWindow, Menu, session, shell, nativeTheme, ipcMain, screen, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -19,6 +19,7 @@ const desktop = require('./desktop.js');
 const style = require('./style.js');
 const { TrayIcon } = require('./tray.js');
 const { Banners, sweepAvatars } = require('./notify.js');
+const bidi = require('./bidi.js');
 const { SEP } = require('./page/inject.js');
 const debug = require('./debug.js');
 const sound = require('./sound.js');
@@ -186,6 +187,11 @@ let quitting = false;
 let cssKey = null;
 let loadedAt = 0;
 let unreadChats = 0;
+/* How many messages are waiting, as the page counted them off the unread pills.
+   null until it has, which is what makes the document title's chat count a
+   stand-in rather than a permanent answer. */
+let unreadMessages = null;
+let badgeShown = -1;
 let lastArrivalAt = 0;
 /* The font stack the page says it wants, which is what gets aliased to the
    desktop font. Empty until the page reports it, a moment after each load. */
@@ -520,7 +526,35 @@ const onKey = (event, input) => {
 const playTone = () => {
   if (!config.get('notifications.sound')) return;
   if (!win || win.isDestroyed()) return;
+  /* The desktop has the last word.
+   *
+   * A notification daemon reads the urgency and the do-not-disturb setting and
+   * decides whether to put a banner on screen, and it decides whether to make a
+   * sound the same way -- but only for the sound IT plays, from the hint on the
+   * call. This tone is played by the client, through the page, and the daemon
+   * knows nothing about it. So do-not-disturb silenced the banner and left the
+   * sound, which is the opposite of what do-not-disturb is for. Asked here
+   * instead, and the same question the shell asks itself. */
+  if (!desktop.notificationsAllowed()) {
+    console.log('the tone is not played: the desktop is not taking notifications');
+    return;
+  }
+  if (!desktop.eventSoundsEnabled()) {
+    console.log('the tone is not played: the desktop has its alert sounds off');
+    return;
+  }
   win.webContents.send('wa:play-tone', null);
+};
+
+/* What a message is, when its words are not to be shown. The page marks every
+   kind of media with a glyph of its own -- see MEDIA_KINDS in the page script --
+   so a body that begins with one already says what arrived, and the rest of it
+   is the part the user asked to keep off the screen. Anything else is a message
+   of words, and with previews hidden that is all a banner may say about it. */
+const KIND = /^([\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]+\s*[A-Za-z ]+)/u;
+const kindOf = message => {
+  const found = KIND.exec(String(message || '').replace(/^[^:]{1,40}:\s*/, ''));
+  return found ? found[1].trim() : 'New message';
 };
 
 /* ------------------------------------------------------------ withdrawals */
@@ -628,10 +662,14 @@ const describeThenNotify = () => setTimeout(async () => {
   const [chat, sender, message, avatar] = answer.split(SEP);
   if (!chat || !message) return;
 
-  banners.show({
+  const raised = banners.show({
+    /* This message and no other. Not the chat -- keyed on the chat, the second
+       message of a burst would replace the first instead of stacking under it. */
+    identity: [chat, sender, message].join(SEP),
     key: chat,
-    title: chat,
-    body: sender ? `${sender}: ${message}` : message,
+    title: bidi.paragraph(chat),
+    body: bidi.line(sender, message),
+    redacted: kindOf(message),
     icon: avatar,
     /* A banner is a message, and clicking one is asking to read it. The banners
        WhatsApp Web raises have always done this -- the click goes back to the
@@ -644,7 +682,10 @@ const describeThenNotify = () => setTimeout(async () => {
       if (win && !win.isDestroyed()) win.webContents.send('wa:open-chat-request', chat);
     },
   });
-  playTone();
+  /* One event, one sound. A banner refused as a message already announced is not
+     an event, and playing a tone for it would be the duplicate arriving in the
+     one form the deduplication cannot take back. */
+  if (raised) playTone();
 }, 250);
 
 /* WhatsApp Web puts "(3) WhatsApp" in the document title while chats are unread
@@ -670,9 +711,34 @@ const onTitle = title => {
   }
   unreadChats = chats;
 
-  if (tray) tray.setAttention(chats > 0);
-  app.badgeCount = chats;
+  /* The title dropping its prefix is the one unambiguous statement WhatsApp
+     makes about unread: everything has been read. It is taken as such, and the
+     page's count is reset with it rather than left to expire on its own -- two
+     places writing the badge and the tray from numbers that disagree is how an
+     icon ends up marked unread with nothing behind it. */
+  if (chats === 0) unreadMessages = 0;
+
+  const waiting = unreadMessages === null ? chats : unreadMessages;
+  if (tray) tray.setAttention(waiting > 0);
+  /* The number on the launcher icon, from the title only until the page has
+     counted the pills for us. The title's number is chats, not messages, so it
+     is the wrong number for a badge -- three conversations holding eleven
+     messages read "3" where the phone reads "11" -- but it is the right number
+     when nothing has been counted yet. */
+  setBadge(waiting);
   if (win && !win.isDestroyed()) win.setTitle(title && title.trim() ? title : TITLE);
+};
+
+/* Drawn by the launcher, over the application's icon. On Linux this goes out on
+   the Unity LauncherEntry interface, which GNOME reads through Dash to Dock and
+   its relatives and which nothing at all reads on a plain GNOME -- so it is set
+   and not depended upon, and the tray icon carries the same news for a desktop
+   that does not draw badges. */
+const setBadge = count => {
+  const wanted = Math.max(0, Math.round(Number(count) || 0));
+  if (wanted === badgeShown) return;
+  badgeShown = wanted;
+  try { app.badgeCount = wanted; } catch (e) { /* no launcher listening */ }
 };
 
 /* --------------------------------------------------------------- the app */
@@ -759,22 +825,39 @@ const wireIpc = () => {
      back to the page, whose own handler opens the conversation. */
   ipcMain.on('wa:page-notification', (event, note) => {
     if (!note || !config.get('notifications.enabled')) return;
+    /* WhatsApp writes a group notification as "Group name" with "Sender:
+       message" in the body, and a direct one as the contact with the message.
+       Either way the part in front of the first colon is a name, and the rest is
+       what was said -- which is all the direction rules below need. */
+    const split = /^([^:\n]{1,60}):\s*([\s\S]+)$/.exec(note.body || '');
+    const sender = split ? split[1] : '';
+    const message = split ? split[2] : (note.body || '');
+
     const banner = banners.show({
+      identity: [note.chat || note.title, sender, message].join(SEP),
       /* Keyed on the chat the page found in its list rather than on the title
          WhatsApp wrote, so this path and the watcher's agree on what a chat is
          called. The withdrawal side speaks chat-list names and nothing else: a
          key that does not appear there is a notification nothing can take
          down. */
       key: note.chat || note.title,
-      title: note.title,
-      body: note.body,
+      title: bidi.paragraph(note.title),
+      body: bidi.line(sender, message),
+      redacted: kindOf(note.body),
       icon: note.avatar,
       onClick: () => {
         showWindow();
         if (win && !win.isDestroyed()) win.webContents.send('wa:notification-clicked', note.id);
       },
     });
-    if (banner) pageBanners.set(note.id, banner);
+    if (banner) {
+      pageBanners.set(note.id, banner);
+      /* Most of these are never mentioned again: a banner the user clicked, or
+         one withdrawn when its chat was read, is finished with and WhatsApp
+         never names its id. Trimmed oldest-first rather than tracked, which a
+         client left running for days needs and nothing else would do. */
+      while (pageBanners.size > 256) pageBanners.delete(pageBanners.keys().next().value);
+    }
     /* And the tone, because the page's own has been silenced for this.
      *
      * `silent` on the notification is deliberately not honoured. In the web API
@@ -790,9 +873,30 @@ const wireIpc = () => {
     }
   });
 
+  /*
+   * WhatsApp Web closing a notification of its own.
+   *
+   * It does this for two very different reasons and says which for neither. One
+   * is the message having been read -- on the phone, most often -- and that is
+   * a banner this client should take down with it. The other is housekeeping:
+   * it closes notifications it has finished with, and it does so in batches, so
+   * a sticker arriving used to sweep every earlier message out of the
+   * notification centre along with it. That was the report, and taking the
+   * disposal out altogether was the fix -- which left the phone case unhandled.
+   *
+   * The chat itself settles it. A close for a chat that still has something
+   * waiting is housekeeping and is ignored; a close for a chat with nothing
+   * unread left is the message having been read, and the banner goes.
+   */
   ipcMain.on('wa:page-notification-close', (event, note) => {
     if (!note) return;
+    const banner = pageBanners.get(note.id);
     pageBanners.delete(note.id);
+    if (!banner) return;
+    if (unreadChatNames.has(banner.key)) return;
+    banner.dispose();
+    console.log('withdrew a notification for %s: WhatsApp closed it and the chat is caught up',
+                banner.key);
   });
 
   /* The conversation on screen, reported by the page when it changes and again
@@ -814,6 +918,15 @@ const wireIpc = () => {
     if (!Array.isArray(names) || !banners) return;
     unreadChatNames = new Set(names);
     for (const key of new Set([...banners.keys(), ...withdrawing.keys()])) withdrawRead(key);
+  });
+
+  /* How many messages are waiting, counted off the unread pills rather than
+     inferred from the document title. This is the number the badge wants. */
+  ipcMain.on('wa:unread-count', (event, count) => {
+    if (!count || typeof count.messages !== 'number') return;
+    unreadMessages = count.messages;
+    setBadge(count.messages);
+    if (tray) tray.setAttention(count.messages > 0);
   });
 };
 
@@ -845,15 +958,26 @@ const ALLOWED_PERMISSIONS = new Set([
 ]);
 
 const wirePermissions = ses => {
+  /* The origin is checked as well as the permission, and the check is written to
+     survive not being told one. Chromium hands over an empty requestingUrl for
+     the media request a call starts with, and an earlier version of this read
+     that as "not WhatsApp" and refused the camera -- which is why the check was
+     taken out altogether. It is back, with isWhatsApp answering true for the
+     empty, blob: and about: URLs that are this window's own. Without it, an
+     <iframe> of somebody else's making asks for the microphone and is given
+     it. */
   ses.setPermissionRequestHandler((contents, permission, callback, details) => {
-    callback(ALLOWED_PERMISSIONS.has(permission));
+    const url = (details && details.requestingUrl) || (contents && contents.getURL()) || '';
+    callback(isWhatsApp(url) && ALLOWED_PERMISSIONS.has(permission));
   });
-  ses.setPermissionCheckHandler((contents, permission, origin, details) => {
-    return ALLOWED_PERMISSIONS.has(permission);
-  });
-  ses.setDevicePermissionHandler(details => {
-    return true;
-  });
+  ses.setPermissionCheckHandler((contents, permission, origin, details) =>
+    isWhatsApp(origin || '') && ALLOWED_PERMISSIONS.has(permission));
+  /* This one is not about the camera. It decides which USB, HID and serial
+     devices a page may open, and WhatsApp Web asks for none of them -- so the
+     answer is scoped to the one origin this window shows rather than left as a
+     blanket yes to anything that finds its way into it. */
+  ses.setDevicePermissionHandler(details =>
+    isWhatsApp((details && details.origin) || ''));
 };
 
 /* Screen sharing during calls. WhatsApp Web calls getDisplayMedia() when the user
@@ -867,15 +991,31 @@ const wirePermissions = ses => {
 const wireScreenSharing = ses => {
   ses.setDisplayMediaRequestHandler(async (request, callback) => {
     try {
-      const sources = await desktopCapturer.getSources({ types: ['screen'] });
-      const source = sources[0];
+      /* Windows as well as screens. WhatsApp Web's share button offers both, and
+         a handler that only ever answers with a screen turns "share this window"
+         into "share everything" -- which is a privacy bug, not a missing
+         feature. On Wayland the choice is made in the portal dialog the
+         compositor puts up anyway, and asking for both types is what lets that
+         dialog offer both. */
+      const sources = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        fetchWindowIcons: false,
+      });
+      /* A screen first when there is one: on Wayland every entry here is a
+         placeholder the portal fills in, and the screen entry is the one that
+         lets the user pick in the portal's own dialog. */
+      const source = sources.find(s => s.id.startsWith('screen:')) || sources[0];
       if (!source) {
-        console.warn('screen sharing: no sources found');
+        console.warn('screen sharing: nothing to share -- no screen or window source');
         callback({ video: null });
         return;
       }
       console.log('screen sharing: handing over "%s"', source.name);
-      callback({ video: source, audio: 'loopback' });
+      /* No audio. `loopback` is the system-audio capture Electron implements on
+         Windows and nowhere else, and passing it on Linux is at best ignored --
+         WhatsApp does not carry desktop audio over a screen share in any case,
+         and the microphone is already in the call. */
+      callback({ video: source });
     } catch (err) {
       console.warn('screen sharing failed: %s', err.message);
       callback({ video: null });
@@ -939,6 +1079,10 @@ app.whenReady().then(() => {
   banners = new Banners({
     seconds: Number(config.get('notifications.banner-seconds')) || 12,
     appIcon,
+    hidePreview: !!config.get('notifications.hide-preview'),
+    /* Which messages have already been announced, so a restart does not put the
+       whole unread backlog back on screen as though it had just arrived. */
+    stateFile: path.join(app.getPath('userData'), 'announced.json'),
   });
 
   wireIpc();

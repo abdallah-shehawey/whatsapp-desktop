@@ -32,14 +32,46 @@ const familyOf = spec => {
   return words.join(' ').trim();
 };
 
-const gsettings = key => {
+const read = (schema, key) => {
   try {
-    return execFileSync('gsettings', ['get', SCHEMA, key], { encoding: 'utf8', timeout: 2000 })
+    return execFileSync('gsettings', ['get', schema, key], { encoding: 'utf8', timeout: 2000 })
       .trim().replace(/^'|'$/g, '');
   } catch (e) {
     return '';                                   // not GNOME, or gsettings is not installed
   }
 };
+
+const gsettings = key => read(SCHEMA, key);
+
+/* Two settings that are asked in front of a notification rather than once at
+   startup, and so are worth not spawning gsettings for every time. A quarter of
+   a minute is short enough that turning do-not-disturb on takes effect while the
+   user still remembers doing it, and long enough that a burst of ten messages
+   costs one process rather than ten. */
+const CACHE_MS = 15000;
+const cached = new Map();
+
+const setting = (schema, key, fallback) => {
+  const id = schema + ' ' + key;
+  const held = cached.get(id);
+  if (held && Date.now() - held.at < CACHE_MS) return held.value;
+  const answer = read(schema, key);
+  const value = answer === '' ? fallback : answer !== 'false';
+  cached.set(id, { value, at: Date.now() });
+  return value;
+};
+
+/* Do not disturb. GNOME calls it show-banners, and turning it off is what the
+   quick-settings toggle does. A desktop that will not say -- anything that is
+   not GNOME -- is taken at its word rather than second-guessed: the client does
+   not get to decide it knows better than a shell it cannot ask. */
+const notificationsAllowed = () =>
+  setting('org.gnome.desktop.notifications', 'show-banners', true);
+
+/* And the desktop's own switch for alert sounds, which is the setting the tone
+   this client plays would follow if the notification daemon were playing it. */
+const eventSoundsEnabled = () =>
+  setting('org.gnome.desktop.sound', 'event-sounds', true);
 
 /* fontconfig's answer for the generic sans family, which is what Chromium would
    have used anyway. Only reached when there is no GSettings to ask. */
@@ -88,4 +120,5 @@ const watch = (keys, onChange) => {
   return () => { try { child.kill(); } catch (e) {} };
 };
 
-module.exports = { interfaceFont, prefersDark, watch, familyOf };
+module.exports = { interfaceFont, prefersDark, watch, familyOf,
+                   notificationsAllowed, eventSoundsEnabled };
