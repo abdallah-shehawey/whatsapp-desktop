@@ -236,6 +236,32 @@ const install = (getWindow, getBanners) => {
       return;
     }
 
+    /* What a full collection actually reclaims, which is the only way to know
+       whether asking for one is worth wiring up. HeapProfiler.collectGarbage
+       goes through the devtools protocol, so it needs neither --expose-gc nor
+       anything from the page. */
+    if (source === '#gc') {
+      const heap = () => win.webContents.executeJavaScript(
+        '(performance.memory||{}).usedJSHeapSize|0', true);
+      const rss = () => {
+        try { return require('fs').readFileSync('/proc/self/statm', 'utf8'); } catch (e) { return ''; }
+      };
+      const before = await heap();
+      let attached = false;
+      try {
+        if (!win.webContents.debugger.isAttached()) { win.webContents.debugger.attach('1.3'); attached = true; }
+        await win.webContents.debugger.sendCommand('HeapProfiler.collectGarbage');
+      } catch (err) {
+        console.log('debug: could not collect: %s', err.message);
+      } finally {
+        if (attached) { try { win.webContents.debugger.detach(); } catch (e) {} }
+      }
+      const after = await heap();
+      console.log('debug: js heap %d MB -> %d MB (browser statm %s)',
+                  Math.round(before / 1048576), Math.round(after / 1048576), rss().trim());
+      return;
+    }
+
     if (source === '#tone') {
       win.webContents.send('wa:play-tone', null);
       console.log('debug: tone requested');

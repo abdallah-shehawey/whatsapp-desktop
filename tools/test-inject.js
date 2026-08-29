@@ -265,6 +265,15 @@ const sandbox = {
   Event: class { constructor(type) { this.type = type; } },
   addEventListener: listen, dispatchEvent() {},
   module: { exports: {} },
+  /* The page script is a real CommonJS module -- the preload requires it, in the
+     page's own world, with contextIsolation off -- so it may require the parts of
+     the client that are plain text in and text out. The sandbox has to offer the
+     same, and offer nothing else: anything the page script reached for beyond
+     this would be something it cannot have in production either. */
+  require: name => {
+    if (name === '../wording.js') return require('../src/wording.js');
+    throw new Error('the page script may not require ' + name);
+  },
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
@@ -441,14 +450,45 @@ const check = (label, got, want) => {
 
   /* And the slower half of it: the unread list, which is what covers a message
      read on the phone. */
+  /* The reports are checked for what they SAY and not merely for what they do
+     not say. `(unreadReports.pop() || []).includes(name)` is false when no report
+     arrived at all, so a version of this that only looked for the absence of a
+     name passed while the client sent nothing -- which is the bug it was there to
+     catch. */
+  const reported = () => (unreadReports.length ? unreadReports[unreadReports.length - 1] : null);
+
   unreadReports = [];
   update(joo, { badge: 2, preview: 'خلاص؟', when: clock() });
   await scan();
-  check('a chat going unread is reported', (unreadReports.pop() || []).includes('EL Joo'), true);
+  check('a chat going unread is reported', (reported() || []).includes('EL Joo'), true);
+
+  /* Read on the phone: WhatsApp clears the unread pill, and the mutation that
+     clears it is the LAST one the list makes.
+   *
+   * This watcher has no timer behind it -- a MutationObserver and nothing else --
+   * so a chat held inside its grace window used to be a chat judged never again.
+   * The scan the clearing triggers falls inside the grace, keeps the name, and
+   * the banner then sat in the notification centre until the window was opened,
+   * which was simply the next thing to touch the DOM. The grace has to book its
+   * own second look, and this is that: one mutation, then nothing at all.
+   *
+   * Real time rather than the movable clock, because what is being tested is
+   * that a timer was set. */
+  unreadReports = [];
   update(joo, { badge: 0 });
-  await scan();
-  check('and reported again without it once it has been read',
-        (unreadReports.pop() || []).includes('EL Joo'), false);
+  observers.forEach(o => o.cb());
+  await sleep(300);
+  check('and is still held for a moment, in case the pill was merely redrawn',
+        (reported() || ['EL Joo']).includes('EL Joo'), true);
+
+  unreadReports = [];
+  await sleep(2600);                     // nothing whatever touches the list in here
+  check('then dropped on the watcher\'s own timer, with nothing else moving the list',
+        reported(), unreadReports.length ? reported() : null);
+  check('and the report that did it names the other unread chats and not this one',
+        !!reported() && !reported().includes('EL Joo'), true);
+
+  await describe();                      // drain what the badge changes queued
 
   /* A sticker or media arrival without a preview title is recognized and announced */
   await describe(); // drain any queued arrival from the unread test above
@@ -487,14 +527,18 @@ const check = (label, got, want) => {
                            when: clock(1), outgoing: true });
   pane.append(reacting);
   await scan();
-  update(reacting, { badge: 1, preview: 'Reacted \u2764\uFE0F to "\u062a\u0645\u0627\u0645"',
+  /* The wording is WhatsApp's own, copied off the live list: the verb sits in
+     the middle, behind the name of whoever reacted. */
+  update(reacting, { badge: 1, preview: '~Ahmed reacted \u2764\uFE0F to: "\u062a\u0645\u0627\u0645"',
                      when: clock() });
   await scan();
   check('somebody reacting to the user\'s own message is announced',
-        await describe(), 'Salah | Reacted \u2764\uFE0F to "\u062a\u0645\u0627\u0645"');
+        await describe(), 'Salah | ~Ahmed reacted \u2764\uFE0F to: "\u062a\u0645\u0627\u0645"');
 
-  /* The user's own reaction is written the other way round, and stays quiet. */
-  update(reacting, { badge: 0, preview: 'You reacted \u{1F44D} to "\u062a\u0645\u0627\u0645"',
+  /* The user's own reaction is written the same way with their own name on it,
+     and is caught by the sender test like any other message of theirs. */
+  update(reacting, { badge: 0, sender: 'You',
+                     preview: 'You reacted \u{1F44D} to: "\u062a\u0645\u0627\u0645"',
                      when: clock() });
   await scan();
   check('and the user reacting to somebody else is not',

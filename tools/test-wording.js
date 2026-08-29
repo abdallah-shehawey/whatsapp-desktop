@@ -8,7 +8,7 @@
  */
 'use strict';
 
-const { kindOf, pushName, readBody } = require('../src/wording.js');
+const { kindOf, pushName, readBody, mediaFromWords } = require('../src/wording.js');
 
 let failures = 0;
 const check = (label, got, want) => {
@@ -95,6 +95,26 @@ check('the same in Arabic, which is what the client is mostly read in',
    lifted when WhatsApp's own punctuation follows it. */
 check('a message that starts with the words but is not the mark is left alone',
       readBody('Mentioned you in the meeting').mark, '');
+
+/* -------------------------------------------------------- the media marks */
+
+/* The words WhatsApp writes into a notification it raises itself, which is
+   every notification raised while the window is not in front. They arrived bare
+   -- "Sticker", and nothing to look at -- because only the chat-list watcher
+   had this table. */
+check('a sticker WhatsApp named itself gets the mark too',
+      mediaFromWords('Sticker'), '\u{1F642} Sticker');
+check('and a voice message', mediaFromWords('Voice message'), '\u{1F3A4} Voice message');
+check('and a photo', mediaFromWords('Photo'), '\u{1F4F7} Photo');
+check('and the round video keeps WhatsApp\'s own name for it',
+      mediaFromWords('Video note'), '\u{1F3A5} Video note');
+check('in Arabic as well', mediaFromWords('\u0645\u0644\u0635\u0642'), '\u{1F642} Sticker');
+check('an album counts what is in it', mediaFromWords('4 photos'), '\u{1F5BC}\uFE0F Album');
+
+/* Anchored, or a message ABOUT a photo becomes a photo. */
+check('a message that merely mentions one is a message',
+      mediaFromWords('send me the photo'), '');
+check('and nothing at all names nothing', mediaFromWords(''), '');
 
 /* ------------------------------------------------- previews kept off screen */
 

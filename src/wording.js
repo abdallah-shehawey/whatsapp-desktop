@@ -1,3 +1,71 @@
+/*
+ * The sticker's glyph, which took the longest to settle.
+ *
+ * Unicode has no sticker, so the question is which character comes nearest to
+ * the mark WhatsApp itself puts on one. That mark is a rounded square with a
+ * peeled corner and a smiling face inside it -- the app names its own button
+ * for it "sticker-smiley" -- and of everything in the emoji font it is the
+ * face that carries the meaning. The peel is what makes it a sticker rather
+ * than a smiley, and no character has it.
+ *
+ * A label was tried first, on the reasoning that a label is a thing you peel
+ * and stick. It reads as a price tag and nothing else, and it was rejected on
+ * sight. Every candidate was drawn through Pango at banner size before this
+ * one was chosen, because how a glyph reads is not a thing to reason about
+ * from its Unicode name.
+ *
+ * The word "Sticker" is beside it and does the disambiguating, so the glyph's
+ * job is to be recognisable and not to mislead -- which the label was and the
+ * face is not. U+1F642 defaults to emoji presentation, so it needs no
+ * variation selector to land in the colour font.
+ */
+const STICKER = '\u{1F642} Sticker';
+/* The selector is on the three whose default presentation is text -- the label,
+   the film frames and the framed picture -- and off the rest, whose default is
+   already the emoji. Adding it where it is not needed makes a sequence Unicode
+   does not list, and the point was to be handed to the emoji font, not to carry
+   an invisible character for its own sake. */
+
+/* The words WhatsApp itself writes in a preview for the same things, so a
+   preview that arrived as text still gets its glyph. Anchored, because a
+   message about a photo is a message and not a photo. */
+const MEDIA_WORDS = [
+  { text: /^(sticker|ملصق)$/i,                            label: STICKER },
+  { text: /^(gif)$/i,                                     label: '\u{1F39E}\uFE0F GIF' },
+  { text: /^(voice message|رسالة صوتية)$/i,               label: '\u{1F3A4} Voice message' },
+  { text: /^(photo|image|صورة)$/i,                        label: '\u{1F4F7} Photo' },
+  /* WhatsApp's own name for the round one, and it is the phone's wording too,
+     so it is kept rather than flattened into "Video". */
+  { text: /^(video note|ملاحظة فيديو)$/i,               label: '\u{1F3A5} Video note' },
+  { text: /^(video|فيديو)$/i,                             label: '\u{1F3A5} Video' },
+  { text: /^(audio|أغنية|ملف صوتي)$/i,                    label: '\u{1F3B5} Audio' },
+  { text: /^(poll|استطلاع)$/i,                             label: '\u{1F4CA} Poll' },
+  { text: /^(location|live location|موقع)$/i,             label: '\u{1F4CD} Location' },
+  { text: /^(contact|جهة اتصال)$/i,                       label: '\u{1F464} Contact' },
+  { text: /^(document|مستند)$/i,                          label: '\u{1F4C4} Document' },
+  { text: /^(\d+\s*(photos|videos|صور|مقاطع))$/i,             label: '\u{1F5BC}\uFE0F Album' },
+  { text: /^(missed voice call|missed video call|مكالمة فائتة)$/i,
+    label: '\u{1F4DE} Missed call' },
+  { text: /^(this message was deleted|تم حذف هذه الرسالة)$/i, label: '\u{1F6AB} Deleted message' },
+];
+
+/* The glyph for a preview WhatsApp handed over as words.
+ *
+ * Both halves of the client need this and only one of them used to have it. The
+ * chat-list watcher labelled what it read off a row; the notifications WhatsApp
+ * Web raises itself -- which is EVERY notification while the window is not in
+ * front, and so most of them -- went out with WhatsApp's bare "Sticker" and no
+ * mark at all. That was the report: a sticker arrives and there is no icon on
+ * it.
+ *
+ * Anchored, because a message about a photo is a message and not a photo. */
+const mediaFromWords = text => {
+  const said = String(text == null ? '' : text).trim();
+  if (!said) return '';
+  for (const kind of MEDIA_WORDS) if (kind.text.test(said)) return kind.label;
+  return '';
+};
+
 /* What a message is, when its words are not to be shown. The page marks every
    kind of media with a glyph of its own -- see MEDIA_KINDS in the page script --
    so a body that begins with one already says what arrived, and the rest of it
@@ -85,4 +153,4 @@ const readBody = (raw, group) => {
 };
 
 
-module.exports = { kindOf, pushName, readBody };
+module.exports = { kindOf, pushName, readBody, mediaFromWords, STICKER };

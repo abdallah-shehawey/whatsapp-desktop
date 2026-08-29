@@ -22,6 +22,8 @@
  */
 'use strict';
 
+const wording = require('../wording.js');
+
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
 const start = ({ send, on }) => {
@@ -205,10 +207,15 @@ const start = ({ send, on }) => {
   const SELF_SENDER = /^(you|أنت|انت|أنتَ|أنتِ)$/i;
 
   /* What WhatsApp writes into a chat-list preview when somebody reacts to one of
-     the user's messages. The reaction itself is already in that text, so nothing
-     is put in front of it: a glyph here would be a second emoji next to the one
-     the sender actually chose. */
-  const REACTION_PREVIEW = /^(reacted|تفاعل)\b/i;
+     the user's messages. Measured on the live list rather than guessed, because
+     the guess was wrong: the preview reads `~Ahmed reacted \u{1F44D} to: "..."`,
+     so the verb is in the middle and an anchored test never matched it. The
+     user's own reaction is written `You reacted ... to: "..."` and is caught by
+     the sender test below like any other message of their own.
+
+     Nothing is put in front of it: the reaction the sender chose is already in
+     that text, and a glyph here would be a second emoji beside it. */
+  const REACTION_PREVIEW = /\b(reacted|تفاعل)\b/i;
 
   const isOutgoing = el => {
     if (!el) return false;
@@ -361,33 +368,7 @@ const start = ({ send, on }) => {
    * Ordered, and the order is load-bearing: a voice note's icon is named "ptt"
    * on some builds and "audio" on others, and "audio" would otherwise be read as
    * a music file; a GIF is a video to every icon set that does not name it. */
-  /*
-   * The sticker's glyph, which took the longest to settle.
-   *
-   * Unicode has no sticker, so the question is which character comes nearest to
-   * the mark WhatsApp itself puts on one. That mark is a rounded square with a
-   * peeled corner and a smiling face inside it -- the app names its own button
-   * for it "sticker-smiley" -- and of everything in the emoji font it is the
-   * face that carries the meaning. The peel is what makes it a sticker rather
-   * than a smiley, and no character has it.
-   *
-   * A label was tried first, on the reasoning that a label is a thing you peel
-   * and stick. It reads as a price tag and nothing else, and it was rejected on
-   * sight. Every candidate was drawn through Pango at banner size before this
-   * one was chosen, because how a glyph reads is not a thing to reason about
-   * from its Unicode name.
-   *
-   * The word "Sticker" is beside it and does the disambiguating, so the glyph's
-   * job is to be recognisable and not to mislead -- which the label was and the
-   * face is not. U+1F642 defaults to emoji presentation, so it needs no
-   * variation selector to land in the colour font.
-   */
-  const STICKER = '\u{1F642} Sticker';
-  /* The selector is on the three whose default presentation is text -- the label,
-     the film frames and the framed picture -- and off the rest, whose default is
-     already the emoji. Adding it where it is not needed makes a sequence Unicode
-     does not list, and the point was to be handed to the emoji font, not to carry
-     an invisible character for its own sake. */
+  const STICKER = wording.STICKER;
 
   const MEDIA_KINDS = [
     { icon: /sticker|ملصق/i,                         label: STICKER },
@@ -402,29 +383,6 @@ const start = ({ send, on }) => {
     { icon: /document|\bdoc\b|مستند|ملف/i,           label: '\u{1F4C4} Document' },
   ];
 
-  /* The words WhatsApp itself writes in a preview for the same things, so a
-     preview that arrived as text still gets its glyph. Anchored, because a
-     message about a photo is a message and not a photo. */
-  const MEDIA_WORDS = [
-    { text: /^(sticker|ملصق)$/i,                            label: STICKER },
-    { text: /^(gif)$/i,                                     label: '\u{1F39E}\uFE0F GIF' },
-    { text: /^(voice message|رسالة صوتية)$/i,               label: '\u{1F3A4} Voice message' },
-    { text: /^(photo|image|صورة)$/i,                        label: '\u{1F4F7} Photo' },
-    /* WhatsApp's own name for the round one, and it is the phone's wording too,
-       so it is kept rather than flattened into "Video". */
-    { text: /^(video note|ملاحظة فيديو)$/i,               label: '\u{1F3A5} Video note' },
-    { text: /^(video|فيديو)$/i,                             label: '\u{1F3A5} Video' },
-    { text: /^(audio|أغنية|ملف صوتي)$/i,                    label: '\u{1F3B5} Audio' },
-    { text: /^(poll|استطلاع)$/i,                             label: '\u{1F4CA} Poll' },
-    { text: /^(location|live location|موقع)$/i,             label: '\u{1F4CD} Location' },
-    { text: /^(contact|جهة اتصال)$/i,                       label: '\u{1F464} Contact' },
-    { text: /^(document|مستند)$/i,                          label: '\u{1F4C4} Document' },
-    { text: /^(\d+\s*(photos|videos|صور|مقاطع))$/i,             label: '\u{1F5BC}\uFE0F Album' },
-    { text: /^(missed voice call|missed video call|مكالمة فائتة)$/i,
-      label: '\u{1F4DE} Missed call' },
-    { text: /^(this message was deleted|تم حذف هذه الرسالة)$/i, label: '\u{1F6AB} Deleted message' },
-  ];
-
   /* The kind of a row, from its icons and then from whatever text it carries.
      Answers '' when nothing says: an empty preview is a row mid-render, and the
      caller has to be able to tell that from a row with nothing to say. */
@@ -435,8 +393,7 @@ const start = ({ send, on }) => {
       if (icons.some(name => kind.icon.test(name))) return kind.label;
 
     const text = strip((row.innerText || '').split('\n').find(line => strip(line)) || '');
-    for (const kind of MEDIA_WORDS) if (kind.text.test(text)) return kind.label;
-    return '';
+    return wording.mediaFromWords(text);
   };
 
   /* A preview WhatsApp handed over as words, given its glyph when the words name
@@ -445,7 +402,8 @@ const start = ({ send, on }) => {
   const labelled = (preview, row) => {
     const said = strip(preview);
     if (!said) return said;
-    for (const kind of MEDIA_WORDS) if (kind.text.test(said)) return kind.label;
+    const named = wording.mediaFromWords(said);
+    if (named) return named;
     /* A voice note has no words to preview, so WhatsApp writes its LENGTH there:
        the row for one reads "0:41". A banner saying 0:41 tells the user nothing
        at all, and it is not even obviously a duration -- so the row is asked what
@@ -793,6 +751,31 @@ const start = ({ send, on }) => {
   let lastCount = null;
   const knownUnread = new Map();          // chat -> { at, count }
   const UNREAD_GRACE_MS = 2500;
+  /* How long a chat that has stopped being rendered is still believed to be
+     unread. Longer than the grace above because scrolling a name out of the list
+     says nothing about whether it was read. */
+  const OFFSCREEN_MS = 60000;
+
+  /* Another look, later.
+   *
+   * This watcher is driven by a MutationObserver and by nothing else -- there is
+   * no timer behind it -- so a decision that was DEFERRED is a decision never
+   * taken again, unless something else happens to move the list. That is what
+   * "the notification only goes away when I open the app" was: reading a message
+   * on the phone clears the unread pill, the mutation that clears it is the last
+   * one the list makes, and the scan it triggers finds the chat inside its grace
+   * window and keeps it. Opening the app was simply the next thing to move the
+   * DOM. So whenever a name is held rather than judged, the moment it becomes
+   * judgeable is booked here. One timer, coalesced to the soonest. */
+  let regrade = 0;
+  let regradeAt = 0;
+  const scanSoon = ms => {
+    const when = Date.now() + ms;
+    if (regrade && regradeAt <= when) return;
+    if (regrade) clearTimeout(regrade);
+    regradeAt = when;
+    regrade = setTimeout(() => { regrade = 0; scanList(); }, ms);
+  };
 
   const reportUnread = pane => {
     const now = Date.now();
@@ -817,6 +800,14 @@ const start = ({ send, on }) => {
     if (!renderedNames.size && !pane.querySelector('[role="row"]')) return;
 
     const names = [];
+    /* The soonest moment at which one of the names below stops being held and
+       becomes a decision. Zero when nothing is being held. */
+    let judgeIn = 0;
+    const hold = until => {
+      const left = Math.max(0, until - now);
+      if (!judgeIn || left < judgeIn) judgeIn = left;
+    };
+
     for (const [name, seen] of knownUnread.entries()) {
       if (currentUnread.has(name)) {
         names.push(name);
@@ -825,14 +816,20 @@ const start = ({ send, on }) => {
         const isOpenChat = open && nameOf(open) === name && focused;
         if (!isOpenChat && (now - seen.at < UNREAD_GRACE_MS)) {
           names.push(name);
+          hold(seen.at + UNREAD_GRACE_MS);
         } else {
           knownUnread.delete(name);
         }
       } else {
-        if (now - seen.at < 60000) names.push(name);
-        else knownUnread.delete(name);
+        if (now - seen.at < OFFSCREEN_MS) {
+          names.push(name);
+          hold(seen.at + OFFSCREEN_MS);
+        } else {
+          knownUnread.delete(name);
+        }
       }
     }
+    if (judgeIn) scanSoon(judgeIn + 100);
 
     const key = names.sort().join(SEP);
     if (key !== lastUnread) {

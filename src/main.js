@@ -20,7 +20,7 @@ const style = require('./style.js');
 const { TrayIcon } = require('./tray.js');
 const { Banners, sweepAvatars } = require('./notify.js');
 const bidi = require('./bidi.js');
-const { kindOf, pushName, readBody } = require('./wording.js');
+const { kindOf, pushName, readBody, mediaFromWords } = require('./wording.js');
 const { SEP } = require('./page/inject.js');
 const debug = require('./debug.js');
 const sound = require('./sound.js');
@@ -825,7 +825,15 @@ const wireIpc = () => {
     /* The page says whether this chat is a group, because WhatsApp's own body
        reads "Sender: message" for one and the bare message for the other, and
        nothing in the text tells them apart. */
-    const { sender, message, mark } = readBody(note.body, note.group);
+    const { sender, message: said, mark } = readBody(note.body, note.group);
+    /* And the mark for what kind of thing it is, which this path never used to
+       put on. The chat-list watcher labelled every preview it read; the
+       notifications WhatsApp Web raises itself came through with WhatsApp's own
+       bare "Sticker" and no glyph -- and those are every notification raised
+       while the window is not in front, which is most of them. Same table both
+       sides now, so the two also agree on what a message is called and the
+       deduplication between them keeps working. */
+    const message = mediaFromWords(said) || said;
 
     const banner = banners.show({
       identity: [note.chat || note.title, sender, message].join(SEP),
@@ -837,7 +845,7 @@ const wireIpc = () => {
       key: note.chat || note.title,
       title: bidi.paragraph(pushName(note.title)),
       body: mark + bidi.line(sender, message),
-      redacted: mark + kindOf(note.body),
+      redacted: mark + kindOf(message),
       icon: note.avatar,
       onClick: () => {
         showWindow();
@@ -862,6 +870,10 @@ const wireIpc = () => {
      * making no sound at all. It is logged instead, so the truth about which
      * notifications carry it is in the log rather than in a guess. */
     if (banner) {
+      /* What kind of thing it was, and never a word of what it said. This is the
+         one line that answers "the sticker arrived without its mark" from a log
+         instead of from a screenshot. */
+      console.log('raised: %s', mark + (mediaFromWords(said) || 'a message of words'));
       if (note.silent) console.log('the page asked for a silent notification; the tone is played anyway');
       playTone();
     }
