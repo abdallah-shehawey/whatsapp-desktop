@@ -46,5 +46,35 @@ Description: WhatsApp Web desktop client for Linux
  desktop notifications, desktop font integration, and Arabic text fixes.
 CONTROL
 
+# The icon theme keeps a compiled cache, and a launcher icon replaced under a
+# directory that already has one is drawn from that cache until it is rebuilt --
+# which is the whole of "I updated and the icon did not change". The tray icon is
+# not affected: the app loads that one straight off disk by path.
+cat > "$STAGE/root/DEBIAN/postinst" <<'POSTINST'
+#!/bin/sh
+set -e
+if [ -x /usr/bin/gtk-update-icon-cache ]; then
+  gtk-update-icon-cache -qtf /usr/share/icons/hicolor || true
+fi
+if [ -x /usr/bin/update-desktop-database ]; then
+  update-desktop-database -q /usr/share/applications || true
+fi
+POSTINST
+
+cat > "$STAGE/root/DEBIAN/postrm" <<'POSTRM'
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+  if [ -x /usr/bin/gtk-update-icon-cache ]; then
+    gtk-update-icon-cache -qtf /usr/share/icons/hicolor || true
+  fi
+  if [ -x /usr/bin/update-desktop-database ]; then
+    update-desktop-database -q /usr/share/applications || true
+  fi
+fi
+POSTRM
+
+chmod 755 "$STAGE/root/DEBIAN/postinst" "$STAGE/root/DEBIAN/postrm"
+
 dpkg-deb --build --root-owner-group "$STAGE/root" "$DIST/whatsapp-desktop_${VERSION}_${ARCH}.deb" >/dev/null
 printf 'Created %s\n' "$DIST/whatsapp-desktop_${VERSION}_${ARCH}.deb"

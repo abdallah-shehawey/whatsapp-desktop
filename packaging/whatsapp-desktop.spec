@@ -79,6 +79,22 @@ sed -i 's|@BINDIR@|/usr/bin|g' %{buildroot}/etc/xdg/autostart/io.github.shehawey
 install -D -m 0644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE
 install -D -m 0644 README.md %{buildroot}%{_docdir}/%{name}/README.md
 
+# The icon theme keeps a compiled cache, and a launcher icon replaced under a
+# directory that already has one goes on being drawn from the cache until it is
+# rebuilt. That is the whole of "I updated and the icon did not change" -- so it
+# is rebuilt here, on install and on update alike, and again after a removal so
+# the entry does not linger. The tray icon is not affected either way: the app
+# loads that one straight off disk by path, never through the theme.
+%post
+/usr/bin/gtk-update-icon-cache -qtf /usr/share/icons/hicolor &>/dev/null || :
+/usr/bin/update-desktop-database -q /usr/share/applications &>/dev/null || :
+
+%postun
+if [ $1 -eq 0 ]; then
+  /usr/bin/gtk-update-icon-cache -qtf /usr/share/icons/hicolor &>/dev/null || :
+  /usr/bin/update-desktop-database -q /usr/share/applications &>/dev/null || :
+fi
+
 %files
 /usr/bin/%{name}
 /usr/lib/%{name}

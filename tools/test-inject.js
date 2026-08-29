@@ -126,6 +126,10 @@ const clock = (backMinutes = 0) => {
 const mkRow = spec => {
   const row = el('div', { role: 'row' });
   if (spec.open) row.attrs['aria-selected'] = 'true';
+  /* A group inside a community draws THREE titles: the community, the group and
+     then the message. Measured on the live chat list, where every community row
+     carried one more than a plain chat does. */
+  if (spec.community) row.append(el('span', { title: spec.community }));
   row.append(el('span', { title: spec.name }), el('span', { title: spec.preview }));
   if (spec.badge) row.append(el('div', { 'aria-label': spec.badge + ' unread messages' }));
   if (spec.muted) row.append(el('div', { 'aria-label': 'muted' }));
@@ -139,14 +143,14 @@ const mkRow = spec => {
   row.paint = () => {
     const s = row.__spec;
     const titles = row.querySelectorAll('span[title]');
-    titles[0].setAttribute('title', s.name);
-    titles[1].setAttribute('title', s.preview);
+    titles[titles.length - 2].setAttribute('title', s.name);
+    titles[titles.length - 1].setAttribute('title', s.preview);
     const pill = row.querySelectorAll('[aria-label]')
                     .find(e => /unread/.test(e.attrs['aria-label'] || ''));
     if (s.badge && pill) pill.setAttribute('aria-label', s.badge + ' unread messages');
     else if (s.badge) row.append(el('div', { 'aria-label': s.badge + ' unread messages' }));
     else if (pill) pill.remove();
-    row.attrs.__innerText = [s.name, s.when]
+    row.attrs.__innerText = [s.community || s.name, s.when]
         .concat(s.sender ? [s.sender, ':'] : [])
         .concat([s.preview]).join('\n');
   };
@@ -172,6 +176,7 @@ const handlers = new Map();                 // channel -> what the page listens 
 
 let openReports = [];                       // what the page said was on screen
 let unreadReports = [];                     // and which chats it said were unread
+let countReports = [];                      // and how many messages, for the badge
 
 /* The app side of the bridge the page is given: the nudge that something
    arrived, the log, and the two reports the app withdraws notifications on. */
@@ -180,6 +185,7 @@ const send = (channel, payload) => {
   else if (channel === 'log') logs.push(String(payload));
   else if (channel === 'open-chat') openReports.push(payload);
   else if (channel === 'unread-chats') unreadReports.push(payload);
+  else if (channel === 'unread-count') countReports.push(payload);
 };
 const on = (channel, fn) => handlers.set(channel, fn);
 const push = (channel, payload) => {
@@ -346,7 +352,7 @@ const check = (label, got, want) => {
   pane.append(deep);
   await scan();
   check('a row that appears at the top unread is still guessed at',
-        await describe(), 'Communication Engineer 4 | ~Mo farhat: تم');
+        await describe(), 'Communication Engineer 4 | Mo farhat: تم');
   check('but only once', await describe(), '');
 
   /* A row that is still unread cannot be the conversation on screen: WhatsApp
@@ -510,6 +516,74 @@ const check = (label, got, want) => {
   await scan();
   check('and a message that merely mentions one is left as it was written',
         await describe(), 'Pdf & Assignments | Mega: the sticker you sent is great');
+
+
+  /* ------------------------------------------------------ communities */
+
+  /* A group inside a community carries the community's name in front of its own,
+     so the message is the LAST title on the row and not the second. Reading the
+     second announced the name of the chat as though it were the message. */
+  await describe();
+  const community = mkRow({ community: 'Graduation Project', name: 'Graduation project',
+                            preview: 'اول رساله', when: clock(), badge: 1, sender: 'Salah' });
+  pane.append(community);
+  await scan();                                    // first sight: not news
+  update(community, { badge: 2, preview: 'رايح امتى نروح سوا؟', when: clock() });
+  await scan();
+  check('a community message is announced with the message, not the group name',
+        await describe(), 'Graduation Project | Salah: رايح امتى نروح سوا؟');
+  community.remove();
+
+  /* ------------------------------------------------------- voice notes */
+
+  /* A voice note has no words, so WhatsApp puts its LENGTH in the preview: the
+     row reads "0:41". A banner saying 0:41 says nothing. */
+  await describe();
+  update(pdf, { badge: 6, preview: '0:41', sender: 'Mega', when: clock() });
+  const voiceIcon = el('span', { 'data-icon': 'ic-keyboard-voice-filled' });
+  pdf.append(voiceIcon);
+  await scan();
+  check('a voice note is announced as one, with its length kept',
+        await describe(), 'Pdf & Assignments | Mega: \u{1f3a4} Voice message (0:41)');
+  voiceIcon.remove();
+
+
+  /* ------------------------------------------------------------- the badge */
+
+  /* The number the launcher draws. The document title cannot supply it: it counts
+     unread CHATS and leaves muted ones out of even that. Measured on the live
+     account, the title read "(3)" while six chats were unread holding eleven
+     messages between them. */
+  await describe();
+  /* The rows the earlier checks left unread would be counted too, and this is a
+     check about arithmetic rather than about them. The watcher also remembers a
+     chat that has stopped being rendered for a minute, so the clock is moved past
+     that before the count is read. */
+  for (const row of pane.children) if (row.__spec) update(row, { badge: 0 });
+  advance(120000);
+  await scan();
+  await scan();
+  await describe();
+  countReports = [];
+  const loud  = mkRow({ name: 'Loud Group', preview: 'واحد', when: clock(), badge: 3,
+                        sender: 'Ali' });
+  const quiet = mkRow({ name: 'Quiet Group', preview: 'اتنين', when: clock(), badge: 7,
+                        sender: 'Sara', muted: true });
+  pane.append(loud, quiet);
+  await scan();
+  const counted = countReports.pop();
+  check('the badge counts messages, not chats', counted && counted.messages, 3);
+  check('and leaves a muted chat out of it', counted && counted.chats, 1);
+
+  /* A mention in a muted group is not muted, and does count. */
+  update(quiet, { badge: 8, preview: 'يا عبدالله', when: clock(), mention: true });
+  quiet.append(el('span', { 'data-icon': 'mention' }));
+  await scan();
+  const withMention = countReports.pop();
+  check('a mention inside a muted group counts again',
+        withMention && withMention.messages, 11);
+  loud.remove(); quiet.remove();
+  await describe();
 
   /* ----------------------------------------------- the tone of a message out */
 

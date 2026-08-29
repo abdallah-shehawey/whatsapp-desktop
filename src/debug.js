@@ -174,6 +174,31 @@ const install = getWindow => {
       return;
     }
 
+    /* A real key, sent the way the compositor would send one. The page cannot
+       make one: a KeyboardEvent it constructs is untrusted, and the handlers
+       this is aimed at ignore those. Escape is the one worth having here --
+       whether it closes the emoji panel is a question only a trusted key can
+       answer. */
+    if (source === '#esc' || source.startsWith('#key ')) {
+      const key = source === '#esc' ? 'Escape' : source.slice(5).trim();
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: key });
+      win.webContents.sendInputEvent({ type: 'char', keyCode: key });
+      win.webContents.sendInputEvent({ type: 'keyUp', keyCode: key });
+      console.log('debug: sent %s as a real key', key);
+      return;
+    }
+
+    /* Text typed into whatever has the caret. The page cannot do this either:
+       WhatsApp's composer is a Lexical editor, it listens for beforeinput, and
+       execCommand('insertText') from an evaluated script leaves it empty --
+       measured. insertText goes in through the same path a keyboard does. */
+    if (source.startsWith('#type ')) {
+      win.webContents.focus();
+      win.webContents.insertText(source.slice(6));
+      console.log('debug: typed %d character(s)', source.length - 6);
+      return;
+    }
+
     if (source === '#tone') {
       win.webContents.send('wa:play-tone', null);
       console.log('debug: tone requested');

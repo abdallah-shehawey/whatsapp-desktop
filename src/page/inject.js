@@ -187,7 +187,11 @@ const start = ({ send, on }) => {
   const senderIn = row => {
     const lines = ((row && row.innerText) || '').split('\n').map(strip);
     const colon = lines.indexOf(':');
-    return colon > 0 ? lines[colon - 1] : '';
+    /* WhatsApp marks a name it took from the sender's profile rather than from
+       the user's contacts with a leading tilde -- "~Amr Mostafa". That is a note
+       to the reader about where the name came from, not part of it, and it has
+       no business being printed on a banner. */
+    return colon > 0 ? lines[colon - 1].replace(/^~\s*/, '') : '';
   };
 
   /* WhatsApp writes the sender in front of the preview, and for a message of our
@@ -366,10 +370,18 @@ const start = ({ send, on }) => {
   /* A preview WhatsApp handed over as words, given its glyph when the words name
      a kind of media rather than say something. The sender prefix rides along
      untouched -- it is put back on by the caller, not read from here. */
-  const labelled = preview => {
+  const labelled = (preview, row) => {
     const said = strip(preview);
     if (!said) return said;
     for (const kind of MEDIA_WORDS) if (kind.text.test(said)) return kind.label;
+    /* A voice note has no words to preview, so WhatsApp writes its LENGTH there:
+       the row for one reads "0:41". A banner saying 0:41 tells the user nothing
+       at all, and it is not even obviously a duration -- so the row is asked what
+       kind of thing it is holding, and the length is kept after the label. */
+    if (/^\d{1,2}:\d{2}$/.test(said)) {
+      const kind = mediaLabel(row);
+      return kind ? kind + ' (' + said + ')' : said;
+    }
     return said;
   };
 
@@ -378,10 +390,31 @@ const start = ({ send, on }) => {
      message; the timestamp, because a second "tamam" under the first leaves the
      preview identical and that message went unannounced; and the unread count,
      because two identical messages inside the same minute move nothing else. */
+  /* The message a row is showing, which is the LAST of its titles and not the
+     second.
+   *
+   * A plain chat draws two: the name and the message. A group inside a community
+   * draws three -- the community, then the group, then the message -- and
+   * reading the second of those announced "Graduation Project: Graduation
+   * project", a banner whose body was the name of the chat it came from. Worse
+   * than the wrong words: the preview then never changed from one message to the
+   * next, so every arrival in a community had to be caught by the clock or the
+   * unread pill instead, and the ones that moved neither were never announced at
+   * all. Measured on the live list: seventy rows, and every community group in
+   * it carried three. */
+  const previewIn = (row, titles) => {
+    const list = titles || titlesIn(row);
+    if (list.length < 2) return '';
+    const last = strip(list[list.length - 1].getAttribute('title'));
+    /* A row mid-render can repeat the name where the message should be; that is
+       not a message, and announcing it would be the bug this replaced. */
+    return last === strip(list[0] && list[0].getAttribute('title')) ? '' : last;
+  };
+
   const readRow = row => {
     const titles = titlesIn(row);
     const name = (titles[0] && strip(titles[0].getAttribute('title'))) || nameOf(row);
-    let preview = labelled(strip(titles[1] && titles[1].getAttribute('title')));
+    let preview = labelled(previewIn(row, titles), row);
 
     if (!preview) preview = mediaLabel(row);
 
@@ -518,10 +551,29 @@ const start = ({ send, on }) => {
   const FACES_TTL_MS = 12 * 60 * 60 * 1000;
   const FACES_MAX = 256;
 
+  /*
+   * The picture on a row, and never the placeholder standing in for one.
+   *
+   * A row whose avatar has not been fetched yet carries an <img> all the same,
+   * pointing at a one-pixel transparent GIF as a data: URL. Taking that as the
+   * face is how a message from a group with a perfectly good picture arrived
+   * wearing the application's icon -- measured on the live list, where the
+   * community's announcement row held exactly that placeholder while the row
+   * above it held the real 96x96 image.
+   *
+   * So a data: URL is never a face, and neither is anything the page has decoded
+   * to fewer than sixteen pixels across. naturalWidth is 0 for an image still
+   * loading, which is not a reason to reject it: the fetch below asks the network
+   * and the cache, not this element.
+   */
   const faceUrlIn = row => {
-    const img = row && row.querySelector(
-      'img[src^="http"], img[src^="blob:"], img[src^="data:"]');
-    return (img && img.src) || '';
+    for (const img of (row ? row.querySelectorAll('img') : [])) {
+      const src = img.src || '';
+      if (!/^https?:|^blob:/.test(src)) continue;
+      if (img.naturalWidth && img.naturalWidth < 16) continue;
+      return src;
+    }
+    return '';
   };
 
   const rememberFace = (name, row) => {
@@ -634,7 +686,11 @@ const start = ({ send, on }) => {
       const waiting = unreadCount(row);
       if (waiting > 0) {
         currentUnread.add(name);
-        knownUnread.set(name, { at: now, count: waiting });
+        /* Silenced is carried alongside the count, for the badge below. The
+           withdrawal list keeps every unread chat regardless: a mention in a
+           muted group does raise a banner, and a banner has to be withdrawable
+           whatever the chat it came from. */
+        knownUnread.set(name, { at: now, count: waiting, silenced: isSilenced(row) });
       }
     }
 
@@ -664,19 +720,31 @@ const start = ({ send, on }) => {
       send('unread-chats', names);
     }
 
-    /* And the number the launcher draws on the icon. The document title cannot
-       supply it: its "(3)" counts unread CHATS, so three conversations holding
-       eleven messages between them put a 3 on the icon while the phone shows 11.
-       The pills carry the real number, and they are already being read. */
+    /* And the number the launcher draws on the icon.
+     *
+     * The document title cannot supply it, and it is wrong in two ways at once.
+     * Its "(3)" counts unread CHATS rather than messages, so three conversations
+     * holding eleven messages between them put a 3 on an icon where the phone
+     * shows 11. And it leaves muted chats out of even that -- measured on this
+     * account, where the title read "(3)" with six chats unread.
+     *
+     * The pills carry the real number and they are already being read here. Muted
+     * chats stay out, which is the title's one good instinct and the phone's rule
+     * as well: a badge counts what the user was told about, and a muted chat is
+     * one they asked not to be told about. A mention inside one is not muted, so
+     * it counts. */
     let messages = 0;
+    let chats = 0;
     for (const name of names) {
       const seen = knownUnread.get(name);
-      messages += (seen && seen.count) || 1;
+      if (!seen || seen.silenced) continue;
+      messages += seen.count || 1;
+      chats++;
     }
-    const counted = names.length + SEP + messages;
+    const counted = chats + SEP + messages;
     if (counted !== lastCount) {
       lastCount = counted;
-      send('unread-count', { chats: names.length, messages });
+      send('unread-count', { chats, messages });
     }
   };
 
@@ -739,7 +807,7 @@ const start = ({ send, on }) => {
     for (const row of (pane ? pane.querySelectorAll('[role="row"]') : [])) {
       const titles = titlesIn(row);
       if (strip(titles[0] && titles[0].getAttribute('title')) !== name) continue;
-      if (preview && strip(titles[1] && titles[1].getAttribute('title')) !== preview) continue;
+      if (preview && labelled(previewIn(row, titles), row) !== preview) continue;
       return row;
     }
     return null;
@@ -955,47 +1023,88 @@ const start = ({ send, on }) => {
   /*
    * Escape closes the emoji panel, whether or not an emoji has been picked.
    *
-   * WhatsApp's own Escape handler is bound to the composer. Opening the panel
-   * leaves the composer focused and Escape reaches it; picking an emoji moves
-   * focus into the panel, and from there the key never gets there -- so the
-   * panel stayed open and the only way out was pressing its button a second
-   * time. Which is exactly the report: "if I don't pick an emoji it closes, if I
-   * do it doesn't".
+   * Every line of this was measured against the live page, and each measurement
+   * killed a fix that had looked obvious:
    *
-   * What is done about it is the same thing the user would do: the button that
-   * opened the panel is pressed. It is found by being the one that says it is
-   * expanded, so a build that renames its icon still closes -- and if nothing on
-   * the page says a panel is open, the key is left entirely alone and WhatsApp's
-   * own handler gets it as before.
+   *   The button carries no aria-expanded -- the attribute is absent, open or
+   *   shut -- so there is nothing to ask whether the panel is up. What is up is
+   *   read off the panel instead: it is the page's only [role="application"].
+   *
+   *   It carries no data-icon either. Every icon on this build is an <svg> whose
+   *   only marking is a <title> child, so the button is found by its label and
+   *   by that title, never by data-icon.
+   *
+   *   Picking an emoji moves focus to an <input> inside the panel, the "Search
+   *   emoji" box. That is the bug entire: WhatsApp's Escape handler is on the
+   *   composer, and a key typed into a box that is not the composer never
+   *   reaches it. Which is the report exactly -- it closes if you have not
+   *   picked one, and does not if you have.
+   *
+   *   Escape does not close it however it is delivered: dispatched at the panel,
+   *   at the search box, or sent into the window as a real key by the app. Nor
+   *   does a click outside. The one thing that closes it is the button, pressed
+   *   the way the row of a chat has to be pressed -- at the deepest node inside
+   *   it, because the handler is not on the button but on an element under it,
+   *   and an event dispatched at the button travels upwards and never reaches it.
+   *
+   * The trusted-key route was tried and is gone. It also taught something worth
+   * keeping written down: a key the app injects arrives back here as an ordinary
+   * keydown, this handler caught it, asked for another, and the two processes
+   * threw Escapes at each other until the renderer stopped answering at all.
    */
-  const PANEL_ICON  = /smil|emoji|sticker|gif|avatar/i;
-  const PANEL_LABEL = /^(emoji|sticker|gif|avatar|رموز|ملصق|إيموجي|ايموجي)/i;
+  const PANEL_LABEL = /emoji|sticker|gif|رموز|ملصق|إيموجي|ايموجي/i;
+  const PANEL_ICON  = /smil|emoji|sticker|gif/i;
 
-  const openPanelButton = () => {
-    for (const el of document.querySelectorAll('[aria-expanded="true"]')) {
-      const own = el.getAttribute('data-icon') || '';
-      const inner = el.querySelector('[data-icon]');
-      const icon = own || (inner && inner.getAttribute('data-icon')) || '';
-      const label = strip(el.getAttribute('aria-label'));
-      if (PANEL_ICON.test(icon) || PANEL_LABEL.test(label)) return el;
-    }
-    return null;
+  const emojiPanel = () => {
+    const panel = document.querySelector('[role="application"]');
+    if (!panel) return null;
+    /* It has to be the composer's panel and not something else claiming the
+       role -- a call window would, and Escape belongs to the call then. */
+    return (panel.querySelector('[role="tab"]') || panel.querySelector('input')) ? panel : null;
   };
 
   const composer = () =>
     document.querySelector('#main [contenteditable="true"]') ||
     document.querySelector('footer [contenteditable="true"]');
 
+  /* The name of an icon, wherever this build happens to keep it. */
+  const iconTitle = el => {
+    const own = el.getAttribute('data-icon');
+    if (own) return own;
+    const inner = el.querySelector('[data-icon]');
+    if (inner) return inner.getAttribute('data-icon') || '';
+    const svg = el.querySelector('svg title');
+    return svg ? svg.textContent || '' : '';
+  };
+
+  const panelButton = () => {
+    const footer = document.querySelector('footer') || document;
+    for (const el of footer.querySelectorAll('button, [role="button"]')) {
+      const label = strip(el.getAttribute('aria-label'));
+      if (PANEL_LABEL.test(label) || PANEL_ICON.test(iconTitle(el))) return el;
+    }
+    return null;
+  };
+
+  /* The node an event has to be aimed at for a handler above it to see it. */
+  const deepestIn = el => {
+    let node = el;
+    while (node.firstElementChild) node = node.firstElementChild;
+    return node;
+  };
+
   addEventListener('keydown', event => {
     if (event.key !== 'Escape' || event.defaultPrevented) return;
-    const button = openPanelButton();
-    if (!button) return;                    // nothing open: WhatsApp's key, not ours
+    if (!emojiPanel()) return;               // nothing open: WhatsApp's key, not ours
+
+    const button = panelButton();
+    if (!button) { log('the emoji panel is open and its button cannot be found'); return; }
 
     event.preventDefault();
     event.stopPropagation();
-    press(button);
-    /* And the caret back where it was, so the next keystroke is a message and
-       not a shortcut aimed at whatever the panel left focused. */
+    press(button, deepestIn(button));
+    /* And the caret back in the composer, so the next keystroke is a message
+       rather than a search in a panel that is no longer on screen. */
     const box = composer();
     if (box) { try { box.focus(); } catch (err) {} }
   }, true);

@@ -739,6 +739,7 @@ const setBadge = count => {
   if (wanted === badgeShown) return;
   badgeShown = wanted;
   try { app.badgeCount = wanted; } catch (e) { /* no launcher listening */ }
+  console.log('badge: %d', wanted);
 };
 
 /* --------------------------------------------------------------- the app */
@@ -809,6 +810,7 @@ const wireIpc = () => {
   });
 
   ipcMain.on('wa:focus-request', showWindow);
+
 
   /* The chat list watcher nudges us for every message it sees land, which is what
      makes a banner per message possible at all. The document title cannot do that
