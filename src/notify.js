@@ -165,15 +165,33 @@ class Entry {
     this.onClick = onClick;
     this.raisedAt = Date.now();
     this.settled = false;
-    this.closedByUs = false;
     this.timer = null;
     this.current = null;
   }
 
   _open() { try { this.onClick && this.onClick(); } catch (e) {} }
 
+  /* Watching one notification, and the way to take that one down again.
+   *
+   * "Did we close this, or did the user?" is the whole question, and it used to
+   * be answered by a field on the entry set immediately before close() and
+   * cleared immediately after. That answer is a race and it is wrong on the
+   * losing side: close() returns as soon as the D-Bus call is away, the server's
+   * NotificationClosed comes back on a later turn, and by then the field says
+   * "the user did it". The banner filed in its place is then disposed of at
+   * once, which is a message swept out of the notification centre twelve seconds
+   * after it arrived and no way to know it had been.
+   *
+   * So the flag belongs to the notification rather than to the entry, and it is
+   * set for good rather than cleared. Whoever wants this one gone calls the
+   * retire function that comes with it. */
   _watch(notification) {
     this.current = notification;
+    let ours = false;
+    notification.__retire = () => {
+      ours = true;
+      try { notification.close(); } catch (e) {}
+    };
     notification.on('click', () => {
       this.settled = true;
       this._open();
@@ -183,7 +201,7 @@ class Entry {
        the notification centre -- not when it merely leaves the screen. So a
        close we did not ask for means the user has dealt with the message. */
     notification.on('close', () => {
-      if (this.closedByUs) return;
+      if (ours) return;
       this.settled = true;
       this.dispose();
     });
@@ -207,9 +225,7 @@ class Entry {
     this.timer = setTimeout(() => {
       this.timer = null;
       if (this.settled) return;
-      this.closedByUs = true;
-      try { banner.close(); } catch (e) {}
-      this.closedByUs = false;
+      banner.__retire();
 
       const filed = new Notification({
         title: this.title, body: this.body, icon: this.iconPath,
@@ -228,8 +244,7 @@ class Entry {
   dispose() {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     if (this.current) {
-      this.closedByUs = true;
-      try { this.current.close(); } catch (e) {}
+      this.current.__retire();
       this.current = null;
     }
     this.owner._forget(this);

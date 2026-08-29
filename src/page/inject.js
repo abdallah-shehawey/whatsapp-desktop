@@ -204,6 +204,12 @@ const start = ({ send, on }) => {
      likely to be run in, and it costs nothing when it does not match. */
   const SELF_SENDER = /^(you|أنت|انت|أنتَ|أنتِ)$/i;
 
+  /* What WhatsApp writes into a chat-list preview when somebody reacts to one of
+     the user's messages. The reaction itself is already in that text, so nothing
+     is put in front of it: a glyph here would be a second emoji next to the one
+     the sender actually chose. */
+  const REACTION_PREVIEW = /^(reacted|تفاعل)\b/i;
+
   const isOutgoing = el => {
     if (!el) return false;
     if (iconNames(el).some(n => OUTGOING_ICON.test(n))) return true;
@@ -225,14 +231,47 @@ const start = ({ send, on }) => {
      against a display name would call every "@everyone" and every mention of
      somebody else a mention of the user, and the spec is explicit that it must
      not. A reply to one of the user's own messages is marked the same way. */
-  const MENTION_ICON  = /mention|reply|quoted/i;
+  /* "alternate-email" is the @ sign, and it is what this build actually draws --
+     measured on the live list, where the one mentioned row carried
+     <svg title="ic-alternate-email"> and nothing whatever containing the word
+     "mention". The older names are kept beside it because they cost nothing and
+     a build that goes back to them must not go quiet.
+
+     Read through iconNames, which looks at the <svg title> and the <title> child
+     as well as at data-icon. Reading data-icon alone is what made this return
+     false for every row on this build: the badge has no data-icon at all, so
+     every mention inside a muted group was silenced exactly like the messages it
+     is supposed to be an exception to. */
+  const MENTION_ICON  = /alternate-email|mention|reply|quoted|\bat-sign\b/i;
   const MENTION_LABEL = /mention|منشن|إشارة|اشارة|رد على|replied to you/i;
   const isMention = row => {
     if (!row) return false;
-    if ([...row.querySelectorAll('[data-icon]')]
-          .some(e => MENTION_ICON.test(e.getAttribute('data-icon') || ''))) return true;
+    if (iconNames(row).some(name => MENTION_ICON.test(name))) return true;
     return [...row.querySelectorAll('[aria-label]')]
       .some(e => MENTION_LABEL.test(e.getAttribute('aria-label') || ''));
+  };
+
+  /* Whether a row is a group rather than one person.
+   *
+   * This exists for one question the app cannot answer on its own: WhatsApp
+   * writes "Sender: message" into the body of a GROUP notification and writes
+   * the bare message into a direct one, and there is nothing in the text that
+   * distinguishes the two. Split on the colon regardless and a direct message
+   * reading "the link is https://example.com/x" goes out with "the link is
+   * https" printed as the person who wrote it.
+   *
+   * Three signals, any of which settles it: a group or community icon; the
+   * third span[title] that only a community group draws; and a sender line for
+   * somebody other than the user, which a direct chat never has. The user's own
+   * name is excluded because a direct chat does write "You:" in front of the
+   * last message when it was theirs. */
+  const GROUP_ICON = /group|communit/i;
+  const isGroupRow = row => {
+    if (!row) return false;
+    if (iconNames(row).some(name => GROUP_ICON.test(name))) return true;
+    if (titlesIn(row).length >= 3) return true;
+    const who = senderIn(row);
+    return !!who && !SELF_SENDER.test(who);
   };
 
   /* Whether this row is one the client should stay quiet about. Muted, unless
@@ -325,19 +364,25 @@ const start = ({ send, on }) => {
   /*
    * The sticker's glyph, which took the longest to settle.
    *
-   * Unicode has no sticker, so this is the nearest thing that is not already
-   * spoken for: a label, which is a thing you peel and stick. Not the framed
-   * picture -- that is a photograph, and Photo has the camera. Not a smiley --
-   * that is what an emoji is.
+   * Unicode has no sticker, so the question is which character comes nearest to
+   * the mark WhatsApp itself puts on one. That mark is a rounded square with a
+   * peeled corner and a smiling face inside it -- the app names its own button
+   * for it "sticker-smiley" -- and of everything in the emoji font it is the
+   * face that carries the meaning. The peel is what makes it a sticker rather
+   * than a smiley, and no character has it.
    *
-   * The variation selector after it is not decoration. U+1F3F7 defaults to TEXT
-   * presentation, so without U+FE0F fontconfig hands it to whatever monochrome
-   * font claims it first -- Symbola here, measured -- and the banner shows an
-   * outline glyph that reads as a box rather than a sticker. Every label below
-   * carries the selector for the same reason, whether it needs it or not: the
-   * fully-qualified form is the one that always lands in the emoji font.
+   * A label was tried first, on the reasoning that a label is a thing you peel
+   * and stick. It reads as a price tag and nothing else, and it was rejected on
+   * sight. Every candidate was drawn through Pango at banner size before this
+   * one was chosen, because how a glyph reads is not a thing to reason about
+   * from its Unicode name.
+   *
+   * The word "Sticker" is beside it and does the disambiguating, so the glyph's
+   * job is to be recognisable and not to mislead -- which the label was and the
+   * face is not. U+1F642 defaults to emoji presentation, so it needs no
+   * variation selector to land in the colour font.
    */
-  const STICKER = '\u{1F3F7}\uFE0F Sticker';
+  const STICKER = '\u{1F642} Sticker';
   /* The selector is on the three whose default presentation is text -- the label,
      the film frames and the framed picture -- and off the rest, whose default is
      already the emoji. Adding it where it is not needed makes a sequence Unicode
@@ -606,7 +651,7 @@ const start = ({ send, on }) => {
    * already, and a face that has genuinely changed is re-fetched the next time
    * the row is drawn.
    */
-  const chatFaces = new Map();            // chat name -> { url, at }
+  const chatFaces = new Map();            // chat name -> { url, group, at }
   const FACES_TTL_MS = 12 * 60 * 60 * 1000;
   const FACES_MAX = 256;
 
@@ -636,9 +681,17 @@ const start = ({ send, on }) => {
   };
 
   const rememberFace = (name, row) => {
+    if (!name) return;
     const url = faceUrlIn(row);
-    if (!name || !url) return;
-    chatFaces.set(name, { url, at: Date.now() });
+    /* The picture may not have loaded, and the answer to "is this a group" does
+       not depend on it. A row is remembered for either, and a face that arrives
+       later is written over the entry rather than beside it. */
+    const before = chatFaces.get(name);
+    chatFaces.set(name, {
+      url: url || (before && before.url) || '',
+      group: isGroupRow(row),
+      at: Date.now(),
+    });
     if (chatFaces.size > FACES_MAX) {
       const cutoff = Date.now() - FACES_TTL_MS;
       for (const [key, seen] of chatFaces) if (seen.at < cutoff) chatFaces.delete(key);
@@ -695,7 +748,15 @@ const start = ({ send, on }) => {
       if (Date.now() - seededAt < SETTLE_MS) continue;
       if (!isArrival(before, now)) continue;
       if (isSilenced(row)) continue;
-      if (isOutgoing(row)) continue;
+      /* The delivery tick says the last message in this row is the user's own,
+         and that is normally the end of it. A reaction is the exception: it is
+         somebody else's event landing on the user's own message, so the row
+         keeps the tick and WhatsApp rewrites the preview to say what happened.
+         The phone announces those, and without this the row is read as an echo
+         of a message the user sent and dropped. Narrow on purpose -- only a
+         preview that opens with WhatsApp's own word for it gets past the guard,
+         and the user's own reaction is written "You reacted", which does not. */
+      if (isOutgoing(row) && !REACTION_PREVIEW.test(now.preview)) continue;
 
       /* Nothing is queued while the window is away: WhatsApp raises its own
          notification then, and the app dresses that one instead. A queue built up
@@ -996,6 +1057,24 @@ const start = ({ send, on }) => {
       if (known.length > 2 && (wanted.indexOf(known) >= 0 || known.indexOf(wanted) >= 0))
         return known;
     return '';
+  };
+
+  /* Whether the chat a notification belongs to is a group, for the app's benefit
+     when it comes to read WhatsApp's wording of the body. Answers null when
+     there is nothing on record, which is not the same as "no": the app has a
+     cautious reading for that case and a decisive one for this. */
+  const chatKindFor = name => {
+    const row = rowFor(strip(name));
+    if (row) return isGroupRow(row);
+    /* From memory, "yes" is worth having and "no" is not. The signals for a
+       group are all positive ones -- an icon, a third title, somebody else's
+       name in front of the last message -- so their absence means either a
+       one-to-one chat or a group whose last message was the user's own, and
+       there is no telling which. Answering false for the second would stop the
+       sender being lifted out of the body, and an Arabic message then reads its
+       direction off the Latin name in front of it and wraps the wrong way. */
+    const known = chatFaces.get(chatNameFor(name));
+    return known && known.group ? true : null;
   };
 
   /* Asked by name when the notification is one the page raised.
@@ -1513,6 +1592,7 @@ const start = ({ send, on }) => {
           .then(avatar => send('page-notification', {
             id: this.__id, title: this.title, body: this.body,
             chat: chat,
+            group: chatKindFor(this.title),
             avatar: avatar || '', silent: this.silent,
           }));
       }

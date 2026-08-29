@@ -123,6 +123,7 @@ icons:
 test:
 	@node tools/test-inject.js
 	@node tools/test-bidi.js
+	@node tools/test-wording.js
 	@node tools/test-style.js
 
 run:

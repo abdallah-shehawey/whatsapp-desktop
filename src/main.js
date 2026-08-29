@@ -20,6 +20,7 @@ const style = require('./style.js');
 const { TrayIcon } = require('./tray.js');
 const { Banners, sweepAvatars } = require('./notify.js');
 const bidi = require('./bidi.js');
+const { kindOf, pushName, readBody } = require('./wording.js');
 const { SEP } = require('./page/inject.js');
 const debug = require('./debug.js');
 const sound = require('./sound.js');
@@ -546,17 +547,6 @@ const playTone = () => {
   win.webContents.send('wa:play-tone', null);
 };
 
-/* What a message is, when its words are not to be shown. The page marks every
-   kind of media with a glyph of its own -- see MEDIA_KINDS in the page script --
-   so a body that begins with one already says what arrived, and the rest of it
-   is the part the user asked to keep off the screen. Anything else is a message
-   of words, and with previews hidden that is all a banner may say about it. */
-const KIND = /^([\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]+\s*[A-Za-z ]+)/u;
-const kindOf = message => {
-  const found = KIND.exec(String(message || '').replace(/^[^:]{1,40}:\s*/, ''));
-  return found ? found[1].trim() : 'New message';
-};
-
 /* ------------------------------------------------------------ withdrawals */
 
 /* A notification is an unread message made visible, so it comes down as soon as
@@ -832,13 +822,10 @@ const wireIpc = () => {
      back to the page, whose own handler opens the conversation. */
   ipcMain.on('wa:page-notification', (event, note) => {
     if (!note || !config.get('notifications.enabled')) return;
-    /* WhatsApp writes a group notification as "Group name" with "Sender:
-       message" in the body, and a direct one as the contact with the message.
-       Either way the part in front of the first colon is a name, and the rest is
-       what was said -- which is all the direction rules below need. */
-    const split = /^([^:\n]{1,60}):\s*([\s\S]+)$/.exec(note.body || '');
-    const sender = split ? split[1] : '';
-    const message = split ? split[2] : (note.body || '');
+    /* The page says whether this chat is a group, because WhatsApp's own body
+       reads "Sender: message" for one and the bare message for the other, and
+       nothing in the text tells them apart. */
+    const { sender, message, mark } = readBody(note.body, note.group);
 
     const banner = banners.show({
       identity: [note.chat || note.title, sender, message].join(SEP),
@@ -848,9 +835,9 @@ const wireIpc = () => {
          key that does not appear there is a notification nothing can take
          down. */
       key: note.chat || note.title,
-      title: bidi.paragraph(note.title),
-      body: bidi.line(sender, message),
-      redacted: kindOf(note.body),
+      title: bidi.paragraph(pushName(note.title)),
+      body: mark + bidi.line(sender, message),
+      redacted: mark + kindOf(note.body),
       icon: note.avatar,
       onClick: () => {
         showWindow();
@@ -1137,7 +1124,7 @@ app.whenReady().then(() => {
     title: TITLE,
   });
 
-  debug.install(() => win);
+  debug.install(() => win, () => banners);
 
   /* Follow the desktop live: a theme switched from light to dark, or a font
      changed in Settings, should not need the client restarted. */

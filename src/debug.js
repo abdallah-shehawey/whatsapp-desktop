@@ -27,7 +27,7 @@ const os = require('os');
 
 const SNAPSHOT = path.join(os.tmpdir(), 'whatsapp-desktop-snapshot.png');
 
-const install = getWindow => {
+const install = (getWindow, getBanners) => {
   const file = process.env.WHATSAPP_DEBUG_EVAL;
   if (!file) return;
 
@@ -196,6 +196,43 @@ const install = getWindow => {
       win.webContents.focus();
       win.webContents.insertText(source.slice(6));
       console.log('debug: typed %d character(s)', source.length - 6);
+      return;
+    }
+
+    /* One banner per kind of message, raised through the very path a real one
+       takes -- Banners.show, the same glyphs the page writes, the same bidi. The
+       question these answer is the only one that cannot be answered from a test:
+       what the glyph actually LOOKS like once fontconfig, Pango and the shell
+       have each had their turn at it. */
+    if (source === '#notify' || source.startsWith('#notify ')) {
+      const banners = getBanners && getBanners();
+      if (!banners) { console.log('debug: no banners to raise'); return; }
+      const bidi = require('./bidi.js');
+      const kinds = [
+        ['\u{1F642} Sticker', ''],
+        ['\u{1F4F7} Photo', ''],
+        ['\u{1F3A5} Video', ''],
+        ['\u{1F3A4} Voice message (0:12)', ''],
+        ['\u{1F39E}\uFE0F GIF', ''],
+        ['\u{1F4C4} Document', ''],
+        ['\u{1F4CD} Location', ''],
+        ['\u{1F5BC}\uFE0F Album', ''],
+        ['\u0631\u0633\u0627\u0644\u0629 \u0639\u0631\u0628\u064A \u0637\u0648\u064A\u0644\u0629 ' +
+         '\u0639\u0634\u0627\u0646 \u0646\u0634\u0648\u0641 \u0627\u0644\u0633\u0637\u0631 ' +
+         '\u0627\u0644\u062A\u0627\u0646\u064A \u0628\u064A\u0628\u062F\u0623 \u0645\u0646 ' +
+         '\u0641\u064A\u0646', ''],
+        ['\u062A\u0645\u0627\u0645 \u064A\u0627 \u0645\u0639\u0644\u0645', '\u21A9\uFE0F '],
+      ];
+      let n = 0;
+      for (const [message, mark] of kinds) {
+        banners.show({
+          identity: 'debug' + Date.now() + (n++),
+          key: '__debug__',
+          title: bidi.paragraph('WhatsApp \u2014 test'),
+          body: mark + bidi.line('Ahmed', message),
+        });
+      }
+      console.log('debug: raised %d banners, one per kind', n);
       return;
     }
 

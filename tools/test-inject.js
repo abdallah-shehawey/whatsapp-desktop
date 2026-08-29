@@ -123,6 +123,13 @@ const clock = (backMinutes = 0) => {
    span[title] elements, the unread pill in an aria-label, the sender of a group
    message as its own line followed by a bare ":" line, and the delivery tick as
    an <svg> carrying a <title> -- which is where this build puts it. */
+/* The @ badge on its own, for a row that gains one after it was built. */
+const atBadge = () => {
+  const at = el('svg', {});
+  at.append(el('title', {}, 'ic-alternate-email'));
+  return at;
+};
+
 const mkRow = spec => {
   const row = el('div', { role: 'row' });
   if (spec.open) row.attrs['aria-selected'] = 'true';
@@ -133,7 +140,15 @@ const mkRow = spec => {
   row.append(el('span', { title: spec.name }), el('span', { title: spec.preview }));
   if (spec.badge) row.append(el('div', { 'aria-label': spec.badge + ' unread messages' }));
   if (spec.muted) row.append(el('div', { 'aria-label': 'muted' }));
-  if (spec.mention) row.append(el('span', { 'data-icon': 'mention' }));
+  /* The @ badge as this build actually draws it: an <svg> whose only marking is
+     a <title> reading "ic-alternate-email". Nothing on the row contains the word
+     "mention", which is why reading data-icon for it found nothing at all and
+     every mention inside a muted group went silent. */
+  if (spec.mention) {
+    const at = el('svg', {});
+    at.append(el('title', {}, 'ic-alternate-email'));
+    row.append(at);
+  }
   if (spec.outgoing) {
     const svg = el('svg', {});
     svg.append(el('title', {}, 'wds-ic-read'));
@@ -442,7 +457,7 @@ const check = (label, got, want) => {
   pdf.append(stickerIcon);
   await scan();
   check('a sticker message is announced as a sticker, glyph and all',
-        await describe(), 'Pdf & Assignments | Mega: \u{1f3f7}\ufe0f Sticker');
+        await describe(), 'Pdf & Assignments | Mega: \u{1f642} Sticker');
   stickerIcon.remove();
 
 
@@ -463,6 +478,28 @@ const check = (label, got, want) => {
   await scan();
   check('the same message from somebody else is announced',
         await describe(), 'Pdf & Assignments | Salah: تمام يا معلم');
+
+  /* A reaction to one of the user's own messages. The row keeps the delivery
+     tick -- the last message in it really is the user's -- so the outgoing guard
+     is exactly what swallowed this, and the phone announces it. */
+  await describe();
+  const reacting = mkRow({ name: 'Salah', preview: 'تمام يا معلم', badge: 0,
+                           when: clock(1), outgoing: true });
+  pane.append(reacting);
+  await scan();
+  update(reacting, { badge: 1, preview: 'Reacted \u2764\uFE0F to "\u062a\u0645\u0627\u0645"',
+                     when: clock() });
+  await scan();
+  check('somebody reacting to the user\'s own message is announced',
+        await describe(), 'Salah | Reacted \u2764\uFE0F to "\u062a\u0645\u0627\u0645"');
+
+  /* The user's own reaction is written the other way round, and stays quiet. */
+  update(reacting, { badge: 0, preview: 'You reacted \u{1F44D} to "\u062a\u0645\u0627\u0645"',
+                     when: clock() });
+  await scan();
+  check('and the user reacting to somebody else is not',
+        await describe(), '');
+  reacting.remove();
 
   /* A reply inside a community thread moves the group to the top of the list
      with the PARENT message still in its preview and a fresh clock on it. Every
@@ -493,7 +530,7 @@ const check = (label, got, want) => {
   /* Unless the user was named in it, which is the one thing that gets through a
      muted group on the phone as well. */
   update(club, { badge: 3, preview: 'يا عبدالله شوف دا', when: clock(), mention: true });
-  club.append(el('span', { 'data-icon': 'mention' }));
+  club.append(atBadge());
   await scan();
   check('a mention gets through the muting',
         await describe(), 'Study Group | Ahmed: يا عبدالله شوف دا');
@@ -577,7 +614,7 @@ const check = (label, got, want) => {
 
   /* A mention in a muted group is not muted, and does count. */
   update(quiet, { badge: 8, preview: 'يا عبدالله', when: clock(), mention: true });
-  quiet.append(el('span', { 'data-icon': 'mention' }));
+  quiet.append(atBadge());
   await scan();
   const withMention = countReports.pop();
   check('a mention inside a muted group counts again',
