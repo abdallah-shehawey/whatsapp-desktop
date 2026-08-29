@@ -1308,8 +1308,9 @@ const start = ({ send, on }) => {
    * So there was never anything to retry: the key was not missed, it was eaten.
    * Sending a second one -- at the document, with the caret out of the composer,
    * which is what stood here before -- only fed the same handler again, and was
-   * measured doing nothing both times. What does close it is the conversation
-   * menu's own "Close chat", pressed the way every control on this page has to be.
+   * measured doing nothing both times. What closes it is WhatsApp's own
+   * closeActiveChat, and failing that its menu's own "Close chat", pressed the
+   * way every control on this page has to be.
    *
    * The one thing this must never do is close a conversation for an Escape that
    * was for something else -- a dropdown, the profile drawer, in-chat search, a
@@ -1336,22 +1337,47 @@ const start = ({ send, on }) => {
    * 3611 without a flicker, and a message landing inside the window costs
    * nothing worse than an Escape that has to be pressed a second time. */
 
-  /* The layers that leave slowly, read at the keypress. The emoji panel is one
-     of them and is handled above this; it is named here as well because this
-     runs for the Escape after the one that opened it. */
-  const OPEN_LAYER = '[role="menu"], [role="listbox"], [role="application"]';
   const ANSWERED_MS = 60;
   const WATCH_MS = 8;
   let closing = false;
   const conversation = () => document.querySelector('#main');
 
-  /* The other slow one, and it wears no role at all: a photo opened full screen
-     took 299ms to leave the DOM, and carries neither a role nor a name to ask
-     it by. What it does do is cover the window, so it is asked geometrically --
-     is the chat list still the thing on top of the chat list? Measured both
-     ways: with the photo up, the middle of the pane answers a div outside it;
-     with the photo shut, it answers the pane's own span. This catches every
-     full-window overlay, including the ones WhatsApp has not shipped yet. */
+  /* Is there something on screen that Escape is for? Everything below is read
+     at the keypress, and each line is one measured layer that takes longer to
+     leave than it is worth waiting for.
+
+     A dropdown, a list of suggestions, the emoji panel. The panel is handled
+     above this as well; it is named here because this runs for the Escape after
+     the one that opened it. */
+  const OPEN_LAYER = '[role="menu"], [role="listbox"], [role="application"]';
+
+  /* Selection mode: 282ms to leave, and the only sure sign of it is that every
+     message has grown a checkbox. Eleven of them against none in a plain
+     conversation, measured. Its header and footer say nothing a language could
+     not change, and the composer is no test either -- a member who cannot post
+     in an announcement group has no composer and still deserves this.
+
+     A modal -- "add to list" was the one measured -- needs no name here: it
+     goes well inside the watch below. Only what outlasts the watch has to be
+     read at the keypress. */
+  const SELECTING = 'input[type="checkbox"]';
+
+  /* A bar in the composer with a cancel on it -- a reply being written, a
+     message being edited. This one is a guess made safe rather than a
+     measurement: the reply bar cannot be raised from a script, because the
+     control that raises it appears on a real hover that a dispatched event does
+     not produce. What was measured is the other half, that a plain footer
+     carries only ic-attach-file, wds-ic-sticker-smiley and mic-outlined, so
+     this can cost nothing when there is nothing there. */
+  const CANCELLABLE = /close|cancel/i;
+
+  /* And the one that wears no marking at all: a photo opened full screen, 299ms
+     to leave, with neither a role nor a name to ask it by. What it does do is
+     cover the window, so it is asked geometrically -- is the chat list still the
+     thing on top of the chat list? Measured both ways: with the photo up the
+     middle of the pane answers a div outside it, with the photo shut it answers
+     the pane's own span. This catches every full-window overlay, including the
+     ones WhatsApp has not shipped yet. */
   const chatListCovered = () => {
     const pane = document.querySelector('#pane-side');
     if (!pane) return false;
@@ -1360,6 +1386,29 @@ const start = ({ send, on }) => {
     const on = document.elementFromPoint(Math.round(box.left + box.width / 2),
                                          Math.round(box.top + box.height / 2));
     return !!on && !pane.contains(on);
+  };
+
+  const somethingElseIsUp = () => {
+    const main = conversation();
+    if (!main) return true;
+    if (document.querySelector(OPEN_LAYER)) return true;
+    if (main.querySelector(SELECTING)) return true;
+    /* The profile drawer. It has no name of its own, but it is the only thing
+       that puts a second [role="dialog"] on the page and puts it OUTSIDE the
+       conversation -- one while it is open and none while it is shut, over an
+       open-and-shut cycle. The dialog INSIDE the conversation is the
+       announcement tip, which is not a layer and stays as long as the chat does.
+       It is read here rather than waited for because waiting for it was flaky:
+       its first measurement said 27ms and a later run outlasted the watch and
+       took the conversation down with it. */
+    for (const dialog of document.querySelectorAll('#app [role="dialog"]'))
+      if (!main.contains(dialog)) return true;
+    const footer = main.querySelector('footer');
+    if (footer) {
+      for (const title of footer.querySelectorAll('svg title'))
+        if (CANCELLABLE.test(strip(title.textContent))) return true;
+    }
+    return chatListCovered();
   };
 
   /* The page in a few cheap numbers, chosen to move whenever a layer opens or
@@ -1438,7 +1487,41 @@ const start = ({ send, on }) => {
     return null;
   };
 
+  /* WhatsApp's own command, which is what its menu item ends up calling and
+     what every other client on this page uses. `window.require` is Meta's
+     module registry and it is right there -- contextIsolation is off for this
+     window, so this file shares the page's world with WhatsApp's own code --
+     and `WAWebCmd`'s Cmd carries closeActiveChat among its 188 methods.
+     Measured at 29ms against the menu's 85, and it raises nothing on screen to
+     hide.
+
+     It is a private name and one WhatsApp deploy can take it away, so it is
+     asked for inside a try, its answer is checked rather than believed, and the
+     menu below stays as what happens when it is gone. */
+  const closeByCommand = () => {
+    try {
+      const module = typeof window.require === 'function' && window.require('WAWebCmd');
+      const Cmd = module && module.Cmd;
+      if (!Cmd || typeof Cmd.closeActiveChat !== 'function') return false;
+      Cmd.closeActiveChat();
+      return true;
+    } catch (err) {
+      return false;
+    }
+  };
+
+  const gone = async ms => {
+    const until = Date.now() + ms;
+    while (conversation() && Date.now() < until) await new Promise(r => setTimeout(r, 4));
+    return !conversation();
+  };
+
   const closeConversation = async () => {
+    if (closeByCommand() && await gone(200)) {
+      log('Escape closed nothing, so the conversation was closed by WhatsApp\'s own command');
+      return;
+    }
+
     const button = menuButton();
     if (!button) { log('Escape closed nothing and the conversation menu cannot be found'); return; }
 
@@ -1480,7 +1563,7 @@ const start = ({ send, on }) => {
       if (closing || !conversation()) return;
       /* A layer that is up now is what the key is for, and this has nothing to
          say about it. */
-      if (document.querySelector(OPEN_LAYER) || chatListCovered()) return;
+      if (somethingElseIsUp()) return;
 
       const before = layers();
       const until = Date.now() + ANSWERED_MS;
