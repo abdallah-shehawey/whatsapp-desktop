@@ -209,7 +209,7 @@ const install = (getWindow, getBanners) => {
       if (!banners) { console.log('debug: no banners to raise'); return; }
       const bidi = require('./bidi.js');
       const kinds = [
-        ['\u{1F642} Sticker', ''],
+        ['\u{1F49F} Sticker', ''],
         ['\u{1F4F7} Photo', ''],
         ['\u{1F3A5} Video', ''],
         ['\u{1F3A4} Voice message (0:12)', ''],

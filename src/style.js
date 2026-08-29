@@ -56,6 +56,33 @@ const ARABIC_CLIP = `
    ever does get shorn in the list here, the rule that belongs is this same clip
    widening on "#pane-side div:has(> span[title])" -- never a line-height, which
    in the GTK client shifted every Arabic line off the page's own rhythm. */
+/* Arabic that wraps.
+ *
+ * WhatsApp marks the SPAN holding the text dir="rtl" and leaves the block around
+ * it dir="ltr" with text-align: start -- which, on a left-to-right block,
+ * resolves to left. An inline span's direction fixes the order of words within a
+ * line and nothing else: alignment belongs to the block. So the first line of an
+ * Arabic message looks right because it fills the width, and every line after it
+ * is flush against the LEFT margin, which is the report.
+ *
+ * Measured on a live bubble rather than guessed: the div reads
+ * direction "ltr", text-align "start", and the span inside it dir="rtl",
+ * direction "rtl".
+ *
+ * text-align rather than direction, because direction on the block would move
+ * the timestamp and the ticks that sit inside the same bubble. :has() asks the
+ * only question that matters -- did WhatsApp itself decide this text is
+ * right-to-left -- so a Latin message in the same conversation is untouched. */
+#main div.copyable-text:not([contenteditable]) > div:has(> span[dir="rtl"]),
+#main div.copyable-text:not([contenteditable]) > div:has(> span > span[dir="rtl"]) {
+  text-align: right;
+}
+/* The same thing in a quoted reply and in the chat list, where the preview is a
+   span[title] inside a block the page leaves left-to-right. */
+#pane-side div:has(> span[title][dir="rtl"]) {
+  text-align: right;
+}
+
 /* The composer clips the same way. A taller line box here is a trap: WhatsApp
    already sets 1.47em on it, and one pixel of overflow makes the box scrollable,
    so every keystroke scrolled the caret back into view and the text twitched. */

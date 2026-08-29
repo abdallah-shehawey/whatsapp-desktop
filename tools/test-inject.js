@@ -497,7 +497,7 @@ const check = (label, got, want) => {
   pdf.append(stickerIcon);
   await scan();
   check('a sticker message is announced as a sticker, glyph and all',
-        await describe(), 'Pdf & Assignments | Mega: \u{1f642} Sticker');
+        await describe(), 'Pdf & Assignments | Mega: \u{1f49f} Sticker');
   stickerIcon.remove();
 
 

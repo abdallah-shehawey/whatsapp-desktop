@@ -767,6 +767,33 @@ const start = ({ send, on }) => {
    * window and keeps it. Opening the app was simply the next thing to move the
    * DOM. So whenever a name is held rather than judged, the moment it becomes
    * judgeable is booked here. One timer, coalesced to the soonest. */
+  /* And a heartbeat under all of it, for the cases a mutation never comes at all.
+   *
+   * The list is watched by a MutationObserver, so everything this client knows
+   * about a chat being read arrives as a change to the DOM. That is enough when
+   * WhatsApp redraws the row -- and it is not something to depend on for the one
+   * case that matters most: a message read on the PHONE, with the window in the
+   * tray or simply behind something else, where the whole of WhatsApp's answer
+   * may be a single attribute going away.
+   *
+   * So while any chat is being tracked as unread, the list is re-read every few
+   * seconds regardless. It costs nothing when the client is caught up -- there is
+   * no timer at all then -- and it is the difference between a banner that goes
+   * when the message is read and one that goes when the user next opens the
+   * window. */
+  const SWEEP_MS = 3000;
+  let sweeping = false;
+  const sweepLater = () => {
+    if (sweeping) return;
+    sweeping = true;
+    setTimeout(() => {
+      sweeping = false;
+      const pane = document.querySelector('#pane-side');
+      if (!pane || !knownUnread.size) return;
+      reportUnread(pane);          // which arms the next one if anything is left
+    }, SWEEP_MS);
+  };
+
   let regrade = 0;
   let regradeAt = 0;
   const scanSoon = ms => {
@@ -830,6 +857,7 @@ const start = ({ send, on }) => {
       }
     }
     if (judgeIn) scanSoon(judgeIn + 100);
+    if (knownUnread.size) sweepLater();
 
     const key = names.sort().join(SEP);
     if (key !== lastUnread) {

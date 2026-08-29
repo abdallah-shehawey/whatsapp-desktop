@@ -592,7 +592,11 @@ const withdrawRead = key => {
   if (closed) console.log('withdrew %d notification(s) for %s: it has been read', closed, key);
 
   const left = banners.guardRemaining(key, ARRIVAL_SETTLE_MS);
-  if (left > 0) withdrawing.set(key, setTimeout(() => withdrawRead(key), left + 50));
+  if (left > 0) {
+    console.log('holding %s for another %dms before withdrawing: the banner is new',
+                key, Math.round(left));
+    withdrawing.set(key, setTimeout(() => withdrawRead(key), left + 50));
+  }
 };
 
 /* Whether a banner is this client's to raise at all. While the window is away
@@ -899,7 +903,11 @@ const wireIpc = () => {
     const banner = pageBanners.get(note.id);
     pageBanners.delete(note.id);
     if (!banner) return;
-    if (unreadChatNames.has(banner.key)) return;
+    if (unreadChatNames.has(banner.key)) {
+      console.log('WhatsApp closed its notification for %s but the chat still has ' +
+                  'something unread; leaving the banner up', banner.key);
+      return;
+    }
     banner.dispose();
     console.log('withdrew a notification for %s: WhatsApp closed it and the chat is caught up',
                 banner.key);
@@ -923,7 +931,13 @@ const wireIpc = () => {
   ipcMain.on('wa:unread-chats', (event, names) => {
     if (!Array.isArray(names) || !banners) return;
     unreadChatNames = new Set(names);
-    for (const key of new Set([...banners.keys(), ...withdrawing.keys()])) withdrawRead(key);
+    const held = banners.keys();
+    /* Names, never messages. Which chats are unread and which still have a
+       banner up is the whole of the withdrawal question, and it is the one thing
+       a log of this path has to be able to answer. */
+    if (held.length)
+      console.log('unread: [%s]; banners still up for: [%s]', names.join(', '), held.join(', '));
+    for (const key of new Set([...held, ...withdrawing.keys()])) withdrawRead(key);
   });
 
   /* How many messages are waiting, counted off the unread pills rather than

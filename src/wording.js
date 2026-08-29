@@ -14,12 +14,23 @@
  * one was chosen, because how a glyph reads is not a thing to reason about
  * from its Unicode name.
  *
- * The word "Sticker" is beside it and does the disambiguating, so the glyph's
- * job is to be recognisable and not to mislead -- which the label was and the
- * face is not. U+1F642 defaults to emoji presentation, so it needs no
- * variation selector to land in the colour font.
+ * A label was tried, then a face, and both were rejected on sight -- the label
+ * reads as a price tag and the face reads as an emoji, which is the one thing a
+ * sticker must not be mistaken for. The answer came from the owner of the
+ * client, who wanted the shape rather than the meaning: a square with a heart in
+ * it, in pink, the way it looks on the phone. U+1F49F is drawn as exactly that,
+ * a rounded magenta square with a white heart knocked out of it, and it is the
+ * only character in the font that is a square with something inside it.
+ *
+ * The picture in the notification body is not an option and was checked rather
+ * than assumed: gnome-shell 50.4 answers GetCapabilities with actions, body,
+ * body-markup, icon-static, persistence and sound -- and no body-images. So the
+ * mark has to be a character, and this is the character.
+ *
+ * It defaults to emoji presentation, so it needs no variation selector to land
+ * in the colour font.
  */
-const STICKER = '\u{1F642} Sticker';
+const STICKER = '\u{1F49F} Sticker';
 /* The selector is on the three whose default presentation is text -- the label,
    the film frames and the framed picture -- and off the rest, whose default is
    already the emoji. Adding it where it is not needed makes a sequence Unicode

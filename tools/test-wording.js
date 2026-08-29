@@ -103,12 +103,12 @@ check('a message that starts with the words but is not the mark is left alone',
    -- "Sticker", and nothing to look at -- because only the chat-list watcher
    had this table. */
 check('a sticker WhatsApp named itself gets the mark too',
-      mediaFromWords('Sticker'), '\u{1F642} Sticker');
+      mediaFromWords('Sticker'), '\u{1F49F} Sticker');
 check('and a voice message', mediaFromWords('Voice message'), '\u{1F3A4} Voice message');
 check('and a photo', mediaFromWords('Photo'), '\u{1F4F7} Photo');
 check('and the round video keeps WhatsApp\'s own name for it',
       mediaFromWords('Video note'), '\u{1F3A5} Video note');
-check('in Arabic as well', mediaFromWords('\u0645\u0644\u0635\u0642'), '\u{1F642} Sticker');
+check('in Arabic as well', mediaFromWords('\u0645\u0644\u0635\u0642'), '\u{1F49F} Sticker');
 check('an album counts what is in it', mediaFromWords('4 photos'), '\u{1F5BC}\uFE0F Album');
 
 /* Anchored, or a message ABOUT a photo becomes a photo. */
@@ -121,7 +121,7 @@ check('and nothing at all names nothing', mediaFromWords(''), '');
 /* With previews hidden the banner still says what kind of thing arrived, and
    that is read back off the glyph the page put in front of it. */
 check('a sticker is still announced as a sticker with the words hidden',
-      kindOf('Mega: \u{1F642} Sticker'), '\u{1F642} Sticker');
+      kindOf('Mega: \u{1F49F} Sticker'), '\u{1F49F} Sticker');
 check('and a voice note keeps its name but not its length',
       kindOf('\u{1F3A4} Voice message (0:41)'), '\u{1F3A4} Voice message');
 check('a message of words says only that it is one',
