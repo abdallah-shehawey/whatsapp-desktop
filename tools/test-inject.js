@@ -16,6 +16,12 @@
 const fs   = require('fs');
 const path = require('path');
 const vm   = require('vm');
+/* The marks, read from the one table that defines them rather than written out
+   again here. Spelling a glyph into a test is how a check comes to be asserting
+   the character somebody typed in 2026 instead of the character the client uses
+   -- which is exactly what happened when every mark was moved to its monochrome
+   form and two checks failed for having the old one in them. */
+const { MARKS } = require('../src/wording.js');
 
 const SRC = process.env.WA_INJECT || path.join(__dirname, '..', 'src', 'page', 'inject.js');
 const US  = String.fromCharCode(31);      // the unit separator the page answers with
@@ -272,6 +278,11 @@ const sandbox = {
      this would be something it cannot have in production either. */
   require: name => {
     if (name === '../wording.js') return require('../src/wording.js');
+    /* The store module is real, and it is asked for here for one reason: to be
+       given a page with no window.require on it, so it never resolves and the
+       watcher below stays in charge. That is the fallback this rig exists to
+       exercise -- what the client does on the day WhatsApp renames a module. */
+    if (name === './store.js') return require('../src/page/store.js');
     throw new Error('the page script may not require ' + name);
   },
 };
@@ -497,7 +508,7 @@ const check = (label, got, want) => {
   pdf.append(stickerIcon);
   await scan();
   check('a sticker message is announced as a sticker, glyph and all',
-        await describe(), 'Pdf & Assignments | Mega: \u{1f49f} Sticker');
+        await describe(), 'Pdf & Assignments | Mega: ' + MARKS.sticker);
   stickerIcon.remove();
 
 
@@ -590,7 +601,7 @@ const check = (label, got, want) => {
   update(pdf, { badge: 4, preview: 'Photo', sender: 'Mega', when: clock() });
   await scan();
   check('a photo is announced as a photo, not as the word',
-        await describe(), 'Pdf & Assignments | Mega: \u{1f4f7} Photo');
+        await describe(), 'Pdf & Assignments | Mega: ' + MARKS.image);
 
   update(pdf, { badge: 5, preview: 'the sticker you sent is great', sender: 'Mega',
                 when: clock() });

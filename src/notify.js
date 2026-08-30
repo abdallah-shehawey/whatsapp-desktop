@@ -156,9 +156,15 @@ class Seen {
  * lets it be withdrawn when that chat is read.
  */
 class Entry {
-  constructor(owner, { key, title, body, iconPath, onClick }) {
+  constructor(owner, { key, msgId, title, body, iconPath, onClick }) {
     this.owner = owner;
     this.key = key || title;
+    /* The message this banner is, when there is one to name. A withdrawal used
+       to be able to speak only in whole chats -- "everything for Mega" -- which
+       is right for a chat that has been opened and wrong for every other case:
+       a message deleted for everyone takes down one banner, and a chat read
+       down to two remaining messages takes down all but two. */
+    this.msgId = msgId || '';
     this.title = title;
     this.body = body || '';
     this.iconPath = iconPath;
@@ -262,6 +268,18 @@ class Entry {
  * report within a second of each other or not at all. */
 const SAME_MESSAGE_MS = 15000;
 
+/* And how long one MESSAGE ID stays itself, which is a different question with a
+   different answer: for ever, or as near to it as the file goes. The window
+   above is short because it is guarding against two watchers describing one
+   arrival, and two descriptions that are going to differ will differ inside a
+   second. A message id needs no such window -- it is not a description, it is
+   the thing -- and the case it guards is the client restarting: WhatsApp puts
+   the recent history back into its collection on every page load, `add` fires
+   for all of it, and a message announced four minutes before a restart is
+   inside the freshness window on the other side of it. The startup grace
+   catches most of that and this catches the rest. */
+const SAME_ID_MS = SEEN_TTL_MS;
+
 class Banners {
   constructor({ seconds = 12, appIcon = null, stateFile = null, hidePreview = false } = {}) {
     this.seconds = seconds;
@@ -283,11 +301,11 @@ class Banners {
    * icon      base64 image bytes for the sender's picture, or nothing
    * onClick   what to do when the user clicks the banner
    */
-  show({ identity, key, title, body, icon, onClick, redacted }) {
+  show({ identity, msgId, key, title, body, icon, onClick, redacted }) {
     if (!this.supported || !title) return null;
 
     if (identity && this.seen) {
-      if (this.seen.has(identity, SAME_MESSAGE_MS)) {
+      if (this.seen.has(identity, msgId ? SAME_ID_MS : SAME_MESSAGE_MS)) {
         console.log('already announced: the same message reported twice');
         return null;
       }
@@ -295,7 +313,7 @@ class Banners {
     }
 
     const entry = new Entry(this, {
-      key, title,
+      key, msgId, title,
       /* With previews hidden the banner says which chat and what kind of thing
          arrived, and never a word of it. */
       body: this.hidePreview ? (redacted || 'New message') : body,
@@ -346,6 +364,47 @@ class Banners {
       if (left > longest) longest = left;
     }
     return longest;
+  }
+
+  /* One message, taken back. A message deleted for everyone is the case this
+     exists for: the phone withdraws the notification for it and does not raise
+     a second one saying it was deleted, and neither does this. */
+  closeMessage(msgId) {
+    if (!msgId) return 0;
+    let closed = 0;
+    for (const set of [...this.byKey.values()])
+      for (const entry of [...set])
+        if (entry.msgId === msgId) { entry.dispose(); closed++; }
+    return closed;
+  }
+
+  /* All but the newest `keep` for this chat.
+   *
+   * WhatsApp counts what is unread in a conversation, and the messages it is
+   * counting are the last ones in it -- so a chat that has gone from five unread
+   * to two has had the oldest three read, whoever read them and wherever. That
+   * is the whole of partial-read handling, and it needs no message id from the
+   * read side at all: the banners are held in the order they were raised, and
+   * everything before the last `keep` of them comes down.
+   *
+   * `keep` of zero is a chat that has been read to the end and takes all of them
+   * with it. No age guard: this is an answer WhatsApp gave, not something
+   * inferred from a redrawn list, and the guard that used to sit here is what
+   * left a message read on the phone sitting in the notification centre. */
+  trim(key, keep) {
+    const set = this.byKey.get(key);
+    if (!set) return 0;
+    const live = [...set];
+    const going = keep > 0 ? live.slice(0, Math.max(0, live.length - keep)) : live;
+    for (const entry of going) entry.dispose();
+    return going.length;
+  }
+
+  /* How many are still up for this chat, which is what decides whether a report
+     is worth logging. */
+  countFor(key) {
+    const set = this.byKey.get(key);
+    return set ? set.size : 0;
   }
 
   keys() { return [...this.byKey.keys()]; }

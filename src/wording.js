@@ -30,7 +30,28 @@
  * It defaults to emoji presentation, so it needs no variation selector to land
  * in the colour font.
  */
-const STICKER = '\u{1F49F} Sticker';
+/* Monochrome, and by asking for it rather than by choosing characters that
+ * happen to have no colour.
+ *
+ * Every mark below is a character with EMOJI presentation by default, so a
+ * shaper hands it to Noto Color Emoji and it lands on the banner as a small
+ * colour picture -- a pink camera, a blue person, a red pin -- next to text the
+ * shell draws in one colour. U+FE0E, VARIATION SELECTOR-15, is the request for
+ * the text form of the same character, and on this machine it moves every one of
+ * them from Noto Color Emoji to **Noto Emoji**: the same designs, drawn as
+ * outlines in the colour of the surrounding text.
+ *
+ * Measured rather than reasoned about, through PangoCairo at banner size, which
+ * is the only way to know: the run's resolved family was read for each mark both
+ * ways, and the pair was drawn to a PNG and looked at. Picking different
+ * characters -- the ones Unicode gives text presentation by default -- was the
+ * other way to do this, and it was worse: it scatters the marks across Noto Sans
+ * Symbols 2, Font Awesome, DejaVu and Adwaita Mono, four designs that do not
+ * belong together, and it changes shapes the user already recognises. */
+const TEXT = '︎';
+const mono = character => character + TEXT;
+
+const STICKER = mono('\u{1F49F}') + ' Sticker';
 /* The selector is on the three whose default presentation is text -- the label,
    the film frames and the framed picture -- and off the rest, whose default is
    already the emoji. Adding it where it is not needed makes a sequence Unicode
@@ -42,22 +63,22 @@ const STICKER = '\u{1F49F} Sticker';
    message about a photo is a message and not a photo. */
 const MEDIA_WORDS = [
   { text: /^(sticker|ملصق)$/i,                            label: STICKER },
-  { text: /^(gif)$/i,                                     label: '\u{1F39E}\uFE0F GIF' },
-  { text: /^(voice message|رسالة صوتية)$/i,               label: '\u{1F3A4} Voice message' },
-  { text: /^(photo|image|صورة)$/i,                        label: '\u{1F4F7} Photo' },
+  { text: /^(gif)$/i,                                     label: mono('\u{1F39E}') + ' GIF' },
+  { text: /^(voice message|رسالة صوتية)$/i,               label: mono('\u{1F3A4}') + ' Voice message' },
+  { text: /^(photo|image|صورة)$/i,                        label: mono('\u{1F4F7}') + ' Photo' },
   /* WhatsApp's own name for the round one, and it is the phone's wording too,
      so it is kept rather than flattened into "Video". */
-  { text: /^(video note|ملاحظة فيديو)$/i,               label: '\u{1F3A5} Video note' },
-  { text: /^(video|فيديو)$/i,                             label: '\u{1F3A5} Video' },
-  { text: /^(audio|أغنية|ملف صوتي)$/i,                    label: '\u{1F3B5} Audio' },
-  { text: /^(poll|استطلاع)$/i,                             label: '\u{1F4CA} Poll' },
-  { text: /^(location|live location|موقع)$/i,             label: '\u{1F4CD} Location' },
-  { text: /^(contact|جهة اتصال)$/i,                       label: '\u{1F464} Contact' },
-  { text: /^(document|مستند)$/i,                          label: '\u{1F4C4} Document' },
-  { text: /^(\d+\s*(photos|videos|صور|مقاطع))$/i,             label: '\u{1F5BC}\uFE0F Album' },
+  { text: /^(video note|ملاحظة فيديو)$/i,               label: mono('\u{1F3A5}') + ' Video note' },
+  { text: /^(video|فيديو)$/i,                             label: mono('\u{1F3A5}') + ' Video' },
+  { text: /^(audio|أغنية|ملف صوتي)$/i,                    label: mono('\u{1F3B5}') + ' Audio' },
+  { text: /^(poll|استطلاع)$/i,                             label: mono('\u{1F4CA}') + ' Poll' },
+  { text: /^(location|live location|موقع)$/i,             label: mono('\u{1F4CD}') + ' Location' },
+  { text: /^(contact|جهة اتصال)$/i,                       label: mono('\u{1F464}') + ' Contact' },
+  { text: /^(document|مستند)$/i,                          label: mono('\u{1F4C4}') + ' Document' },
+  { text: /^(\d+\s*(photos|videos|صور|مقاطع))$/i,             label: mono('\u{1F5BC}') + ' Album' },
   { text: /^(missed voice call|missed video call|مكالمة فائتة)$/i,
-    label: '\u{1F4DE} Missed call' },
-  { text: /^(this message was deleted|تم حذف هذه الرسالة)$/i, label: '\u{1F6AB} Deleted message' },
+    label: mono('\u{1F4DE}') + ' Missed call' },
+  { text: /^(this message was deleted|تم حذف هذه الرسالة)$/i, label: mono('\u{1F6AB}') + ' Deleted message' },
 ];
 
 /* The glyph for a preview WhatsApp handed over as words.
@@ -82,7 +103,11 @@ const mediaFromWords = text => {
    so a body that begins with one already says what arrived, and the rest of it
    is the part the user asked to keep off the screen. Anything else is a message
    of words, and with previews hidden that is all a banner may say about it. */
-const KIND = /^([\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]+\s*[A-Za-z ]+)/u;
+/* FE0E is in the class beside FE0F: every mark carries one now, and a class
+   that did not know it read "Photo" out of a body whose glyph it had stopped
+   recognising -- which is the whole label, so nothing broke visibly and the
+   hidden-preview banner quietly said "New message" for everything. */
+const KIND = /^([\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{FE0E}\u{FE0F}]+\s*[A-Za-z ]+)/u;
 const kindOf = message => {
   const body = String(message || '');
   /* The whole body first, and only then the body with a sender taken off it.
@@ -106,7 +131,7 @@ const pushName = name => String(name == null ? '' : name).replace(/^~\s*/, '').t
    the place a sender belongs. Lifted off and turned back into what it is -- a
    mark on the message -- which is how the phone shows it too. */
 const AIMED_AT_US = [
-  { text: /^(?:replied to you|رد عليك)\s*[:\u061b\u003a]\s*/i, mark: '\u21A9\uFE0F ' },
+  { text: /^(?:replied to you|رد عليك)\s*[:\u061b\u003a]\s*/i, mark: mono('\u21A9') + ' ' },
   { text: /^(?:mentioned you|ذكرك)\s*[:\u061b\u003a]\s*/i,     mark: '@ ' },
 ];
 
@@ -164,4 +189,44 @@ const readBody = (raw, group) => {
 };
 
 
-module.exports = { kindOf, pushName, readBody, mediaFromWords, STICKER };
+/* The mark for each kind of message WhatsApp's own store names, which is the
+   same table the previews above are matched against -- one place, so the two
+   halves of the client cannot drift into calling a voice note different things.
+   A key that is not here is not a message: the census of one real account turned
+   up forty-two type/subtype pairs, of which nine were things people had sent and
+   the rest were WhatsApp talking to itself. An empty label is a message that
+   speaks for itself. */
+const MARKS = {
+  chat:                  '',
+  sticker:               STICKER,
+  image:                 mono('\u{1F4F7}') + ' Photo',
+  video:                 mono('\u{1F3A5}') + ' Video',
+  ptv:                   mono('\u{1F3A5}') + ' Video note',
+  gif:                   mono('\u{1F39E}') + ' GIF',
+  audio:                 mono('\u{1F3B5}') + ' Audio',
+  ptt:                   mono('\u{1F3A4}') + ' Voice message',
+  document:              mono('\u{1F4C4}') + ' Document',
+  album:                 mono('\u{1F5BC}') + ' Album',
+  location:              mono('\u{1F4CD}') + ' Location',
+  live_location:         mono('\u{1F4CD}') + ' Live location',
+  vcard:                 mono('\u{1F464}') + ' Contact',
+  multi_vcard:           mono('\u{1F464}') + ' Contacts',
+  poll_creation:         mono('\u{1F4CA}') + ' Poll',
+  groups_v4_invite:      mono('\u{1F4E8}') + ' Group invite',
+  payment:               mono('\u{1F4B3}') + ' Payment',
+  order:                 mono('\u{1F6CD}') + ' Order',
+  product:               mono('\u{1F6CD}') + ' Product',
+  list:                  mono('\u{1F4CB}') + ' List',
+  interactive:           '',
+  buttons_response:      '',
+  template_button_reply: '',
+  list_response:         '',
+};
+
+/* What goes in front of a message aimed at the user in particular, in the same
+   monochrome as the rest. */
+const MENTION_MARK = '@';
+const REPLY_MARK = mono('↩');
+
+module.exports = { kindOf, pushName, readBody, mediaFromWords, STICKER,
+                   MARKS, MENTION_MARK, REPLY_MARK, TEXT, mono };

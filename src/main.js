@@ -205,6 +205,20 @@ let openChat = '';
 let unreadChatNames = new Set();
 const withdrawing = new Map();          // chat -> the timer that will try again
 
+/* And the same three questions again, answered by WhatsApp's own store instead
+   of by a reading of its chat list. While `storeLive` is true this is the ONLY
+   notification path -- the watcher's nudge and the shim over WhatsApp's own
+   notifications are both refused below -- because the two of them disagreed
+   about what a chat is called, what a mention is and when a message was read,
+   and every one of those disagreements was a bug somebody had to report.
+
+   The identities here are WhatsApp's: a chat id rather than a display name (two
+   chats can share a name, and this account has three such pairs) and a message
+   id rather than the text of a message. */
+let storeLive = false;
+let activeChatId = '';
+const chatTitles = new Map();           // chat id -> what to print for it
+
 /* --------------------------------------------------------------- window */
 
 const clampToScreen = (width, height) => {
@@ -599,6 +613,79 @@ const withdrawRead = key => {
   }
 };
 
+/* --------------------------------------------------- the store's own answers */
+
+/*
+ * Everything below reads WhatsApp's own state rather than a picture of it.
+ * There is no age guard anywhere in it, and that absence is the point: a guard
+ * belongs in front of an inference, and none of these is one. A chat whose
+ * unread count WhatsApp just changed has been read; a message whose type
+ * WhatsApp just rewrote to `revoked` has been taken back. The guards that used
+ * to sit here -- ARRIVAL_SETTLE_MS, a 2.5s grace, a 3s sweep -- were each there
+ * because the chat list answers late, and each of them was a second or more of
+ * a notification sitting on screen for a message the user had already read on
+ * their phone.
+ */
+
+/* A chat read down to `unread` messages.
+ *
+ * WhatsApp counts the messages still waiting, and the ones it is counting are
+ * the last ones in the conversation -- so five unread becoming two means the
+ * oldest three have been read, and it does not matter at all which device read
+ * them. That is partial read handling, and it needs nothing from the read side
+ * but a number. Zero takes the chat's banners with it. */
+const storeRead = (chatId, unread) => {
+  if (!banners || !chatId) return;
+  const held = banners.countFor(chatId);
+  if (!held) return;
+  const closed = banners.trim(chatId, unread);
+  if (!closed) return;
+  console.log('withdrew %d notification(s) for %s: %s', closed,
+              chatTitles.get(chatId) || chatId,
+              unread ? unread + ' message(s) still unread' : 'it has been read');
+};
+
+/* The conversation on screen. An answer from WhatsApp, and one it gives whether
+   or not the window is drawn -- which is what the old reading of aria-selected
+   could not do, and why leaving a chat took a beat to register and swallowed the
+   next message to land in it. */
+const storeActive = chatId => {
+  activeChatId = chatId || '';
+  if (!banners || !activeChatId) return;
+  if (!win || win.isDestroyed()) return;
+  if (!win.isVisible() || win.isMinimized() || !win.isFocused()) return;
+  const closed = banners.trim(activeChatId, 0);
+  if (closed) console.log('withdrew %d notification(s) for %s: it is the chat on screen',
+                          closed, chatTitles.get(activeChatId) || activeChatId);
+};
+
+/* Everything still waiting, asked for outright rather than waited for. The
+   events above are the whole story while the client is listening; this is for
+   the spell where it was not -- a laptop out of suspend, a socket that dropped
+   and came back -- where the only thing that can be trusted is the answer now. */
+const storeUnread = map => {
+  if (!banners || !map || typeof map !== 'object') return;
+  for (const key of banners.keys()) storeRead(key, Number(map[key]) || 0);
+};
+
+/* Whether the store's banners are this client's to raise.
+ *
+ * Deliberately unlike bannersAreOurs: that one refuses while the window is away,
+ * because WhatsApp Web raises its own notification then and dressing both would
+ * be two banners for one message. The store has no such rival -- the shim
+ * swallows WhatsApp's notification while the store is live -- so this path is
+ * the one that runs in every window state, which is what makes a message id and
+ * a chat id available for a message that arrived into the tray. */
+const storeBannersAreOurs = () => {
+  if (!storeLive || !banners) return false;
+  if (!config.get('notifications.enabled')) return false;
+  if (Date.now() - loadedAt < STARTUP_GRACE_MS) {
+    console.log('notification skipped: the client is still syncing');
+    return false;
+  }
+  return true;
+};
+
 /* Whether a banner is this client's to raise at all. While the window is away
    WhatsApp Web raises its own, which the page shim hands over here already
    dressed; the watcher has to stay out of that, or one message arrives twice. */
@@ -703,7 +790,16 @@ const onTitle = title => {
      enough down the list that its row was never rendered has no previous preview
      to have changed, so nothing is reported when a message moves it to the top.
      The count rises all the same. */
-  if (chats > unreadChats &&
+  /* And nothing at all while the store is answering. This is the last of the
+     three ways into the old path and it was the one left open: the two obvious
+     ones -- the watcher's nudge and the shim over WhatsApp's own notifications
+     -- were shut, and a message still arrived twice, with two tones behind it.
+     A count going up is a guess that something arrived, and a guess raises a
+     banner whose identity is the chat, the sender and the text; the store's
+     carries a message id. Nothing deduplicates across those two, so the guess
+     was announcing a second time every message the store had already named. */
+  if (!storeLive &&
+      chats > unreadChats &&
       Date.now() - lastArrivalAt > TITLE_FALLBACK_MS &&
       bannersAreOurs()) {
     describeThenNotify();
@@ -716,6 +812,15 @@ const onTitle = title => {
      places writing the badge and the tray from numbers that disagree is how an
      icon ends up marked unread with nothing behind it. */
   if (chats === 0) unreadMessages = 0;
+
+  /* The badge too. The title counts unread CHATS and leaves muted ones out of
+     even that -- measured "(3)" against six unread chats holding eleven
+     messages -- and the store counts the messages themselves. Letting both
+     write it means the icon flickers between two numbers that disagree. */
+  if (storeLive) {
+    if (win && !win.isDestroyed()) win.setTitle(title && title.trim() ? title : TITLE);
+    return;
+  }
 
   const waiting = unreadMessages === null ? chats : unreadMessages;
   if (tray) tray.setAttention(waiting > 0);
@@ -816,6 +921,11 @@ const wireIpc = () => {
      job: its number counts unread CHATS, so the second and third message from one
      person leave "(1) WhatsApp" exactly as it was and nothing fires. */
   ipcMain.on('wa:arrival', () => {
+    /* Refused outright while the store is answering. This nudge is the chat-list
+       watcher's, and the watcher stops sending it then -- this is the second
+       half of that gate, so a report already in flight when the store came up
+       does not turn into a duplicate banner. */
+    if (storeLive) return;
     if (!bannersAreOurs()) return;
     lastArrivalAt = Date.now();
     describeThenNotify();
@@ -825,6 +935,7 @@ const wireIpc = () => {
      and handed over with the sender's picture already fetched. The click goes
      back to the page, whose own handler opens the conversation. */
   ipcMain.on('wa:page-notification', (event, note) => {
+    if (storeLive) return;
     if (!note || !config.get('notifications.enabled')) return;
     /* The page says whether this chat is a group, because WhatsApp's own body
        reads "Sender: message" for one and the bare message for the other, and
@@ -913,12 +1024,141 @@ const wireIpc = () => {
                 banner.key);
   });
 
+  /* ------------------------------------------------ WhatsApp's own store */
+
+  ipcMain.on('wa:store-ready', (event, state) => {
+    const ready = !!(state && state.ready);
+    if (ready === storeLive) return;
+    storeLive = ready;
+    if (!ready) {
+      console.log('WhatsApp\'s store is not answering; the chat list watcher is in charge');
+      return;
+    }
+    /* What the chat list had been reporting is not carried over: it speaks in
+       display names and the store speaks in chat ids, and a mixed set is a set
+       nothing can withdraw from. The store's own report of what is unread
+       follows immediately behind this. */
+    unreadChatNames = new Set();
+    for (const timer of withdrawing.values()) clearTimeout(timer);
+    withdrawing.clear();
+  });
+
+  /* One message, as WhatsApp described it: a message id, a chat id, the sender
+     when there is one, and a mark for what kind of thing arrived. Nothing here
+     is parsed out of a sentence -- the "Sender: message" split that a
+     notification body used to need, and the heuristic that decided a direct
+     message reading "the link is https://..." came from somebody called "the
+     link is https", are both gone with the body they were reading. */
+  ipcMain.on('wa:store-message', (event, note) => {
+    if (!note || !note.chat || !note.title) return;
+    if (!storeBannersAreOurs()) return;
+
+    chatTitles.set(note.chat, note.title);
+    if (chatTitles.size > 512) chatTitles.delete(chatTitles.keys().next().value);
+
+    const mark = note.mark ? note.mark.trim() : '';
+    /* The mark and the words, in that order, and either of them may be missing:
+       a photo with no caption is its mark alone, and a message of words has none
+       at all. */
+    const said = [mark, note.text].filter(Boolean).join(' ');
+
+    /* Two ways to put a name in front of a line, and the difference is not
+       cosmetic. A message is "Mega: نتقابل بكرة" -- the colon says Mega SAID
+       this. A reaction is "Mega reacted 😂 to: ..." -- Mega said none of it,
+       this client is describing what they did, and a colon after the name would
+       claim otherwise. Either way the direction comes from the message and the
+       name is isolated inside it, so a Latin name cannot reorder an Arabic
+       line. */
+    const body = note.join === 'space'
+      ? bidi.paragraph((note.sender ? bidi.isolate(note.sender) + ' ' : '') + said,
+                       bidi.directionOf(said))
+      : bidi.line(note.sender, said);
+    const banner = banners.show({
+      /* The message and no other. This used to be the chat, the sender and the
+         text hashed together, which is as close to a message's identity as
+         reading a chat list can get -- and it cost a genuinely repeated message
+         inside two minutes, because two identical sentences hash the same. A
+         message id is the thing itself. */
+      identity: note.msg,
+      msgId: note.msg,
+      /* Keyed on the chat ID. Every withdrawal below speaks the same identity,
+         so a banner can always be taken down -- which a key made of a display
+         name could not promise, with two chats sharing one. */
+      key: note.chat,
+      title: bidi.paragraph(note.title),
+      body,
+      /* What the banner may say with previews turned off. The page names it when
+         the mark alone would not -- a reaction has no mark, and "New message" is
+         the wrong thing to call one. */
+      redacted: note.redacted || mark || 'New message',
+      icon: note.avatar,
+      onClick: () => {
+        showWindow();
+        if (win && !win.isDestroyed())
+          win.webContents.send('wa:store-open', { chat: note.chat, name: note.title,
+                                                  preview: note.text });
+      },
+    });
+    if (!banner) return;
+    console.log('raised: %s in %s%s', note.why === 'reaction' ? 'a reaction'
+                : mark || 'a message of words', note.title,
+                note.mention ? ' (addressed to you)' : '');
+    playTone();
+  });
+
+  /* A message landing in the conversation the user is looking at, on screen and
+     in front of them. Nothing: no banner, and no tone either. The bubble was
+     drawn under their eyes as it arrived and there is nothing left for an
+     announcement to tell them -- which is the owner's own rule for this case,
+     stated twice. A tone was put here for a moment, on the reasoning that
+     WhatsApp's own had been muted and the case would otherwise go silent, and
+     silent is exactly what it is meant to be. */
+  ipcMain.on('wa:store-open-arrival', () => {
+    if (!storeBannersAreOurs()) return;
+    console.log('a message in the chat on screen: nothing raised, and nothing played');
+  });
+
+  /* Read. Here, on the phone, or on another desktop -- WhatsApp does not say
+     which and it does not matter. */
+  ipcMain.on('wa:store-read', (event, state) => {
+    if (!storeLive || !state) return;
+    storeRead(state.chat, Number(state.unread) || 0);
+  });
+
+  ipcMain.on('wa:store-active', (event, state) => {
+    if (!storeLive || !state) return;
+    storeActive(state.chat || '');
+  });
+
+  ipcMain.on('wa:store-unread', (event, map) => {
+    if (!storeLive) return;
+    storeUnread(map);
+  });
+
+  /* Deleted for everyone. The banner for that one message comes down and nothing
+     is raised in its place -- the phone withdraws it silently, and a notification
+     announcing that a message the user never read has been deleted tells them
+     about a message twice over and about its contents not at all. */
+  ipcMain.on('wa:store-gone', (event, state) => {
+    if (!storeLive || !state || !state.msg || !banners) return;
+    const closed = banners.closeMessage(state.msg);
+    if (closed) console.log('withdrew %d notification(s): the message was deleted', closed);
+  });
+
+  ipcMain.on('wa:store-count', (event, count) => {
+    if (!storeLive || !count || typeof count.messages !== 'number') return;
+    unreadMessages = count.messages;
+    setBadge(count.messages);
+    if (tray) tray.setAttention(count.messages > 0);
+  });
+
   /* The conversation on screen, reported by the page when it changes and again
      whenever the window comes back. This is the signal that takes a banner down
      the moment the user opens the chat -- the unread report below cannot: it is
      refused for the first few seconds of a banner's life, and it is sent only
      when the answer changes, so those few seconds used to be for ever. */
   ipcMain.on('wa:open-chat', (event, name) => {
+    if (storeLive) return;
     openChat = typeof name === 'string' ? name : '';
     withdrawOpen();
   });
@@ -929,6 +1169,7 @@ const wireIpc = () => {
      screen -- and it stops being unread whether it was read here or on the
      phone, because WhatsApp Web clears the pill either way. */
   ipcMain.on('wa:unread-chats', (event, names) => {
+    if (storeLive) return;
     if (!Array.isArray(names) || !banners) return;
     unreadChatNames = new Set(names);
     const held = banners.keys();
@@ -943,6 +1184,7 @@ const wireIpc = () => {
   /* How many messages are waiting, counted off the unread pills rather than
      inferred from the document title. This is the number the badge wants. */
   ipcMain.on('wa:unread-count', (event, count) => {
+    if (storeLive) return;
     if (!count || typeof count.messages !== 'number') return;
     unreadMessages = count.messages;
     setBadge(count.messages);

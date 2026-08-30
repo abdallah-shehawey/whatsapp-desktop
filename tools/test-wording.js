@@ -8,7 +8,8 @@
  */
 'use strict';
 
-const { kindOf, pushName, readBody, mediaFromWords } = require('../src/wording.js');
+const { kindOf, pushName, readBody, mediaFromWords, MARKS, REPLY_MARK } =
+  require('../src/wording.js');
 
 let failures = 0;
 const check = (label, got, want) => {
@@ -81,7 +82,7 @@ check('"replied to you" is a mark on the message, not the person who wrote it',
 check('and the message is what they actually said',
       readBody('Replied to you: ~Ahmed: جميل').message, 'جميل');
 check('and the mark travels separately, to go in front of the line',
-      readBody('Replied to you: ~Ahmed: جميل').mark, '↩️ ');
+      readBody('Replied to you: ~Ahmed: جميل').mark, REPLY_MARK + ' ');
 
 check('a mention is marked with the sign WhatsApp uses for one',
       readBody('Mentioned you: Ahmed: يا عبدالله').mark, '@ ');
@@ -103,13 +104,13 @@ check('a message that starts with the words but is not the mark is left alone',
    -- "Sticker", and nothing to look at -- because only the chat-list watcher
    had this table. */
 check('a sticker WhatsApp named itself gets the mark too',
-      mediaFromWords('Sticker'), '\u{1F49F} Sticker');
-check('and a voice message', mediaFromWords('Voice message'), '\u{1F3A4} Voice message');
-check('and a photo', mediaFromWords('Photo'), '\u{1F4F7} Photo');
+      mediaFromWords('Sticker'), MARKS.sticker);
+check('and a voice message', mediaFromWords('Voice message'), MARKS.ptt);
+check('and a photo', mediaFromWords('Photo'), MARKS.image);
 check('and the round video keeps WhatsApp\'s own name for it',
-      mediaFromWords('Video note'), '\u{1F3A5} Video note');
-check('in Arabic as well', mediaFromWords('\u0645\u0644\u0635\u0642'), '\u{1F49F} Sticker');
-check('an album counts what is in it', mediaFromWords('4 photos'), '\u{1F5BC}\uFE0F Album');
+      mediaFromWords('Video note'), MARKS.ptv);
+check('in Arabic as well', mediaFromWords('\u0645\u0644\u0635\u0642'), MARKS.sticker);
+check('an album counts what is in it', mediaFromWords('4 photos'), MARKS.album);
 
 /* Anchored, or a message ABOUT a photo becomes a photo. */
 check('a message that merely mentions one is a message',
@@ -121,9 +122,9 @@ check('and nothing at all names nothing', mediaFromWords(''), '');
 /* With previews hidden the banner still says what kind of thing arrived, and
    that is read back off the glyph the page put in front of it. */
 check('a sticker is still announced as a sticker with the words hidden',
-      kindOf('Mega: \u{1F49F} Sticker'), '\u{1F49F} Sticker');
+      kindOf('Mega: ' + MARKS.sticker), MARKS.sticker);
 check('and a voice note keeps its name but not its length',
-      kindOf('\u{1F3A4} Voice message (0:41)'), '\u{1F3A4} Voice message');
+      kindOf(MARKS.ptt + ' (0:41)'), MARKS.ptt);
 check('a message of words says only that it is one',
       kindOf('Ahmed: نتقابل بكرة الساعة ٥'), 'New message');
 check('and so does one with nothing in it',

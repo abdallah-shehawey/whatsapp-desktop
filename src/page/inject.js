@@ -23,6 +23,7 @@
 'use strict';
 
 const wording = require('../wording.js');
+const store = require('./store.js');
 
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
@@ -51,10 +52,18 @@ const start = ({ send, on }) => {
   let focused = false;
   let arrivals = [];
 
+  /* WhatsApp's own store, once it answers. Everything below it in this file --
+     the chat-list watcher, the shim over the notifications WhatsApp raises --
+     is what happens when it does not. See store.js: those two paths read a
+     picture drawn for a person and infer from it, and the store is asked. */
+  let waStore = null;
+  const storeLive = () => !!(waStore && waStore.ready);
+
   on('focus', state => {
     state = !!state;
     if (state === focused) return;
     focused = state;
+    if (waStore) waStore.setFocus(focused);
     /* Nothing queued survives the window going away: from here the page raises
        its own notifications, so an arrival still waiting to be asked about would
        be announced a second time the moment the window came back. */
@@ -307,7 +316,10 @@ const start = ({ send, on }) => {
   /* The app is told that something landed; it then asks what. Only the nudge is
      pushed -- pushing the description is the race that used to make every banner
      read "You have a new message". */
-  const ping = () => send('arrival', null);
+  /* Silent while the store is answering: two paths reporting one message is two
+     banners, and the store's report is the better of the two in every way the
+     other one was measured to be wrong. */
+  const ping = () => { if (!storeLive()) send('arrival', null); };
 
   /* Keyed on the row itself, never on the chat name: two chats can carry the same
      name -- this account has four such pairs, and keying by name made each scan
@@ -881,7 +893,7 @@ const start = ({ send, on }) => {
     const key = names.sort().join(SEP);
     if (key !== lastUnread) {
       lastUnread = key;
-      send('unread-chats', names);
+      if (!storeLive()) send('unread-chats', names);
     }
 
     /* And the number the launcher draws on the icon.
@@ -908,7 +920,7 @@ const start = ({ send, on }) => {
     const counted = chats + SEP + messages;
     if (counted !== lastCount) {
       lastCount = counted;
-      send('unread-count', { chats, messages });
+      if (!storeLive()) send('unread-count', { chats, messages });
     }
   };
 
@@ -933,7 +945,7 @@ const start = ({ send, on }) => {
     const name = row ? nameOf(row) : '';
     if (name === lastOpen) return;
     lastOpen = name;
-    send('open-chat', name);
+    if (!storeLive()) send('open-chat', name);
   };
   const refreshOpen = () => { lastOpen = null; reportOpen(); };
 
@@ -1913,6 +1925,12 @@ const start = ({ send, on }) => {
            withdrawals all speak in chat-list names. A notification keyed on
            anything else is one nothing can take down again. */
         const chat = chatNameFor(this.title);
+        /* Swallowed rather than dressed. The shim stays installed either way --
+           taking it out would let Chromium raise WhatsApp's own notification,
+           which is the one with the wrong picture and no way to withdraw it --
+           but while the store is answering, this message has already been
+           announced from it, with a message id on it and a chat id to open. */
+        if (storeLive()) return;
         log('WhatsApp raised a notification of its own');
         Promise.resolve()
           .then(() => {
@@ -1986,8 +2004,39 @@ const start = ({ send, on }) => {
     } catch (e) { log('could not shim the service worker notifications: ' + e.message); }
   };
 
+  /* Opening a conversation the app asked for by chat id -- the identity a
+     notification now carries. It goes to WhatsApp's own openChatBottom, which
+     needs no row on the page and cannot pick the wrong one of two chats sharing
+     a name. Pressing a row is what happens when that is not available. */
+  on('store-open', request => {
+    const chatId = request && request.chat;
+    if (chatId && waStore && waStore.open(chatId)) {
+      setTimeout(() => { if (waStore) send('store-active', { chat: waStore.activeChat() }); }, 300);
+      return;
+    }
+    if (request && request.name) {
+      log('opening "' + request.name + '" by name: the store could not place ' + chatId);
+      /* The same path a banner raised by the watcher takes. */
+      const row = findRow(request.name, request.preview) || rowFor(request.name);
+      if (row) pressRow(row);
+    }
+  });
+
   on('config', config => {
     if (config && config.notifications) installNotificationShim();
+
+    /* And the store, started once the app has said what it wants. It answers a
+       beat later than this -- WhatsApp has to finish loading before its
+       collections hold anything -- so everything above stays in charge until
+       store-ready arrives with ready: true. */
+    if (!waStore) {
+      waStore = store.start({
+        send, log,
+        fetchAvatar: url => withTimeout(fetchAvatar(url)),
+        faceFor: name => avatarFor(name),
+      });
+      waStore.setFocus(focused);
+    }
     muteSendTone = !!(config && config.muteSendTone);
     mutePageTone = !!(config && config.mutePageTone);
     log('ready on ' + location.host);
