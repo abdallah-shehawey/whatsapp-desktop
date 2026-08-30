@@ -488,7 +488,7 @@ const isWhatsApp = (url: string) => {
   if (!url) return true;
   if (url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('about:')) return true;
   try {
-    const host = new global.URL(url).hostname;
+    const host = new URL(url).hostname;
     return host === 'web.whatsapp.com' || host.endsWith('.whatsapp.com') || host === 'whatsapp.com';
   } catch (e) {
     return false;
@@ -1395,8 +1395,6 @@ app.whenReady().then(() => {
     onSettings: openSettings,
     onSetTheme: setTheme,
     getTheme: () => config.get('view.theme') || 'system',
-    onToggleAutostart: () => setAutostart(!autostart.isEnabled()),
-    getAutostart: () => autostart.isEnabled(),
     title: TITLE,
   });
 

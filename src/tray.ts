@@ -113,12 +113,12 @@ class TrayIcon {
   windowVisible: any;
   stopWaiting: any;
 
-  constructor({ normal, attention, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, onToggleAutostart, getAutostart, title = 'WhatsApp' }: { normal: string; attention?: string; onShow?: () => void; onHide?: () => void; onQuit?: () => void; onSettings?: () => void; onSetTheme?: (theme: string) => void; getTheme?: () => string; onToggleAutostart?: () => void; getAutostart?: () => boolean; title?: string }) {
+  constructor({ normal, attention, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, title = 'WhatsApp' }: { normal: string; attention?: string; onShow?: () => void; onHide?: () => void; onQuit?: () => void; onSettings?: () => void; onSetTheme?: (theme: string) => void; getTheme?: () => string; onToggleAutostart?: () => void; getAutostart?: () => boolean; title?: string }) {
     this.icons = {
       normal: nativeImage.createFromPath(normal),
       attention: nativeImage.createFromPath(attention || normal),
     };
-    this.handlers = { onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, onToggleAutostart, getAutostart };
+    this.handlers = { onShow, onHide, onQuit, onSettings, onSetTheme, getTheme };
     this.title = title;
     this.unread = false;
     this.windowVisible = false;
@@ -143,7 +143,6 @@ class TrayIcon {
   render() {
     if (!this.tray) return;
     const currentTheme = this.handlers.getTheme ? this.handlers.getTheme() : 'system';
-    const autostart = this.handlers.getAutostart ? this.handlers.getAutostart() : false;
 
     this.tray.setContextMenu(Menu.buildFromTemplate([
       {
