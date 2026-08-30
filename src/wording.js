@@ -52,6 +52,25 @@ const TEXT = '︎';
 const mono = character => character + TEXT;
 
 const STICKER = mono('\u{1F49F}') + ' Sticker';
+
+/* A call nobody answered, which is not a message and needs a mark of its own.
+   Three of them: the phone names the two kinds separately -- a missed video call
+   is a different thing to be owed than a missed voice call -- and the third is
+   for a preview that says only that one was missed. */
+const MISSED = {
+  voice: mono('\u{1F4DE}') + ' Missed voice call',
+  video: mono('\u{1F4F9}') + ' Missed video call',
+  call:  mono('\u{1F4DE}') + ' Missed call',
+};
+
+/* And the same call while it is still ringing, which is a different thing to be
+   told and is told in the present tense. The marks are the same characters: what
+   changes between the two is which of them has already happened. */
+const RINGING = {
+  voice: mono('\u{1F4DE}') + ' Incoming voice call',
+  video: mono('\u{1F4F9}') + ' Incoming video call',
+  call:  mono('\u{1F4DE}') + ' Incoming call',
+};
 /* The selector is on the three whose default presentation is text -- the label,
    the film frames and the framed picture -- and off the rest, whose default is
    already the emoji. Adding it where it is not needed makes a sequence Unicode
@@ -76,8 +95,9 @@ const MEDIA_WORDS = [
   { text: /^(contact|جهة اتصال)$/i,                       label: mono('\u{1F464}') + ' Contact' },
   { text: /^(document|مستند)$/i,                          label: mono('\u{1F4C4}') + ' Document' },
   { text: /^(\d+\s*(photos|videos|صور|مقاطع))$/i,             label: mono('\u{1F5BC}') + ' Album' },
-  { text: /^(missed voice call|missed video call|مكالمة فائتة)$/i,
-    label: mono('\u{1F4DE}') + ' Missed call' },
+  { text: /^(missed voice call|مكالمة صوتية فائتة)$/i,     label: MISSED.voice },
+  { text: /^(missed video call|مكالمة فيديو فائتة)$/i,     label: MISSED.video },
+  { text: /^(missed call|مكالمة فائتة)$/i,                 label: MISSED.call },
   { text: /^(this message was deleted|تم حذف هذه الرسالة)$/i, label: mono('\u{1F6AB}') + ' Deleted message' },
 ];
 
@@ -228,5 +248,5 @@ const MARKS = {
 const MENTION_MARK = '@';
 const REPLY_MARK = mono('↩');
 
-module.exports = { kindOf, pushName, readBody, mediaFromWords, STICKER,
-                   MARKS, MENTION_MARK, REPLY_MARK, TEXT, mono };
+module.exports = { kindOf, pushName, readBody, mediaFromWords, STICKER, MISSED,
+                   RINGING, MARKS, MENTION_MARK, REPLY_MARK, TEXT, mono };

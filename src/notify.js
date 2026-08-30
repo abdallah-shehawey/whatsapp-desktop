@@ -156,7 +156,7 @@ class Seen {
  * lets it be withdrawn when that chat is read.
  */
 class Entry {
-  constructor(owner, { key, msgId, title, body, iconPath, onClick }) {
+  constructor(owner, { key, msgId, title, body, iconPath, onClick, ongoing }) {
     this.owner = owner;
     this.key = key || title;
     /* The message this banner is, when there is one to name. A withdrawal used
@@ -173,6 +173,11 @@ class Entry {
     this.settled = false;
     this.timer = null;
     this.current = null;
+    /* Announcing something that is still happening rather than something that
+       has happened -- a telephone ringing, and nothing else so far. It is an
+       ordinary banner in every way but one: it is withdrawn when the thing it
+       announces is over, and by nothing else. See trim. */
+    this.ongoing = !!ongoing;
   }
 
   _open() { try { this.onClick && this.onClick(); } catch (e) {} }
@@ -301,7 +306,7 @@ class Banners {
    * icon      base64 image bytes for the sender's picture, or nothing
    * onClick   what to do when the user clicks the banner
    */
-  show({ identity, msgId, key, title, body, icon, onClick, redacted }) {
+  show({ identity, msgId, key, title, body, icon, onClick, redacted, ongoing }) {
     if (!this.supported || !title) return null;
 
     if (identity && this.seen) {
@@ -319,6 +324,7 @@ class Banners {
       body: this.hidePreview ? (redacted || 'New message') : body,
       iconPath: avatarPath(icon) || this.appIcon || undefined,
       onClick,
+      ongoing,
     });
 
     let set = this.byKey.get(entry.key);
@@ -344,6 +350,7 @@ class Banners {
     if (!set) return 0;
     let closed = 0;
     for (const entry of [...set]) {
+      if (entry.ongoing) continue;                   // see trim
       if (Date.now() - entry.raisedAt < minimumAge) continue;
       entry.dispose();
       closed++;
@@ -394,7 +401,10 @@ class Banners {
   trim(key, keep) {
     const set = this.byKey.get(key);
     if (!set) return 0;
-    const live = [...set];
+    /* A telephone ringing is not one of the unread messages this count is
+       about, and nothing WhatsApp says about a chat being read says the ringing
+       has stopped. It comes down when the call is over and by no other route. */
+    const live = [...set].filter(entry => !entry.ongoing);
     const going = keep > 0 ? live.slice(0, Math.max(0, live.length - keep)) : live;
     for (const entry of going) entry.dispose();
     return going.length;

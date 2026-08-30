@@ -236,6 +236,66 @@ const install = (getWindow, getBanners) => {
       return;
     }
 
+    /* The whole of an incoming call, without one.
+     *
+     * The banner for a call goes up, two ordinary ones are announced while it is
+     * still ringing, and then the ringing stops: the first is withdrawn and the
+     * call that was missed goes up in its place. What is being checked is the
+     * part no unit test can reach -- that a banner announcing something still
+     * happening survives in the notification centre until it is over, that the
+     * two raised during it arrive like any others, and that the withdrawal takes
+     * the right one down. Each rehearsal of the real thing costs somebody a
+     * telephone call, which is why this exists. */
+    if (source === '#ring' || source.startsWith('#ring ')) {
+      const banners = getBanners && getBanners();
+      if (!banners) { console.log('debug: no banners to raise'); return; }
+      const bidi = require('./bidi.js');
+      const wording = require('./wording.js');
+      const mark = wording.RINGING.voice;
+      /* Long enough to push the banner away, walk to the notification centre and
+         look for it, because that is one of the things being checked. A real
+         call rings for something like forty seconds. */
+      const seconds = Math.max(3, Number(source.slice(5).trim()) || 25);
+      banners.show({
+        identity: 'debug-ring' + Date.now(), msgId: 'debug-ring', key: '__ring__',
+        ongoing: true, title: bidi.paragraph('Mega'), body: bidi.line('', mark),
+      });
+      console.log('debug: ringing; two messages behind it, and it stops in %ds', seconds);
+
+      /* One from somebody else and one from the very person who is ringing. The
+         second is the case worth rehearsing: a caller who writes while the
+         telephone is still ringing is owed that message like anybody else, and
+         the banner for their own call must not take it down with it. */
+      const held = [
+        { who: 'Ahmed', key: '__held__',
+          said: '\u0627\u0648\u0644 \u0631\u0633\u0627\u0644\u0629 \u0648\u0642\u062A \u0627\u0644\u0631\u0646\u064A\u0646' },
+        { who: 'Mega', key: '__ring__',
+          said: '\u0631\u0633\u0627\u0644\u0629 \u0645\u0646 \u0627\u0644\u0644\u064A \u0628\u064A\u0631\u0646 \u0646\u0641\u0633\u0647' },
+      ];
+      let n = 0;
+      for (const one of held) {
+        const at = ++n;
+        setTimeout(() => banners.show({
+          identity: 'debug-held' + Date.now() + at, msgId: 'debug-held' + at,
+          key: one.key, title: bidi.paragraph(one.who),
+          body: bidi.line(one.who, one.said),
+        }), at * 1000);
+      }
+      /* The ringing stopping: the banner for the call goes, wherever it had got
+         to -- on the screen, or waiting in the notification centre -- and the
+         call that was missed goes up in its place. The same call twice over is
+         not what the centre is for. */
+      setTimeout(() => {
+        console.log('debug: %d ringing banner(s) taken down', banners.closeMessage('debug-ring'));
+        banners.show({
+          identity: 'debug-missed' + Date.now(), msgId: 'debug-missed', key: '__ring__',
+          title: bidi.paragraph('Mega'), body: bidi.line('', wording.MISSED.voice),
+        });
+        console.log('debug: and the missed call in its place');
+      }, seconds * 1000);
+      return;
+    }
+
     /* What a full collection actually reclaims, which is the only way to know
        whether asking for one is worth wiring up. HeapProfiler.collectGarbage
        goes through the devtools protocol, so it needs neither --expose-gc nor
@@ -350,6 +410,20 @@ const install = (getWindow, getBanners) => {
     if (source === '#gpu') {
       const { app } = require('electron');
       console.log('debug: %s', JSON.stringify(app.getGPUFeatureStatus()));
+      return;
+    }
+
+    /* Down the app's own path rather than by signal.
+       A change to the page half needs no restart at all: inject.js and what it
+       requires are a preload, and a reload re-reads them from disk -- measured,
+       by marking the file and reloading. A change to main.js, notify.js or the
+       tray does need one, and this is that restart. It is the quit the tray menu
+       and Ctrl+Q call, which lets Chromium close its storage on the way out
+       rather than being cut off mid-write by a signal. */
+    if (source === '#quit') {
+      console.log('debug: quitting');
+      const { app } = require('electron');
+      app.quit();
       return;
     }
 

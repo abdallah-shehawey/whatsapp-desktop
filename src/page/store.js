@@ -30,6 +30,7 @@
  *                                               measured at 16ms behind arrival
  *   ChatCollection     'change:active'          the conversation on screen
  *   MsgCollection      'change:type' -> revoked deleted for everyone
+ *   MsgCollection      'change'                 a call that has stopped ringing
  *   ReactionsCollection 'add'/'change'          somebody reacted, and to what
  *
  * These are private names and they will not be private for ever, so nothing
@@ -77,13 +78,24 @@ const POLL_MS = 400;
  * were WhatsApp talking to itself (e2e_notification, gp2, call_log, protocol,
  * notification_template, biz_content_placeholder, message_history_notice). A
  * deny-list would announce every one of those the first time WhatsApp invented a
- * new one. */
+ * new one.
+ *
+ * `call_log` is the one of those the user is owed something for, and it is
+ * handled apart from this table -- see missedCall below, and CALL. */
 const KINDS = wording.MARKS;
 
 /* A message that has not decrypted yet. WhatsApp puts it in the collection as
    this and rewrites its type when the key arrives, so it is not dropped -- it is
    remembered, and announced when it turns into something. */
 const PENDING = 'ciphertext';
+
+/* A call, which WhatsApp files as an ordinary message in the chat it was made
+   from. It is a system message -- WAWebMsgType.SYSTEM_MESSAGE_TYPES lists it
+   beside gp2 and e2e_notification -- and the table above drops all of those,
+   which is right for every one of them except this. WhatsApp itself makes the
+   same exception: WAWebGetNotificationStrings.getNotificationMessageBody has a
+   `case "call_log"` among the message types it writes a body for. */
+const CALL = 'call_log';
 
 const start = ({ send, log, fetchAvatar, faceFor }) => {
   /* `window` itself is checked, not just the registry on it. This module is a
@@ -118,6 +130,8 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     const picMod     = grab('WAWebProfilePicThumbCollection');
     const cmdMod     = grab('WAWebCmd');
     const meMod      = grab('WAWebUserPrefsMeUser');
+    const getterMod  = grab('WAWebMsgGetters');
+    const callMod    = grab('WAWebCallLogMsgData.flow');
 
     return {
       chats, msgs,
@@ -127,6 +141,11 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
       pics: picMod && picMod.ProfilePicThumbCollection,
       cmd: cmdMod && cmdMod.Cmd,
       me: meMod,
+      getters: getterMod,
+      /* Non-enumerable, so Object.keys answers {} and the values have to be
+         asked for by name. Each one is its own name -- Missed is "Missed" -- and
+         the fallbacks below say so, but the enum is read first. */
+      outcomes: callMod && callMod.CallOutcome,
     };
   };
 
@@ -456,10 +475,100 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     return said.length > TEXT_MAX ? said.slice(0, TEXT_MAX) + '…' : said;
   };
 
+  /* ----------------------------------------------------------------- calls */
+
+  /* One of WhatsApp's own memoised getters, read off the message. These are the
+     very ones WAWebFormatCallLog consults when it writes the call's line into
+     the chat, so nothing below is a second opinion about a call. */
+  const askCall = (name, msg) => {
+    try {
+      const get = S.getters && S.getters[name];
+      return typeof get === 'function' ? get(msg) : undefined;
+    } catch (e) { return undefined; }
+  };
+
+  /*
+   * A call nobody picked up, and the mark to put on it -- or null for every
+   * other thing a call can be.
+   *
+   * This is the one system message the user is owed a banner for, and it went
+   * missing the day the store took over: WhatsApp Web raises its own
+   * notification for a missed call, the shim in inject.js swallows that while
+   * the store is live, and the store dropped call_log with the rest of the
+   * types it does not recognise. Nobody was announcing it.
+   *
+   * Which outcomes are worth a banner is the phone's answer rather than a new
+   * one. WAWebCallLogMsgData.flow names eight:
+   *
+   *   Missed, Canceled     nobody answered, or the caller gave up waiting
+   *   Rejected             the user turned it down, so they know
+   *   AcceptedElsewhere    the user answered on the phone, so they know
+   *   Completed            answered here
+   *   Ongoing              ringing right now, and it has no outcome yet
+   *   Failed, Unknown      nothing a person did
+   *
+   * Ongoing matters more than it looks, and the two outcomes have to be read in
+   * WhatsApp's own order to get it right. Measured on a real call: the log lands
+   * in the chat the instant the phone starts ringing, carrying callOutcome
+   * "Ongoing" and finalCallOutcome ALREADY "Missed" -- WhatsApp writes the
+   * pessimistic answer up front and settles it when the call is over. Reading
+   * the final one first therefore announced a missed call while the phone was
+   * still ringing, which is exactly what the owner saw.
+   *
+   * So the live state wins, which is the test WAWebFormatCallLog itself makes:
+   *
+   *   isOngoing = callOutcome === Ongoing && finalCallOutcome !== Completed
+   *
+   * A call still ringing answers null here, and the `change` this file listens
+   * for brings the message back once the outcome has settled.
+   */
+  const callNow = msg => {
+    if (!S.getters) return null;
+
+    /* WhatsApp's own switch for an unknown number that was never allowed to
+       ring. Announcing it is the thing the user turned it on to avoid. */
+    if (askCall('getIsCallSilenced', msg) === true) return null;
+    if (askCall('getIsSentByMe', msg) === true) return null;
+
+    /* Each name in the enum is its own value -- Missed is "Missed" -- so the
+       fallback is the name itself, but the enum is what is read. */
+    const names = S.outcomes || {};
+    const named = name => names[name] || name;
+
+    /* Named the way the phone names it. A build that stops answering which kind
+       of call it was still gets a mark, because the one thing worth saying is
+       that there was a call. */
+    const markFrom = set => {
+      const video = askCall('getIsVideoCall', msg);
+      if (video === true) return set.video;
+      if (video === false) return set.voice;
+      return set.call;
+    };
+
+    const outcome = askCall('getCallOutcome', msg);
+    const final = askCall('getFinalCallOutcome', msg);
+    if (outcome === named('Ongoing') && final !== named('Completed'))
+      return { ringing: true, mark: markFrom(wording.RINGING) };
+
+    const settled = final == null ? outcome : final;
+    if (settled == null) return null;
+    if (settled !== named('Missed') && settled !== named('Canceled') &&
+        askCall('getIsMissedCall', msg) !== true) return null;
+    return { ringing: false, mark: markFrom(wording.MISSED) };
+  };
+
   /* The mark for what arrived. A voice note gets its length, the way the phone
      writes it, because "Voice message" alone loses the one fact about it that
      the chat list bothers to show. */
   const markOf = msg => {
+    /* A call is not in the table above, because it is not one kind of thing but
+       several and only one of them is news here. A call still ringing has a
+       banner of its own -- see calling() -- and nothing for this path to say
+       until it is over. */
+    if (msg.type === CALL) {
+      const call = callNow(msg);
+      return call && !call.ringing ? call.mark : null;
+    }
     const label = KINDS[msg.type];
     if (label === undefined) return null;                    // not a message
     if (msg.type !== 'ptt' && msg.type !== 'audio') return label;
@@ -544,6 +653,85 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     };
     payload.avatar = await pictureFor(chat);
     send('store-message', payload);
+  };
+
+  /* -------------------------------------------------- a telephone ringing */
+
+  /*
+   * A call while it is still ringing, which is a banner that stands until it
+   * stops rather than one that is read and gone.
+   *
+   * One message carries both edges of this. WhatsApp writes the call into the
+   * chat with the outcome Ongoing the instant the offer lands and rewrites it
+   * when the call is over -- measured on a real call at 15452ms and 21807ms,
+   * six seconds apart, both on the same message id. So this is asked on the
+   * arrival and on every change, and "is it ringing" is the answer callNow
+   * already gives.
+   *
+   * Keyed by WhatsApp's own call id and not by the message. The banner for a
+   * call that was MISSED is keyed on the message, and the two have to be
+   * different things: they are both up for a moment while one replaces the
+   * other, and taking one down must not take the other with it.
+   */
+  const ringing = new Map();          // call id -> the chat it is ringing in
+
+  const calling = async msg => {
+    if (!S) return;
+
+    let callId, chatId;
+    try {
+      if (!msg || msg.type !== CALL || !msg.id || msg.id.fromMe) return;
+      callId = String(askCall('getCallId', msg) || keyOf(msg.id));
+      chatId = widOf(msg.id.remote);
+    } catch (e) { return; }
+    if (!callId || !chatId) return;
+
+    const call = callNow(msg);
+
+    /* Stopped ringing -- answered, turned down, or missed. The banner comes down
+       either way. Whether a missed call is announced in its place is arrived()'s
+       answer and not this one's, which is why nothing here looks at why it
+       stopped. */
+    if (!call || !call.ringing) {
+      if (!ringing.delete(callId)) return;
+      send('store-ring-over', { call: callId, chat: chatId });
+      return;
+    }
+
+    if (ringing.has(callId)) return;               // already announced
+    if (!enabled) return;
+    if (Date.now() - liveAt < SETTLE_MS) return;
+
+    /* History filling in behind the sync, which is full of calls that were
+       ringing once. None of them is ringing now. */
+    const age = Date.now() / 1000 - (Number(msg.t) || 0);
+    if (!(age < FRESH_S)) return;
+
+    /* The window is in front of the user and WhatsApp draws the incoming call
+       across the whole of it. A banner would be a second copy of something
+       already filling the screen. */
+    if (focused) return;
+
+    const chat = chatOf(msg.id.remote);
+    if (!chat) return;
+    if (!wanted(chat)) return;
+    /* Muting is deliberately not consulted here, and that is the phone's own
+       behaviour: muting a chat silences its messages, and a call from the same
+       person still rings. */
+
+    ringing.set(callId, chatId);
+    if (ringing.size > 32) ringing.delete(ringing.keys().next().value);
+
+    const group = isGroup(chat);
+    send('store-ringing', {
+      call: callId,
+      chat: chatId,
+      title: titleOf(chat),
+      sender: group ? nameOf(msg.author || msg.from, msg.notifyName) : '',
+      group,
+      mark: call.mark,
+      avatar: await pictureFor(chat),
+    });
   };
 
   /* ------------------------------------------------------------- reactions */
@@ -753,7 +941,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
   const wire = () => {
     const { chats, msgs, reactions } = S;
 
-    msgs.on('add', msg => { arrived(msg, 'add'); });
+    msgs.on('add', msg => { arrived(msg, 'add'); calling(msg); });
 
     /* Two things arrive on this one. A message that has just decrypted, which is
        an arrival that was held; and a message deleted for everyone, which is a
@@ -772,6 +960,28 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
         return;
       }
       if (pending.has(id)) { pending.delete(id); arrived(msg, 'decrypted'); }
+    });
+
+    /* A call, asked again once it has stopped ringing.
+     *
+     * WhatsApp writes the call into the chat the moment the offer arrives and
+     * writes the outcome onto that same message when it is over, so the `add`
+     * above meets a call with nothing to say about it yet. There is no
+     * change:<attribute> to wait for that is worth naming here -- the outcome
+     * reaches the message through more than one field and they are private
+     * names -- so this listens for the message changing at all and asks the same
+     * question again. Every model event is re-triggered on the collection:
+     * WhatsApp binds `all` on each model it holds and passes the event straight
+     * through, which is how change:hasReaction above arrives too.
+     *
+     * The type check in front is the whole cost for every other message that
+     * changes, and `announced` keeps a call that changes twice to one banner. */
+    msgs.on('change', msg => {
+      try { if (!msg || msg.type !== CALL) return; } catch (e) { return; }
+      /* The ringing banner first, so it is on its way down before the banner for
+         the call that was missed goes up in its place. */
+      calling(msg);
+      arrived(msg, 'call');
     });
 
     /* Read -- here, or on the phone, or on another desktop. One event, no
@@ -812,6 +1022,10 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
       reactions.on('remove', row => { reaction(row); });
     } else {
       log('the reactions collection is not where it was; reactions will not be announced');
+    }
+
+    if (!S.getters || !S.outcomes) {
+      log('WhatsApp\'s call getters are not where they were; missed calls will not be announced');
     }
 
     recount();

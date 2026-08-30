@@ -1114,6 +1114,60 @@ const wireIpc = () => {
      stated twice. A tone was put here for a moment, on the reasoning that
      WhatsApp's own had been muted and the case would otherwise go silent, and
      silent is exactly what it is meant to be. */
+  /* A telephone ringing, which is the one banner here that announces something
+     still happening rather than something that has happened.
+   *
+   * It is an ordinary banner and deliberately so. Keeping one on the screen for
+   * the whole of a call needs critical urgency, and GNOME's rule for a critical
+   * banner is that it stands until it is acted on -- the pointer moving over it
+   * and away, which is how every other banner is waved off, does nothing to it
+   * at all. The owner asked for the pointer to work. So this behaves like any
+   * other: it shows, it is waved away or slides off by itself, and it waits in
+   * the notification centre -- where it can still be clicked to take the call --
+   * until the ringing stops and it is withdrawn.
+   *
+   * No tone. WhatsApp Web rings for an incoming call through its own audio and
+   * this client has never muted that -- playing one here would be a second
+   * sound over the first. */
+  ipcMain.on('wa:store-ringing', (event, note) => {
+    if (!note || !note.chat || !note.title || !note.call) return;
+    if (!storeBannersAreOurs()) return;
+
+    chatTitles.set(note.chat, note.title);
+
+    const banner = banners.show({
+      /* The call, not the message. The banner for a call that was missed is
+         keyed on the message it was written into, so the two live side by side
+         for the moment it takes one to replace the other. */
+      identity: 'ring' + SEP + note.call,
+      msgId: 'ring' + SEP + note.call,
+      key: note.chat,
+      /* Not a message, so nothing about the chat being read takes it down. */
+      ongoing: true,
+      title: bidi.paragraph(note.title),
+      body: bidi.line(note.sender, note.mark),
+      redacted: note.mark,
+      icon: note.avatar,
+      onClick: () => {
+        showWindow();
+        if (win && !win.isDestroyed())
+          win.webContents.send('wa:store-open', { chat: note.chat, name: note.title });
+      },
+    });
+    if (!banner) return;
+    console.log('ringing: %s in %s', note.mark, note.title);
+  });
+
+  /* And the ringing stopping, whatever stopped it. What follows -- a banner for
+     the call that was missed, and then everything held while it rang -- is not
+     this handler's business. */
+  ipcMain.on('wa:store-ring-over', (event, note) => {
+    if (!storeLive || !note || !note.call || !banners) return;
+    if (banners.closeMessage('ring' + SEP + note.call))
+      console.log('the telephone has stopped ringing in %s',
+                  chatTitles.get(note.chat) || note.chat);
+  });
+
   ipcMain.on('wa:store-open-arrival', () => {
     if (!storeBannersAreOurs()) return;
     console.log('a message in the chat on screen: nothing raised, and nothing played');
