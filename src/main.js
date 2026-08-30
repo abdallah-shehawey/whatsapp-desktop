@@ -9,7 +9,7 @@
  */
 'use strict';
 
-const { app, BrowserWindow, Menu, session, shell, nativeTheme, ipcMain, screen, desktopCapturer } = require('electron');
+const { app, BrowserWindow, Menu, session, shell, nativeTheme, ipcMain, screen: electronScreen, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -28,7 +28,7 @@ const fonts = require('./fonts.js');
 const autostart = require('./autostart.js');
 
 const APP_ID = 'io.github.shehawey.whatsapp-desktop';
-const URL = 'https://web.whatsapp.com/';
+const WHATSAPP_URL = 'https://web.whatsapp.com/';
 const TITLE = 'WhatsApp';
 
 /* The backlog that syncs in over the first half-minute of a launch rewrites the
@@ -222,7 +222,7 @@ const chatTitles = new Map();           // chat id -> what to print for it
 /* --------------------------------------------------------------- window */
 
 const clampToScreen = (width, height) => {
-  const area = screen.getPrimaryDisplay().workAreaSize;
+  const area = electronScreen.getPrimaryDisplay().workAreaSize;
   return {
     width: Math.min(Math.max(400, Math.round(width)), area.width),
     height: Math.min(Math.max(300, Math.round(height)), area.height),
@@ -381,7 +381,7 @@ const createWindow = () => {
   });
 
   Menu.setApplicationMenu(null);
-  win.loadURL(URL);
+  win.loadURL(WHATSAPP_URL);
 
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && (input.control || input.meta) && input.key === ',') {
@@ -453,7 +453,7 @@ const createWindow = () => {
   win.webContents.on('did-fail-load', (event, code, description, url, isMainFrame) => {
     if (!isMainFrame || code === -3) return;                  // -3 is an aborted load
     console.warn('load failed (%d %s); trying again in 5s', code, description);
-    setTimeout(() => win && !win.isDestroyed() && win.loadURL(URL), 5000);
+    setTimeout(() => win && !win.isDestroyed() && win.loadURL(WHATSAPP_URL), 5000);
   });
 
   win.webContents.on('render-process-gone', (event, details) => {
@@ -487,7 +487,7 @@ const isWhatsApp = url => {
   if (!url) return true;
   if (url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('about:')) return true;
   try {
-    const host = new global.URL(url).hostname;
+    const host = new URL(url).hostname;
     return host === 'web.whatsapp.com' || host.endsWith('.whatsapp.com') || host === 'whatsapp.com';
   } catch (e) {
     return false;

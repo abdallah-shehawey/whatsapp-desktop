@@ -135,7 +135,6 @@ class TrayIcon {
   render() {
     if (!this.tray) return;
     const currentTheme = this.handlers.getTheme ? this.handlers.getTheme() : 'system';
-    const autostart = this.handlers.getAutostart ? this.handlers.getAutostart() : false;
 
     this.tray.setContextMenu(Menu.buildFromTemplate([
       {
