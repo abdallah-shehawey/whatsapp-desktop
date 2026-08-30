@@ -7,7 +7,8 @@
   "author": "Abdallah Shehawey <shehawey9@gmail.com>",
   "main": "dist/main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "tsc && electron .",
+    "build": "tsc"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",
