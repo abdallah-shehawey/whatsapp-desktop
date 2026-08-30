@@ -108,7 +108,7 @@ const INHERITED_FONTCONFIG = process.env.FONTCONFIG_FILE;
 const configureFonts = () => {
   if (!config.get('view.force-font')) return null;
   const family = config.get('view.font') || desktop.interfaceFont();
-  return desktop.configure(family, app.getPath('userData'));
+  return fonts.configure(family, app.getPath('userData'));
 };
 
 const fontConfigFile = configureFonts();
