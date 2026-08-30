@@ -29,9 +29,6 @@
  */
 'use strict';
 
-import { ChildProcessByStdio } from "child_process";
-import { Readable } from "stream";
-
 const { Tray, Menu, nativeImage } = require('electron');
 const { execFile, spawn } = require('child_process');
 
@@ -50,7 +47,7 @@ const OWNER_CHANGED =
 
 /* Is a host listening right now? null means the question could not be asked --
    no gdbus on the system -- and the caller should go ahead and try anyway. */
-const hostPresent = (cb: { (present: any): void; (arg0: boolean | null): void; }) => {
+const hostPresent = (cb: { (present: any): void; (arg0: boolean | null): any; }) => {
   execFile('gdbus', ['call', ...DBUS, '--method', 'org.freedesktop.DBus.NameHasOwner', WATCHER],
     (err: any, stdout: any) => cb(err ? null : String(stdout).includes('true')));
 };
@@ -61,7 +58,7 @@ const hostPresent = (cb: { (present: any): void; (arg0: boolean | null): void; }
    stops watching. */
 const waitForHost = (onHost: { (): void; (): void; }) => {
   let done = false;
-  let monitor: ChildProcessByStdio<null, Readable, null> | null = null;
+  let monitor: { kill: () => void; on: (arg0: string, arg1: () => void) => void; stdout: { setEncoding: (arg0: string) => void; on: (arg0: string, arg1: (chunk: any) => void) => void; }; } | null = null;
 
   const stop = () => {
     if (!monitor) return;
@@ -82,7 +79,7 @@ const waitForHost = (onHost: { (): void; (): void; }) => {
     monitor?.on('error', () => {});     // no gdbus: the check below says "try anyway"
     let rest: string = '';
     monitor?.stdout.setEncoding('utf8');
-    monitor?.stdout.on('data', (chunk: string | number) => {
+    monitor?.stdout.on('data', (chunk: string) => {
       const lines = (rest + chunk).split('\n');
       rest = lines.pop() || '';
       for (const line of lines) {
@@ -94,7 +91,7 @@ const waitForHost = (onHost: { (): void; (): void; }) => {
     monitor = null;
   }
 
-  hostPresent((present: any) => {
+  hostPresent((present: any): void => {
     /* The monitor can report a host arriving before this answer comes back, and
        the answer is the older of the two. */
     if (done) return;
@@ -107,7 +104,7 @@ const waitForHost = (onHost: { (): void; (): void; }) => {
   return stop;
 };
 
-export class TrayIcon {
+class TrayIcon {
   icons: any;
   tray: typeof Tray | null;
   handlers: any;
@@ -146,6 +143,7 @@ export class TrayIcon {
   render() {
     if (!this.tray) return;
     const currentTheme = this.handlers.getTheme ? this.handlers.getTheme() : 'system';
+    const autostart = this.handlers.getAutostart ? this.handlers.getAutostart() : false;
 
     this.tray.setContextMenu(Menu.buildFromTemplate([
       {
@@ -212,3 +210,4 @@ export class TrayIcon {
 }
 
 module.exports = { TrayIcon };
+export {};
