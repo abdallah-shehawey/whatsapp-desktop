@@ -1395,8 +1395,6 @@ app.whenReady().then(() => {
     onSettings: openSettings,
     onSetTheme: setTheme,
     getTheme: () => config.get('view.theme') || 'system',
-    onToggleAutostart: setAutostart,
-    getAutostart: () => autostart.isEnabled(),
     title: TITLE,
   });
 

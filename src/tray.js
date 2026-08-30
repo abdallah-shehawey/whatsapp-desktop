@@ -105,12 +105,12 @@ const waitForHost = onHost => {
 };
 
 class TrayIcon {
-  constructor({ normal, attention, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, onToggleAutostart, getAutostart, title = 'WhatsApp' }) {
+  constructor({ normal, attention, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, title = 'WhatsApp' }) {
     this.icons = {
       normal: nativeImage.createFromPath(normal),
       attention: nativeImage.createFromPath(attention || normal),
     };
-    this.handlers = { onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, onToggleAutostart, getAutostart };
+    this.handlers = { onShow, onHide, onQuit, onSettings, onSetTheme, getTheme };
     this.title = title;
     this.unread = false;
     this.windowVisible = false;
