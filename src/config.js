@@ -32,6 +32,12 @@ const DEFAULTS = {
   'notifications.whatsapp-sound': false,  // let WhatsApp play its own tone for a message arriving
   'notifications.banner-seconds': 12,
   'notifications.hide-preview': false,    // the chat and the kind of message, never the words
+  /* WhatsApp Web files a sticker under "photos" for auto-download purposes, so
+     turning photos off takes the stickers with it and leaves nothing in their
+     place -- not even a button to fetch one. The phone has no sticker switch at
+     all and always fetches them. This does the same; turn it off to have
+     WhatsApp's photo switch govern stickers again. */
+  'media.download-stickers': true,
 };
 
 /* A deliberately small INI reader: sections, key = value, # and ; comments.
@@ -139,6 +145,12 @@ class Config {
       '# Keep the message itself off the screen: a banner then says which chat it',
       '# came from and what kind of thing arrived, and nothing of what was said.',
       `hide-preview = ${v['notifications.hide-preview']}`,
+      '',
+      '[media]',
+      '# WhatsApp counts a sticker as a photo for auto-download, so turning photos',
+      '# off leaves every sticker as a blank space with no way to fetch it. The',
+      '# phone always fetches stickers; so does this, unless it is turned off here.',
+      `download-stickers = ${v['media.download-stickers']}`,
       '',
     ].join('\n');
 

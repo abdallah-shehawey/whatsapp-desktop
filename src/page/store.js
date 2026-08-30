@@ -311,15 +311,21 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
    * replacement -- the client's switch stays the master, because it is the one
    * in the window the user opened to turn notifications off.
    */
-  const prefs = () => grab('WAWebUserPrefsNotifications');
+  /* Asked of MuteCollection first, because that is where WhatsApp's own
+     shouldEnableReactionsNotificationGranular reads them -- the same names live
+     on WAWebUserPrefsNotifications and the two agreed on every switch when
+     compared, but the one WhatsApp consults is the one to consult. */
   const asks = (name, fallback) => {
-    try {
-      const module = prefs();
-      if (module && typeof module[name] === 'function') {
-        const answer = module[name]();
-        if (typeof answer === 'boolean') return answer;
-      }
-    } catch (e) {}
+    for (const where of ['WAWebMuteCollection', 'WAWebUserPrefsNotifications']) {
+      try {
+        const module = grab(where);
+        const on = where === 'WAWebMuteCollection' ? (module && module.MuteCollection) : module;
+        if (on && typeof on[name] === 'function') {
+          const answer = on[name]();
+          if (typeof answer === 'boolean') return answer;
+        }
+      } catch (e) {}
+    }
     return fallback;
   };
 
@@ -552,9 +558,56 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      * without this file knowing anything about read receipts. */
   const reacted = new Map();          // parent key + sender -> the emoji announced
 
+  /* Every seat this parent message still has an unread reaction for. WhatsApp's
+     own answer: unreadSenders filters out anything the user has seen, wherever
+     they saw it, and anything that has since been taken back. */
+  const unreadSeats = row => {
+    let senders = [];
+    try {
+      const unread = typeof row.unreadSenders === 'function' ? row.unreadSenders() : row.unreadSenders;
+      senders = Array.isArray(unread) ? unread : (unread && unread.toArray ? unread.toArray() : []);
+    } catch (e) { return null; }
+    return senders;
+  };
+
+  /* Every banner raised for a reaction on this message, taken down. */
+  const dropReactions = (parentKey, chatId) => {
+    for (const [seat, emoji] of [...reacted]) {
+      if (!seat.startsWith(parentKey + '|')) continue;
+      reacted.delete(seat);
+      send('store-gone', { msg: 'reaction' + SEP + seat + SEP + emoji, chat: chatId });
+    }
+  };
+
+  /*
+   * A message that has stopped carrying any reaction at all.
+   *
+   * This is the ONLY thing WhatsApp says when the last reaction on a message is
+   * taken back. Measured, twice, in a group and in a direct chat: the reaction
+   * arrives as a ReactionsCollection `add` with the sender unread, and when it
+   * is removed four seconds later that collection is **silent** -- no add, no
+   * change, no remove -- and the parent message alone reports
+   * change:hasReaction false. A withdrawal waiting on the reactions collection
+   * was therefore waiting for something that never comes, which is why the
+   * banner stayed up.
+   *
+   * The other half -- one of several reactions removed, the message still
+   * carrying the rest -- leaves hasReaction true and does move the collection,
+   * and that is reconciled seat by seat in reaction() below.
+   */
+  const reactionsGone = msg => {
+    let parentKey, chatId;
+    try {
+      if (!msg || !msg.id || !msg.id.fromMe) return;
+      parentKey = keyOf(msg.id);
+      chatId = widOf(msg.id.remote);
+    } catch (e) { return; }
+    if (!parentKey || !chatId) return;
+    dropReactions(parentKey, chatId);
+  };
+
   const reaction = async row => {
     if (!enabled || !S) return;
-    if (Date.now() - liveAt < SETTLE_MS) return;
     let parentKey, chatId;
     try {
       if (!row || !row.id || !row.id.fromMe) return;    // only on the user's own
@@ -563,20 +616,52 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     } catch (e) { return; }
     if (!parentKey || !chatId) return;
 
+    const senders = unreadSeats(row);
+    if (senders === null) return;
+
+    /*
+     * What is no longer waiting, taken down -- and this runs before any of the
+     * tests below, and before the settle window, because a withdrawal is owed
+     * whatever the reason a banner would not be raised now.
+     *
+     * A reaction does not move the chat's unread count -- measured: hasReaction
+     * fired with no change:unreadCount behind it -- so the trim that takes a
+     * message's banner down when the chat is read never applied to one. This is
+     * the read state for reactions, and it covers all three of the cases that
+     * were left standing: read on the phone, read here, and the reaction taken
+     * back by whoever left it.
+     */
+    const live = new Set();
+    for (const sender of senders) {
+      try {
+        /* A reaction taken back does NOT leave unreadSenders. WhatsApp keeps the
+           sender there and blanks the text -- REVOKED_REACTION_TEXT is the empty
+           string, read from WAWebReactionsBEUtils rather than assumed -- so a
+           seat counted live on the strength of the sender alone was a banner
+           nothing would ever take down. The text is what says a reaction is
+           still there. */
+        if (!String(sender.reactionText || '').trim()) continue;
+        live.add(parentKey + '|' + widOf(sender.senderUserJid));
+      } catch (e) {}
+    }
+    for (const [seat, emoji] of [...reacted]) {
+      if (!seat.startsWith(parentKey + '|') || live.has(seat)) continue;
+      reacted.delete(seat);
+      send('store-gone', { msg: 'reaction' + SEP + seat + SEP + emoji, chat: chatId });
+    }
+
+
+    if (Date.now() - liveAt < SETTLE_MS) return;
+
     /* WhatsApp's own switch for exactly this, which this client could not see
-       until it was asked for it. It was OFF on the account the whole of this
-       work was done against, and reactions were being announced regardless. */
+       until it was asked for it. It is granular: a group has its own answer,
+       under Settings -> Notifications -> Groups, and it was off on this account
+       while the one under Messages was on. */
     const chat = chatOf(row.id.remote);
     if (!chat) return;
     if (!wanted(chat) || !reactionsWanted(chat)) return;
     if (isMuted(chat)) return;
     if (onScreen(chat)) return;
-
-    let senders = [];
-    try {
-      const unread = typeof row.unreadSenders === 'function' ? row.unreadSenders() : row.unreadSenders;
-      senders = Array.isArray(unread) ? unread : (unread && unread.toArray ? unread.toArray() : []);
-    } catch (e) { return; }
     if (!senders.length) return;
 
     /* What was reacted TO, which is the half the phone shows and this did not.
@@ -675,6 +760,9 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
        banner that has to come down -- and NOT a banner of its own. The phone
        withdraws the notification for a message that is taken back; it does not
        raise a second one saying so. */
+    /* The last reaction on a message going away, which nothing else reports. */
+    msgs.on('change:hasReaction', (msg, has) => { if (!has) reactionsGone(msg); });
+
     msgs.on('change:type', (msg, type) => {
       let id = '';
       try { id = keyOf(msg.id); } catch (e) { return; }
@@ -714,8 +802,14 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     });
 
     if (reactions && typeof reactions.on === 'function') {
+      /* Three events and one handler, because all three ask the same question:
+         which of this message's reactions is the user still owed a banner for.
+         `remove` is the row going away entirely -- the last reaction on a
+         message taken back -- and it has to withdraw as surely as a change
+         that empties unreadSenders does. */
       reactions.on('add', row => { reaction(row); });
       reactions.on('change', row => { reaction(row); });
+      reactions.on('remove', row => { reaction(row); });
     } else {
       log('the reactions collection is not where it was; reactions will not be announced');
     }
@@ -746,6 +840,17 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
   /* Which chat is open right now, asked rather than remembered -- the app wants
      this again whenever the window comes back, and nothing about the chat itself
      changes to say so. */
+  /* Said again on the way back, unchanged though it is.
+   *
+   * change:active fires when the open conversation CHANGES, and a window coming
+   * out of the tray onto the conversation it was already showing changes
+   * nothing -- so nothing fired, and nothing was withdrawn. A message survived
+   * that because reading it moves the unread count, which has its own event; a
+   * reaction has neither, and that is the whole of "I clicked one and the rest
+   * stayed there". It is only now, with the window back, that the chat on
+   * screen is being read. */
+  const sayActive = () => { send('store-active', { chat: activeChat() }); };
+
   const activeChat = () => {
     if (!S) return '';
     try {
@@ -807,7 +912,11 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     open,
     activeChat,
     unreadNow,
-    setFocus: value => { focused = !!value; },
+    setFocus: value => {
+      const was = focused;
+      focused = !!value;
+      if (S && focused && !was) sayActive();
+    },
     setEnabled: value => { enabled = !!value; },
   };
 };

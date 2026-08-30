@@ -433,6 +433,7 @@ const createWindow = () => {
     win.webContents.setZoomFactor(Number(config.get('view.zoom')) || 1);
     win.webContents.send('wa:config', {
       notifications: !!config.get('notifications.enabled'),
+      downloadStickers: config.get('media.download-stickers') !== false,
       muteSendTone: !config.get('notifications.outgoing-sound'),
       /* One event, one sound, and the same one either way round: the client
          plays the desktop's tone for a message arriving whether the window is in
@@ -806,21 +807,21 @@ const onTitle = title => {
   }
   unreadChats = chats;
 
-  /* The title dropping its prefix is the one unambiguous statement WhatsApp
-     makes about unread: everything has been read. It is taken as such, and the
-     page's count is reset with it rather than left to expire on its own -- two
-     places writing the badge and the tray from numbers that disagree is how an
-     icon ends up marked unread with nothing behind it. */
-  if (chats === 0) unreadMessages = 0;
-
-  /* The badge too. The title counts unread CHATS and leaves muted ones out of
-     even that -- measured "(3)" against six unread chats holding eleven
-     messages -- and the store counts the messages themselves. Letting both
-     write it means the icon flickers between two numbers that disagree. */
+  /* The badge and the tray, and neither of them while the store is answering.
+     The title counts unread CHATS and leaves muted ones out of even that --
+     measured "(3)" against six unread chats holding eleven messages -- while
+     the store counts the messages themselves. Two places writing one number
+     from answers that disagree is how an icon ends up marked unread with
+     nothing behind it. */
   if (storeLive) {
     if (win && !win.isDestroyed()) win.setTitle(title && title.trim() ? title : TITLE);
     return;
   }
+
+  /* The title dropping its prefix is the one unambiguous statement WhatsApp
+     makes about unread: everything has been read. It is taken as such, and the
+     page's count is reset with it rather than left to expire on its own. */
+  if (chats === 0) unreadMessages = 0;
 
   const waiting = unreadMessages === null ? chats : unreadMessages;
   if (tray) tray.setAttention(waiting > 0);
@@ -1142,7 +1143,14 @@ const wireIpc = () => {
   ipcMain.on('wa:store-gone', (event, state) => {
     if (!storeLive || !state || !state.msg || !banners) return;
     const closed = banners.closeMessage(state.msg);
-    if (closed) console.log('withdrew %d notification(s): the message was deleted', closed);
+    if (!closed) return;
+    /* The two things that take one notification down rather than a chat's worth
+       of them, told apart in the log because they are told apart nowhere else:
+       a message deleted for everyone, and a reaction taken back or read. */
+    console.log('withdrew %d notification(s) in %s: %s', closed,
+                chatTitles.get(state.chat) || state.chat || 'a chat',
+                String(state.msg).startsWith('reaction') ? 'the reaction is gone'
+                                                         : 'the message was deleted');
   });
 
   ipcMain.on('wa:store-count', (event, count) => {

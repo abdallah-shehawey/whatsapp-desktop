@@ -283,6 +283,7 @@ const sandbox = {
        watcher below stays in charge. That is the fallback this rig exists to
        exercise -- what the client does on the day WhatsApp renames a module. */
     if (name === './store.js') return require('../src/page/store.js');
+    if (name === './media.js') return require('../src/page/media.js');
     throw new Error('the page script may not require ' + name);
   },
 };

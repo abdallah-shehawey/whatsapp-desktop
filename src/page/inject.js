@@ -24,6 +24,7 @@
 
 const wording = require('../wording.js');
 const store = require('./store.js');
+const media = require('./media.js');
 
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
@@ -57,6 +58,7 @@ const start = ({ send, on }) => {
      is what happens when it does not. See store.js: those two paths read a
      picture drawn for a person and infer from it, and the store is asked. */
   let waStore = null;
+  let waMedia = null;
   const storeLive = () => !!(waStore && waStore.ready);
 
   on('focus', state => {
@@ -2036,6 +2038,14 @@ const start = ({ send, on }) => {
         faceFor: name => avatarFor(name),
       });
       waStore.setFocus(focused);
+    }
+
+    /* And the stickers, which are nothing to do with notifications and are
+       started from here because this is where the page learns what the client
+       wants. See media.js: WhatsApp files a sticker under "photos", so turning
+       photos off leaves every sticker blank with no way to fetch one. */
+    if (!waMedia && config && config.downloadStickers !== false) {
+      waMedia = media.start({ log });
     }
     muteSendTone = !!(config && config.muteSendTone);
     mutePageTone = !!(config && config.mutePageTone);
