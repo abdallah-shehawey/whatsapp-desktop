@@ -23,7 +23,7 @@
  */
 'use strict';
 
-const Notification = require('electron');
+const { Notification } = require('electron');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
