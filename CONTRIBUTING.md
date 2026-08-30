@@ -22,7 +22,7 @@ Before opening a pull request, run:
 
 ```sh
 make test
-for file in disk/*.js dist/page/*.js tools/test-inject.js; do node --check "$file"; done
+for file in dist/*.js dist/page/*.js tools/test-inject.js; do node --check "$file"; done
 ```
 
 Pull requests should describe the problem, the approach, how the change was tested, and any Linux distribution-specific considerations. Do not include account data, session files, screenshots containing private conversations, or generated dependency directories.
