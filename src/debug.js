@@ -4,9 +4,12 @@
  *   WHATSAPP_DEBUG_EVAL=/tmp/eval.js whatsapp-desktop
  *
  * Whatever lands in that file is evaluated in the page and the result logged.
- * Four words are commands to the app rather than to the page: "#snapshot"
- * writes a PNG of the window, "#hide" and "#show" drive the tray behaviour
- * without a tray to click, "#state" prints what the window believes, and "#gpu"
+ * Some words are commands to the app rather than to the page. "#snapshot"
+ * writes a PNG of the window. "#hide", "#show", "#minimize" and "#unfocus" put
+ * the window in each of the states the tray has to tell apart, and "#focus"
+ * asks for it back the plain way -- between them they drive the tray without a
+ * tray to click, which matters because the states differ and only one of them
+ * can be reached by hiding. "#state" prints what the window believes. "#gpu"
  * prints which of Chromium's pipelines are hardware accelerated -- the answer to
  * "why does scrolling lag when the browser does not" -- and "#scroll" measures a
  * real one, sixty wheel events with the page's frame intervals sampled around
@@ -27,7 +30,19 @@ const os = require('os');
 
 const SNAPSHOT = path.join(os.tmpdir(), 'whatsapp-desktop-snapshot.png');
 
-const install = (getWindow, getBanners) => {
+/* Running commentary, on only when the rig is. Window state changes are the
+   thing worth narrating: they are what the tray reads, they arrive from the
+   compositor rather than from this program, and on a bad day they do not
+   arrive at all. */
+const trace = (...args) => {
+  if (!process.env.WHATSAPP_DEBUG_EVAL) return;
+  /* Stamped, because the questions asked of this are about order: which of two
+     things the compositor did first. */
+  const [first, ...rest] = args;
+  console.log('%s ' + first, new Date().toISOString().slice(11, 23), ...rest);
+};
+
+const install = (getWindow, getBanners, actions = {}) => {
   const file = process.env.WHATSAPP_DEBUG_EVAL;
   if (!file) return;
 
@@ -427,8 +442,45 @@ const install = (getWindow, getBanners) => {
       return;
     }
 
+    /* Minimised to the dock: the state the tray read wrong, and the one that
+       cannot be reached by hiding the window. What isMinimized() makes of it
+       afterwards is the point of asking. */
+    if (source === '#minimize') {
+      win.minimize();
+      await new Promise(resolve => setTimeout(resolve, 900));
+      console.log('debug: minimized -> %s', JSON.stringify({
+        visible: win.isVisible(), focused: win.isFocused(), minimized: win.isMinimized() }));
+      return;
+    }
+
+    /* Asking for the focus and nothing else -- no show, no re-map. What the
+       compositor is willing to do for the asking, on its own. */
+    if (source === '#focus') {
+      win.focus();
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      console.log('debug: focus -> %s', JSON.stringify({
+        visible: win.isVisible(), focused: win.isFocused(), minimized: win.isMinimized() }));
+      return;
+    }
+
+    /* Visible, and not where the user is looking -- the state the tray's Open has
+       to deal with and the one a hidden window does not reproduce. */
+    if (source === '#unfocus') {
+      win.show(); win.blur();
+      console.log('debug: shown and blurred');
+      return;
+    }
+
     if (source === '#hide') { win.hide(); console.log('debug: hidden'); return; }
-    if (source === '#show') { win.show(); win.focus(); console.log('debug: shown'); return; }
+    /* Through the app's own path, not a copy of it: what is being checked here
+       is whether that path actually brings the window to the user. */
+    if (source === '#show') {
+      if (actions.show) actions.show(); else { win.show(); win.focus(); }
+      await new Promise(resolve => setTimeout(resolve, 900));
+      console.log('debug: shown -> %s', JSON.stringify({
+        visible: win.isVisible(), focused: win.isFocused(), minimized: win.isMinimized() }));
+      return;
+    }
     if (source === '#state') {
       console.log('debug: %s', JSON.stringify({
         visible: win.isVisible(), focused: win.isFocused(),
@@ -465,4 +517,4 @@ const install = (getWindow, getBanners) => {
   console.log('debug: watching %s', file);
 };
 
-module.exports = { install, SNAPSHOT };
+module.exports = { install, trace, SNAPSHOT };

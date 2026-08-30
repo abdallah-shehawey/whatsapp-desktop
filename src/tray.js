@@ -113,7 +113,10 @@ class TrayIcon {
     this.handlers = { onShow, onHide, onQuit, onSettings, onSetTheme, getTheme };
     this.title = title;
     this.unread = false;
-    this.windowVisible = false;
+    /* On the screen: shown, and not minimised to the dock. Deliberately not
+       "in front of the user" -- see the note in main.js, where opening this very
+       menu is what makes that question unanswerable. */
+    this.onScreen = false;
 
     this.tray = null;
     this.stopWaiting = waitForHost(() => this.build());
@@ -138,8 +141,8 @@ class TrayIcon {
 
     this.tray.setContextMenu(Menu.buildFromTemplate([
       {
-        label: this.windowVisible ? 'Hide WhatsApp' : 'Open WhatsApp',
-        click: () => (this.windowVisible ? this.handlers.onHide : this.handlers.onShow)(),
+        label: this.onScreen ? 'Hide WhatsApp' : 'Open WhatsApp',
+        click: () => (this.onScreen ? this.handlers.onHide : this.handlers.onShow)(),
       },
       { type: 'separator' },
       {
@@ -186,9 +189,9 @@ class TrayIcon {
     this.render();
   }
 
-  setWindowVisible(visible) {
-    if (visible === this.windowVisible) return;
-    this.windowVisible = visible;
+  setWindowOnScreen(onScreen) {
+    if (onScreen === this.onScreen) return;
+    this.onScreen = onScreen;
     this.render();
   }
 

@@ -233,16 +233,172 @@ const pushFocus = () => {
   if (!win || win.isDestroyed()) return;
   const active = win.isVisible() && !win.isMinimized() && win.isFocused();
   win.webContents.send('wa:focus', active);
-  if (tray) tray.setWindowVisible(win.isVisible() && !win.isMinimized());
+  /* The tray is deliberately not told anything here. What it needs is tracked
+     from the window's own events instead -- see trayFollowsWindow -- because
+     asking the window is what got this wrong. */
   /* A window coming back is the user arriving at whatever chat is on screen. */
   if (active) withdrawOpen();
 };
 
+/*
+ * Whether the window is where the owner is looking, which is what the tray's
+ * first item offers to change. Tracked, never asked, because both of the
+ * questions that could be asked have been measured and neither can be used.
+ *
+ * isMinimized() answers false for a window sitting minimised in the dock under
+ * GNOME, so the menu offered to hide a window that was not on the screen: the
+ * report this exists for. And isFocused() cannot be read at the moment the menu
+ * is drawn, because opening that menu is itself what takes the focus away --
+ * with the window open and in front, a focus-tested item read "Open WhatsApp".
+ *
+ * An event is a fact where a query is an opinion. `minimize` fires when the
+ * window goes to the dock whatever isMinimized() says a moment later, and
+ * `show` and `hide` are the same.
+ *
+ * The minimised flag does not stay true for long under Wayland and is not
+ * relied on to. xdg-shell has no minimised state for a compositor to report
+ * back -- a client asks to be minimised and that is the end of the
+ * conversation -- so the next configure puts the window back to normal and
+ * `restore` arrives seconds after a minimise nobody undid. Measured, in that
+ * order, from one click. It does not matter: a window in the dock does not have
+ * the focus, and that is what is actually being tested below.
+ *
+ * Which leaves losing the focus, the one state change with no honest event: a
+ * window going behind another and a window whose tray menu just opened both
+ * arrive as `blur` and are indistinguishable. So a blur is believed only if it
+ * lasts. Reaching for the tray after clicking into another application takes
+ * longer than this; clicking an item in a menu that has just opened takes less.
+ * `focus` is applied at once and puts right anything this ever gets wrong.
+ */
+const BLUR_SETTLE_MS = 1200;
+
+const trayFollowsWindow = () => {
+  let settle = null;
+  const state = { visible: false, minimized: false, focused: false };
+
+  const apply = () => {
+    const onScreen = state.visible && !state.minimized && state.focused;
+    debug.trace('window: %s -> tray offers to %s',
+      JSON.stringify(state), onScreen ? 'hide it' : 'open it');
+    if (tray) tray.setWindowOnScreen(onScreen);
+  };
+
+  /* One pending blur at most, and any later event overtakes it -- a window that
+     has just been hidden or minimised is not waiting to find out. */
+  const set = (change, delay = 0) => {
+    if (settle) { clearTimeout(settle); settle = null; }
+    Object.assign(state, change);
+    if (!delay) { apply(); return; }
+    settle = setTimeout(() => { settle = null; apply(); }, delay);
+  };
+
+  win.on('show', () => set({ visible: true }));
+  win.on('hide', () => set({ visible: false, focused: false }));
+  win.on('minimize', () => set({ minimized: true, focused: false }));
+  win.on('restore', () => set({ minimized: false }));
+  /* Having the focus settles the other two as well: a window cannot be given it
+     while hidden or minimised, whatever an event that never arrived implies. */
+  win.on('focus', () => set({ visible: true, minimized: false, focused: true }));
+  win.on('blur', () => set({ focused: false }, BLUR_SETTLE_MS));
+};
+
+/* Between taking the window down and putting it back up: one frame, because the
+   gap is what the owner watches the icon leave the dock for. Measured at 0, 16,
+   40 and 120ms and the window came back with the focus at every one of them,
+   twice each -- so the shortest is not bought with reliability. One turn of the
+   loop rather than none, so that the unmap is certainly processed and not
+   folded into the map by some other compositor. */
+const REMAP_MS = 16;
+
+/* And between un-minimising and that, for the same reason -- the window has to
+   have finished coming out of the dock before it is taken down again. */
+const RESTORE_MS = 150;
+
+/*
+ * The window, brought to the user -- which on Wayland is not what asking for it
+ * does.
+ *
+ * Wayland has no raise. A client cannot put itself in front of anything; the
+ * one way up is the xdg-activation protocol, and whether it is granted is the
+ * compositor's decision. Measured on the wire, this is the request Chromium
+ * sends when focus() is called on a window that is not already in front:
+ *
+ *   xdg_activation_v1.get_activation_token(new xdg_activation_token_v1)
+ *   xdg_activation_token_v1.set_serial(36978, wl_seat)
+ *   xdg_activation_token_v1.commit()
+ *
+ * and mutter's rule for what to do with it (meta-wayland-activation.c) is:
+ *
+ *   if (!token->seat)    return FALSE;
+ *   if (!token->surface) return FALSE;
+ *   ...
+ *   token_can_activate (token) ? meta_window_activate_full (...)
+ *                              : meta_window_set_demands_attention (window);
+ *
+ * There is no set_surface in that request, so the answer can only ever be no,
+ * and "demands attention" is the notification the owner sees: "WhatsApp is
+ * ready", posted instead of the window arriving. Chromium omits it on purpose
+ * -- DetermineSurface() hands over a surface only for the window that already
+ * holds the pointer or keyboard, which by definition is not this one. Qt sets
+ * the surface unconditionally, which is why Telegram's tray raises its window
+ * on the same desktop and this client's could not. gtk_shell1 would be the
+ * other way through and is bound but never used: Chromium creates no
+ * gtk_surface1, so there is nothing to call request_focus on.
+ *
+ * So the window is not raised, it is opened. Taken down and mapped again, it is
+ * a new window rather than an old one asking for something, and the compositor
+ * gives a new window the focus without being asked -- measured, in every state
+ * the tray can find it in. This is not a trick that will age well and it should
+ * be deleted the day Electron ships a Chromium that sets the surface; until
+ * then it is the only thing that works, and the cost is the window's own
+ * closing and opening animation, which cannot be suppressed from here.
+ *
+ * Asking nicely first is deliberately not tried. It was: request, wait, re-map
+ * if refused. It works, and by the time the refusal can be seen the shell has
+ * already posted "WhatsApp is ready", which flashes up before the window
+ * arrives. There is no withdrawing somebody else's notification, so the only
+ * way not to see it is not to earn it.
+ *
+ * Being briefly always-on-top was the other measured way through and was
+ * rejected twice over: it is _NET_WM_STATE_ABOVE under another name, so what a
+ * Wayland compositor makes of it is the compositor's business -- and the owner
+ * keeps windows of their own on top, which this would have climbed over.
+ */
 const showWindow = () => {
   if (!win || win.isDestroyed()) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
+
+  const remap = () => {
+    if (!win || win.isDestroyed()) return;
+    win.hide();
+    setTimeout(() => {
+      if (!win || win.isDestroyed()) return;
+      win.show();
+      win.focus();
+    }, REMAP_MS);
+  };
+
+  /* A window sitting minimised in the dock cannot simply be shown: doing it
+     takes Ozone's own life, measured, the whole process gone --
+       FATAL wayland_toplevel_window.cc "Should not be called with kMinimized
+       state"
+     -- so the minimised state is cleared first and the re-map runs against a
+     normal window. isMinimized() is the right question here and the only one:
+     it reads the very state Ozone refuses to be shown in, which is not the same
+     thing as whether the window is in the dock. The tracked flag deliberately
+     is not consulted, because it answers the other question and restoring a
+     window that is merely maximised would un-maximise it.
+   *
+   * Restoring is not the end of it. Restore and ask for the focus and the
+   * window comes back behind whatever the owner was using -- focused false,
+   * twice out of two -- because an un-minimised window is still a window that
+   * is already up, and those do not get the focus for the asking. Only the
+   * re-map does: focused true, twice out of two. */
+  if (win.isMinimized()) {
+    win.restore();
+    setTimeout(remap, RESTORE_MS);
+    return;
+  }
+  remap();
 };
 
 const hideWindow = () => {
@@ -419,6 +575,8 @@ const createWindow = () => {
   });
 
   for (const event of ['show', 'hide', 'focus', 'blur', 'restore']) win.on(event, pushFocus);
+
+  trayFollowsWindow();
 
   win.once('ready-to-show', () => {
     if (!hidden) showWindow();
@@ -1452,7 +1610,7 @@ app.whenReady().then(() => {
     title: TITLE,
   });
 
-  debug.install(() => win, () => banners);
+  debug.install(() => win, () => banners, { show: showWindow });
 
   /* Follow the desktop live: a theme switched from light to dark, or a font
      changed in Settings, should not need the client restarted. */
