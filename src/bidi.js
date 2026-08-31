@@ -49,15 +49,32 @@ const directionOf = text => {
   return null;
 };
 
-/* One paragraph, told which way it runs. Neutral text is left alone: a mark in
-   front of "👍" or "3" would pick a side for a line that has no side to pick,
-   and a stray invisible character in a notification the user may copy is worth
-   avoiding when it buys nothing. */
+/*
+ * Text, told which way it runs.
+ *
+ * A newline ends a bidi paragraph, so a banner of several lines is several
+ * paragraphs and Pango works each of their directions out separately. One mark
+ * at the head of the whole thing therefore only ever settles the FIRST line,
+ * and the rest go back to being decided by whatever happens to open them -- an
+ * English word at the head of line four of an otherwise Arabic message flips
+ * that line and nothing else. So every line is marked, and each from its own
+ * first strong character, which is the same rule the conversation itself
+ * follows (see MESSAGE_BIDI in style.js).
+ *
+ * `direction`, when given, is the one the caller worked out for the whole
+ * banner and applies to every line of it -- that is how the sender's name is
+ * kept out of the decision.
+ *
+ * Neutral lines are left alone: a mark in front of "👍" or "3" would pick a
+ * side for a line that has no side to pick, and a stray invisible character in
+ * a notification the user may copy is worth avoiding when it buys nothing.
+ */
 const paragraph = (text, direction) => {
   const body = String(text == null ? '' : text);
-  const way = direction || directionOf(body);
-  if (!way) return body;
-  return (way === 'rtl' ? RLM : LRM) + body;
+  return body.split('\n').map(part => {
+    const way = direction || directionOf(part);
+    return way ? (way === 'rtl' ? RLM : LRM) + part : part;
+  }).join('\n');
 };
 
 /* A name that must not decide the direction of the line it is printed on, and
@@ -83,8 +100,17 @@ const line = (sender, message) => {
   if (!who) return paragraph(text);
   /* The direction is the message's, never the name's. A group of Arabic
      speakers whose display names are Latin -- which is most of them -- would
-     otherwise get a left-to-right banner for every Arabic message in it. */
-  return paragraph(isolate(who) + ': ' + text, directionOf(text));
+     otherwise get a left-to-right banner for every Arabic message in it.
+
+     Only the FIRST line has a name in front of it, and only that line needs
+     protecting from it; the lines under it are read the way any other line is,
+     from their own first strong character. Taking the head's direction from the
+     whole message rather than from its first line is deliberate -- a message
+     that opens "👍" and carries on in Arabic has nothing in its first line to
+     decide with, and the alternative is letting the name decide after all. */
+  const [head, ...rest] = text.split('\n');
+  const first = paragraph(isolate(who) + ': ' + head, directionOf(text));
+  return rest.length ? first + '\n' + paragraph(rest.join('\n')) : first;
 };
 
 module.exports = { directionOf, paragraph, isolate, line, RLM, LRM, FSI, PDI };

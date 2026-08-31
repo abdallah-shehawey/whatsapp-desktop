@@ -76,6 +76,34 @@ check('a Latin one left to right',
 check('and one made of digits is left exactly as it is',
       bidi.paragraph('+20 10 03734117'), '+20 10 03734117');
 
+/* A banner of several lines is several bidi paragraphs, so one mark at the head
+   of it only ever settles the first line. Each line states its own direction --
+   this is the same message that reads wrong in the conversation, an English
+   headline over Arabic body copy. */
+check('every line of a banner is marked, from its own first strong character',
+      bidi.paragraph('We are hiring / IT\nتبحث سلسله مطاعم\nرواتب مجزيه'),
+      LRM + 'We are hiring / IT\n' + RLM + 'تبحث سلسله مطاعم\n' + RLM + 'رواتب مجزيه');
+/* A line with nothing strong in it is still left alone, line by line. */
+check('a blank line between them is left as it is',
+      bidi.paragraph('رواتب مجزيه\n\n01148813215'),
+      RLM + 'رواتب مجزيه\n\n' + '01148813215');
+/* Only the first line of a banner has a name in front of it, so only that line
+   needs the direction stating for it. The lines under it are read the way any
+   other line is -- this is the message from the report, an English headline
+   over Arabic body copy, sent into a group by somebody with a Latin name. */
+check('the name settles the line it is on, and no line under it',
+      bidi.line('Mo farhat', 'We are hiring / IT\nتبحث سلسله مطاعم\nرواتب مجزيه'),
+      LRM + FSI + 'Mo farhat' + PDI + ': ' + 'We are hiring / IT\n' +
+      RLM + 'تبحث سلسله مطاعم\n' + RLM + 'رواتب مجزيه');
+check('and an Arabic message under the same name keeps every line of it Arabic',
+      bidi.line('Mo farhat', 'تبحث سلسله مطاعم\nرواتب مجزيه'),
+      RLM + FSI + 'Mo farhat' + PDI + ': ' + 'تبحث سلسله مطاعم\n' + RLM + 'رواتب مجزيه');
+/* A first line with nothing strong in it still must not be settled by the name,
+   so the head takes the direction of the whole message. */
+check('an opening emoji does not hand the first line to the name',
+      bidi.line('Ahmed', '👍\nتمام يا معلم'),
+      RLM + FSI + 'Ahmed' + PDI + ': ' + '👍\n' + RLM + 'تمام يا معلم');
+
 /* Nothing may come back undefined or throw: a banner with no text is a banner
    nobody can read, and these are called in front of every one of them. */
 check('nothing in, nothing out', bidi.line(null, null), '');

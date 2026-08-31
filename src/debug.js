@@ -238,6 +238,14 @@ const install = (getWindow, getBanners, actions = {}) => {
          '\u0627\u0644\u062A\u0627\u0646\u064A \u0628\u064A\u0628\u062F\u0623 \u0645\u0646 ' +
          '\u0641\u064A\u0646', ''],
         ['\u062A\u0645\u0627\u0645 \u064A\u0627 \u0645\u0639\u0644\u0645', wording.REPLY_MARK + '\n'],
+        /* Several lines, and not all of them the same way round. One mark at the
+           head of a banner only ever settles its first line -- a newline ends a
+           bidi paragraph -- so this is the one that catches a line reverting to
+           whatever it happens to open with. */
+        ['We are hiring / IT\n' +
+         '\u062A\u0628\u062D\u062B \u0633\u0644\u0633\u0644\u0647 \u0645\u0637\u0627\u0639\u0645 ' +
+         '\u0639\u0646 \u0645\u0647\u0646\u062F\u0633 IT\n' +
+         '\u0631\u0648\u0627\u062A\u0628 \u0645\u062C\u0632\u064A\u0647', ''],
       ];
       let n = 0;
       for (const [message, mark] of kinds) {
