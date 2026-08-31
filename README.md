@@ -1,8 +1,9 @@
 # whatsapp-desktop
 
-WhatsApp Web in a window of its own, on Chromium. It loads `web.whatsapp.com`,
-so it is the same client WhatsApp serves to a browser — no reverse-engineered
-protocol, and nothing that puts an account at risk.
+WhatsApp for Linux: the web client in a desktop window of its own, on Chromium.
+It loads `web.whatsapp.com`, so it is the same client WhatsApp serves to a
+browser — no reverse-engineered protocol, and nothing that puts an account at
+risk.
 
 It is the second attempt. The first, [`whatsapp`](https://github.com/abdallah-shehawey/whatsapp),
 is 120 KB of C against GTK4 and WebKitGTK; this one starts from an engine that
@@ -20,7 +21,9 @@ the latest release.
   login. GNOME has no tray of its own: the icon needs the AppIndicator
   extension, and the client waits for it rather than giving up when it starts
   first at login.
-- **Draws everything in the desktop's font**, applied live when you change it.
+- **Draws everything in the desktop's font**, applied live when you change it,
+  and the conversation's own text size is a switch of its own: bigger or
+  smaller messages with the chat list left where it was.
 - **One notification per message**, with the sender, the text and the sender's
   picture, a click that opens that conversation, and a withdrawal the moment you
   open the chat or read it on your phone. Each message is its own entry rather
@@ -93,6 +96,7 @@ make test       # replays a chat list past the watcher, no browser needed
 |---|---|---|
 | `[view] font` | the GNOME interface font | family for everything the client draws |
 | `[view] font-size` | `16` | root font size in pixels — WhatsApp sizes in rem |
+| `[view] chat-font-size` | `100` | the conversation's text, as a percentage of WhatsApp's own |
 | `[view] zoom` | `1.0` | also set with `Ctrl` `+`/`-` |
 | `[view] force-font` | `true` | draw the page in one family |
 | `[view] arabic-fix` | `false` | widen the boxes WhatsApp clips Arabic descenders against |

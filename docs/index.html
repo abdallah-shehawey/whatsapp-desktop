@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>whatsapp-desktop — WhatsApp for Linux</title>
-<meta name="description" content="An unofficial WhatsApp Web desktop client for Linux. Lives in the tray, one notification per message, voice and video calls with screen sharing, and the page drawn in your desktop's own font. Packages for Fedora, Debian, Ubuntu and Arch.">
+<meta name="description" content="WhatsApp as a desktop app for Linux. Lives in the tray, a notification for every message, voice and video calls with screen sharing, and text at the size you want. One command to install on Fedora, Debian, Ubuntu or Arch.">
 <meta name="theme-color" content="#0a100d">
 <meta name="color-scheme" content="dark">
 
@@ -15,7 +15,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="whatsapp-desktop">
 <meta property="og:title" content="whatsapp-desktop — WhatsApp for Linux">
-<meta property="og:description" content="Tray, notifications, calls, screen sharing and your desktop's own font. One command to install on Fedora, Debian, Ubuntu or Arch.">
+<meta property="og:description" content="Tray, a notification for every message, calls, screen sharing, and text at the size you want. One command to install on Fedora, Debian, Ubuntu or Arch.">
 <meta property="og:url" content="https://abdallah-shehawey.github.io/whatsapp-desktop/">
 <meta property="og:image" content="https://abdallah-shehawey.github.io/whatsapp-desktop/assets/og.png">
 <meta property="og:image:width" content="1200">
@@ -54,6 +54,7 @@
     <a href="#install">Install</a>
     <a href="#download">Downloads</a>
     <a href="#configure">Configure</a>
+    <a href="#remove">Remove</a>
     <a href="#build">Build</a>
   </nav>
   <div class="topbar-end">
@@ -73,13 +74,13 @@
   <!-- ------------------------------------------------------------- hero -->
   <section class="hero">
     <div class="hero-copy">
-      <p class="eyebrow">Linux desktop client · Electron 40 · GPL-3.0</p>
-      <h1>WhatsApp, in a window<br>of its own.</h1>
+      <p class="eyebrow">Free and open source · Fedora · Debian · Ubuntu · Arch</p>
+      <h1>WhatsApp for Linux</h1>
       <p class="lead">
-        It loads <code>web.whatsapp.com</code> — the same client WhatsApp serves to a
-        browser, so nothing here is a reverse-engineered protocol and nothing puts an
-        account at risk. What is added is everything a browser tab cannot give it:
-        a tray, real desktop notifications, calls, and your own font.
+        A real desktop app for the WhatsApp you already use. It sits in the tray and
+        tells you the moment a message lands, takes voice and video calls, shares your
+        screen, and draws your chats in the font and the size you want to read them at.
+        Same account, same chats, same phone — nothing to set up but the QR scan.
       </p>
       <div class="cta-row">
         <a class="btn btn-primary" href="#download">
@@ -103,7 +104,7 @@
 <pre class="term-body"><code><span class="p">$</span> curl -fsSL https://abdallah-shehawey.github.io/shinux-repo/install.sh | sudo sh
 <span class="c">==&gt; rpm system detected, installing shinux-release</span>
 <span class="c">==&gt; done.</span>
-<span class="p">$</span> sudo dnf install whatsapp-desktop
+<span class="p">$</span> sudo dnf install --refresh whatsapp-desktop
 <span class="c">Installed:</span> <span class="g">whatsapp-desktop-<span data-version>1.6.1</span>-1.x86_64</span>
 <span class="p">$</span> whatsapp-desktop<span class="cursor"></span></code></pre>
       </div>
@@ -118,76 +119,109 @@
   <!-- --------------------------------------------------------- features -->
   <section id="features" class="band">
     <div class="section-head">
-      <h2>What it does</h2>
-      <p class="sub">The parts a browser tab cannot do.</p>
+      <h2>What you get</h2>
+      <p class="sub">WhatsApp, behaving like an app your desktop actually knows about.</p>
     </div>
 
     <div class="grid">
       <article class="card feat">
         <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a5 5 0 0 0-5 5v3.5L5 15h14l-2-3.5V8a5 5 0 0 0-5-5Z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg></div>
-        <h3>One notification per message</h3>
-        <p>The sender, the text and the sender's picture, a click that opens that
-        conversation, and a withdrawal the moment you read it — on your phone as
-        readily as here. Media says what it is (<code>📷 Photo</code>,
-        <code>🎤 Voice message</code>) instead of looking like somebody typing the word.</p>
+        <h3>A notification for every message</h3>
+        <p>Not one per chat — one per message, with who wrote it, their picture and what
+        they said. Click it and that conversation opens. Read it on your phone and it
+        disappears here on its own. A photo says <code>📷 Photo</code> and a voice note
+        says how long it is.</p>
       </article>
 
       <article class="card feat">
         <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11v12H4z"/><path d="m15 10 5-3v10l-5-3z"/></svg></div>
         <h3>Voice and video calls</h3>
-        <p>Full WebRTC, camera and microphone permissions handled for you, and screen
-        sharing over PipeWire on Wayland — whole screens or a single window. Calls get
-        a window of their own.</p>
+        <p>Ring somebody, or pick up, from your computer — camera and microphone just
+        work, and there is nothing to allow first. Share your whole screen or a single
+        window while you talk. Every call opens in a window of its own.</p>
       </article>
 
       <article class="card feat">
         <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h16"/><path d="M6 17 10.5 6h3L18 17"/><path d="M8 13h8"/></svg></div>
-        <h3>Your desktop's own font</h3>
-        <p>The whole page is drawn in the family you chose in Settings, applied live when
-        you change it. Arabic reads right to left in a banner instead of wrapping the
-        wrong way under a Latin name.</p>
+        <h3>Text the size you want it</h3>
+        <p>Make the messages bigger or smaller from Settings — the conversation only, so
+        your chat list stays where it was. The whole app is drawn in your desktop's own
+        font, and Arabic reads right to left everywhere, notifications included.</p>
       </article>
 
       <article class="card feat">
         <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v10H3z"/><path d="M8 20h8"/><path d="M12 16v4"/></svg></div>
         <h3>Lives in the tray</h3>
-        <p>Closing the window keeps the client connected and messages arriving.
-        <kbd>Ctrl</kbd>+<kbd>Q</kbd> and the tray's Quit are the two ways out, and it can
-        start hidden at login. On GNOME it waits for the AppIndicator extension rather
-        than giving up when it starts first.</p>
+        <p>Close the window and it keeps running, so nothing is missed while it is out of
+        the way. It can start with your session, already hidden, and the tray icon tells
+        you when somebody is waiting.</p>
       </article>
 
       <article class="card feat">
         <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg></div>
-        <h3>Settings and a theme switcher</h3>
-        <p>System, dark or light, autostart at login, and how the tray behaves — from
-        <kbd>Ctrl</kbd>+<kbd>,</kbd> or the tray menu. No config file needed unless you
-        want one.</p>
+        <h3>Dark, light, or whatever the desktop is</h3>
+        <p>One Settings window — <kbd>Ctrl</kbd>+<kbd>,</kbd> or the tray menu — with the
+        theme, the text size, start-at-login, what closing the window does, and which
+        sounds you want. No text editor anywhere.</p>
       </article>
 
       <article class="card feat">
         <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-4.35 7-10V5l-7-2-7 2v6c0 5.65 7 10 7 10Z"/><path d="m9 12 2 2 4-4"/></svg></div>
-        <h3>WhatsApp's own page, untouched</h3>
-        <p>No protocol re-implementation and no third-party bridge. Everything added
-        lives around the page, not inside the account — and it installs alongside the
-        <a href="https://github.com/abdallah-shehawey/whatsapp">C client</a> rather than
-        over it.</p>
+        <h3>Your account is untouched</h3>
+        <p>Inside the window is WhatsApp's own web app, the one you would open in a
+        browser. Nothing is re-implemented, nothing is stored, and no server but
+        WhatsApp's ever sees a message — it is linked from your phone exactly like a
+        browser, and unlinked the same way.</p>
       </article>
     </div>
 
     <div class="showcase">
       <figure>
-        <img src="assets/settings.png" alt="The whatsapp-desktop Settings window: theme, font, tray and notification options." width="480" height="590" loading="lazy" decoding="async">
+        <img src="assets/settings.png" alt="The whatsapp-desktop Settings window: theme, startup and tray, notification sounds, zoom and chat font size." width="520" height="950" loading="lazy" decoding="async">
       </figure>
       <div class="showcase-copy">
-        <h3>Settings, without a text editor</h3>
-        <p>Everything the client does is a switch: the theme, the font it draws the page
-        in, whether closing the window hides it to the tray, whether a banner makes a
-        sound, and how long one stays on screen before it is refiled silently in the
-        notification centre.</p>
-        <p>Every switch also exists in
+        <h3>Everything is a switch</h3>
+        <p>One window — <kbd>Ctrl</kbd>+<kbd>,</kbd> or the tray menu — and every one of
+        these takes effect the moment you set it. Nothing to restart, nothing to save.</p>
+        <dl class="switches">
+          <dt>Theme</dt>
+          <dd>System, dark or light. System turns when your desktop turns.</dd>
+
+          <dt>Start at Login</dt>
+          <dd>Starts hidden in the tray, so messages arrive before you open anything.</dd>
+
+          <dt>Close to Tray</dt>
+          <dd>Closing the window keeps the client running and connected.</dd>
+
+          <dt>Minimize to Tray</dt>
+          <dd>Minimising hides it away as well. Off by default — minimising is not
+          closing.</dd>
+
+          <dt>Desktop Notifications</dt>
+          <dd>One banner per message, with the sender's picture and what they said.</dd>
+
+          <dt>Notification Sound</dt>
+          <dd>Your desktop's own tone when a message lands — the one the rest of your
+          machine uses.</dd>
+
+          <dt>Outgoing Message Tone</dt>
+          <dd>The sound for a message <em>you</em> send. Off by default: it is already on
+          screen with a tick under it.</dd>
+
+          <dt>Zoom Level</dt>
+          <dd>Scales the whole interface, pictures and spacing and all — the same as
+          <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd>.</dd>
+
+          <dt>Chat Font Size</dt>
+          <dd>The words in a conversation only: bigger messages, and a chat list that
+          stays the size it is.</dd>
+
+          <dt>Arabic Text Clipping Fix</dt>
+          <dd>Room for the tails of ن and ي in the boxes WhatsApp clips them against.</dd>
+        </dl>
+        <p class="note">All of it lands in
         <code>~/.config/whatsapp-desktop/whatsapp-desktop.conf</code> —
-        <a href="#configure">the whole table is below</a>.</p>
+        <a href="#configure">the file is documented below</a>.</p>
       </div>
     </div>
   </section>
@@ -196,10 +230,9 @@
   <section id="install" class="band band-alt">
     <div class="section-head">
       <h2>Install</h2>
-      <p class="sub">Pick your distribution — every command is on this page, nothing to
-      read anywhere else. The packages come from a GPG-signed repository, so
-      <code>dnf</code>, <code>apt</code> or <code>pacman</code> keeps the client up to
-      date with the rest of the system.</p>
+      <p class="sub">Pick your distribution and copy the commands — everything you need
+      is on this page. The packages are signed and come from a repository, so your usual
+      system update keeps WhatsApp up to date with everything else.</p>
     </div>
 
     <div class="tabs" role="tablist" aria-label="Install method">
@@ -220,9 +253,14 @@
       three tabs beside this one spell the same steps out by hand.</p>
 
       <p class="step">2 &middot; Install the client</p>
-<pre><code>sudo dnf install whatsapp-desktop     <span class="c"># Fedora and friends</span>
-sudo apt install whatsapp-desktop     <span class="c"># Debian, Ubuntu 24.04+</span>
-sudo pacman -S whatsapp-desktop       <span class="c"># Arch</span></code></pre>
+<pre><code>sudo dnf install --refresh whatsapp-desktop        <span class="c"># Fedora and friends</span>
+sudo apt update &amp;&amp; sudo apt install whatsapp-desktop  <span class="c"># Debian, Ubuntu 24.04+</span>
+sudo pacman -Syu whatsapp-desktop                  <span class="c"># Arch</span></code></pre>
+      <p class="note">The repository is brand new to your machine, so each of these
+      fetches its list of packages first — that is what <code>--refresh</code>,
+      <code>apt update</code> and the <code>y</code> in <code>pacman -Syu</code> do.
+      Without it the package manager reads a list written before the repository existed
+      and answers "no match".</p>
     </div>
 
     <div class="card panel" id="i-fedora" role="tabpanel" aria-labelledby="t-fedora" hidden>
@@ -242,10 +280,9 @@ metadata_expire=6h
 EOF</code></pre>
 
       <p class="step">3 &middot; Install</p>
-<pre><code>sudo dnf install whatsapp-desktop</code></pre>
-      <p class="note">Fedora, RHEL, CentOS Stream, Rocky and Alma. <code>gpgcheck=1</code>
-      is what verifies the package itself; metadata verification is left off so
-      <code>dnf install &lt;TAB&gt;</code> still works as an unprivileged user.</p>
+<pre><code>sudo dnf install --refresh whatsapp-desktop</code></pre>
+      <p class="note">Fedora, RHEL, CentOS Stream, Rocky and Alma. Every package is
+      checked against the signing key before it installs.</p>
     </div>
 
     <div class="card panel" id="i-debian" role="tabpanel" aria-labelledby="t-debian" hidden>
@@ -262,10 +299,9 @@ sudo chmod 0644 /etc/apt/keyrings/shinux.gpg</code></pre>
       <p class="step">3 &middot; Install</p>
 <pre><code>sudo apt update
 sudo apt install whatsapp-desktop</code></pre>
-      <p class="note">Ubuntu 24.04 and later, Debian 12 and later, Mint 22 and later — the
-      package needs a <code>glibc</code> recent enough for Electron 40. The
-      <code>.sources</code> file is deb822 format; <code>apt</code> has read it since
-      Debian 12 and Ubuntu 22.04.</p>
+      <p class="note">Ubuntu 24.04 and later, Debian 12 and later, Mint 22 and later.
+      Older releases are missing system libraries the app needs and will refuse to
+      install rather than break.</p>
     </div>
 
     <div class="card panel" id="i-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
@@ -318,25 +354,15 @@ sudo pacman -U ./whatsapp-desktop-<span data-version>1.6.1</span>-1-x86_64.pkg.t
       delete <code>/etc/xdg/autostart/io.github.shehawey.whatsapp-desktop.desktop</code>.</p>
     </div>
 
-    <div class="two-col">
-      <div class="card">
-        <h3>Updating</h3>
-<pre><code>sudo dnf upgrade whatsapp-desktop
+    <div class="card">
+      <h3>Updating</h3>
+<pre><code>sudo dnf upgrade --refresh whatsapp-desktop
 sudo apt update &amp;&amp; sudo apt install --only-upgrade whatsapp-desktop
-sudo pacman -Syu whatsapp-desktop</code></pre>
-        <p class="note">Installed from the repository, a plain system upgrade picks it up
-        with everything else — there is no updater inside the client.</p>
-      </div>
-      <div class="card">
-        <h3>Removing it</h3>
-<pre><code>sudo dnf remove whatsapp-desktop
-sudo apt purge whatsapp-desktop
-sudo pacman -Rns whatsapp-desktop</code></pre>
-        <p class="note">Your session and settings live in
-        <code>~/.local/share/whatsapp-desktop</code> and
-        <code>~/.config/whatsapp-desktop</code>; delete those two directories to leave
-        nothing behind.</p>
-      </div>
+sudo pacman -Syyu whatsapp-desktop</code></pre>
+      <p class="note">Each command fetches the repository's package list before it looks:
+      a new release can be a few hours newer than the copy your machine last downloaded,
+      and without the refresh it is simply not there yet. Your ordinary system upgrade
+      picks the client up as well — there is no updater inside it.</p>
     </div>
 
     <p class="fpr-line">
@@ -417,9 +443,10 @@ sha256sum -c SHA256SUMS --ignore-missing</code></pre>
   <section id="configure" class="band band-alt">
     <div class="section-head">
       <h2>Configure</h2>
-      <p class="sub">Every key optional, in
-      <code>~/.config/whatsapp-desktop/whatsapp-desktop.conf</code>. State lives in
-      <code>~/.local/share/whatsapp-desktop</code>.</p>
+      <p class="sub">Every switch in that window is also a line in a file, for anyone
+      who would rather keep it there:
+      <code>~/.config/whatsapp-desktop/whatsapp-desktop.conf</code>. Each key is
+      optional, and deleting one puts the default back.</p>
     </div>
 
     <div class="two-col">
@@ -444,7 +471,8 @@ sha256sum -c SHA256SUMS --ignore-missing</code></pre>
           <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td><code>[view] font</code></td><td>GNOME's</td><td>family for everything the client draws</td></tr>
-            <tr><td><code>[view] font-size</code></td><td><code>16</code></td><td>root size in px — WhatsApp sizes in rem</td></tr>
+            <tr><td><code>[view] font-size</code></td><td><code>16</code></td><td>size of the whole interface, in px</td></tr>
+            <tr><td><code>[view] chat-font-size</code></td><td><code>100</code></td><td>size of the messages only, as a %</td></tr>
             <tr><td><code>[view] zoom</code></td><td><code>1.0</code></td><td>also set with <kbd>Ctrl</kbd>+<kbd>+</kbd>/<kbd>-</kbd></td></tr>
             <tr><td><code>[view] force-font</code></td><td><code>true</code></td><td>draw the page in one family</td></tr>
             <tr><td><code>[view] arabic-fix</code></td><td><code>false</code></td><td>widen the boxes Arabic descenders are clipped against</td></tr>
@@ -471,12 +499,88 @@ sha256sum -c SHA256SUMS --ignore-missing</code></pre>
     </div>
   </section>
 
+
+  <!-- ----------------------------------------------------------- remove -->
+  <section id="remove" class="band">
+    <div class="section-head">
+      <h2>Removing it</h2>
+      <p class="sub">Two things went onto your machine: the client, and the repository it
+      updates from. Pick your distribution and run the steps in order — the last one is
+      optional and is the only one that touches your session.</p>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Removal method">
+      <button class="tab" role="tab" aria-selected="true"  aria-controls="r-fedora" id="tr-fedora">Fedora / RHEL</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="r-debian" id="tr-debian">Debian / Ubuntu</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="r-arch"   id="tr-arch">Arch</button>
+    </div>
+
+    <div class="card panel" id="r-fedora" role="tabpanel" aria-labelledby="tr-fedora">
+      <p class="step">1 &middot; Remove the client</p>
+<pre><code>sudo dnf remove whatsapp-desktop</code></pre>
+
+      <p class="step">2 &middot; Remove the repository</p>
+<pre><code>sudo rm -f /etc/yum.repos.d/shinux.repo</code></pre>
+
+      <p class="step">3 &middot; Remove the signing key</p>
+<pre><code>sudo rpm -e $(rpm -q gpg-pubkey --qf '%{NVR} %{SUMMARY}\n' | grep -i shinux | cut -d' ' -f1)</code></pre>
+      <p class="note">The key is stored under a name made from its own fingerprint, which
+      is why it is looked up rather than typed. Leaving it costs nothing; removing it
+      means nothing of this repository is trusted any more.</p>
+
+      <p class="step">4 &middot; Your session and settings <span class="c">— optional</span></p>
+<pre><code>rm -rf ~/.local/share/whatsapp-desktop ~/.config/whatsapp-desktop</code></pre>
+    </div>
+
+    <div class="card panel" id="r-debian" role="tabpanel" aria-labelledby="tr-debian" hidden>
+      <p class="step">1 &middot; Remove the client</p>
+<pre><code>sudo apt purge whatsapp-desktop</code></pre>
+
+      <p class="step">2 &middot; Remove the repository</p>
+<pre><code>sudo rm -f /etc/apt/sources.list.d/shinux.sources</code></pre>
+
+      <p class="step">3 &middot; Remove the signing key</p>
+<pre><code>sudo rm -f /etc/apt/keyrings/shinux.gpg
+sudo apt update</code></pre>
+      <p class="note"><code>apt update</code> afterwards is what makes the change take:
+      until then your machine still lists packages from a repository it can no longer
+      check.</p>
+
+      <p class="step">4 &middot; Your session and settings <span class="c">— optional</span></p>
+<pre><code>rm -rf ~/.local/share/whatsapp-desktop ~/.config/whatsapp-desktop</code></pre>
+    </div>
+
+    <div class="card panel" id="r-arch" role="tabpanel" aria-labelledby="tr-arch" hidden>
+      <p class="step">1 &middot; Remove the client</p>
+<pre><code>sudo pacman -Rns whatsapp-desktop</code></pre>
+
+      <p class="step">2 &middot; Remove the repository</p>
+<pre><code>sudo nano /etc/pacman.conf</code></pre>
+      <p class="note">Delete the three <code>[shinux]</code> lines you added, save, and
+      then <code>sudo pacman -Sy</code> to forget its package list.</p>
+
+      <p class="step">3 &middot; Remove the signing key</p>
+<pre><code>sudo pacman-key --delete AE61EBAE9E8236C02D44F731BAD3F4329468897C</code></pre>
+
+      <p class="step">4 &middot; Your session and settings <span class="c">— optional</span></p>
+<pre><code>rm -rf ~/.local/share/whatsapp-desktop ~/.config/whatsapp-desktop</code></pre>
+    </div>
+
+    <div class="callout">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="ico"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+      <p><strong>Nothing on your phone changes.</strong> This client is a linked device,
+      like a browser tab: removing it here leaves the link listed on your phone under
+      <em>Settings → Linked devices</em>, and that is where you end the session for good.
+      Your messages live with WhatsApp and are all still on the phone afterwards.</p>
+    </div>
+  </section>
+
   <!-- ------------------------------------------------------------ build -->
-  <section id="build" class="band">
+  <section id="build" class="band band-alt">
     <div class="section-head">
       <h2>Build it yourself</h2>
-      <p class="sub">Needs Node and nothing else. GPL-3.0 — icon origins are recorded in
-      <code>data/icons/NOTICE</code>.</p>
+      <p class="sub">For anyone who would rather read the source than trust a package.
+      Needs Node and nothing else; the licence is GPL-3.0.</p>
     </div>
 
     <div class="two-col">

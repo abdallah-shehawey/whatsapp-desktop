@@ -41,6 +41,10 @@ a:hover { text-decoration: underline; }
 
 code, kbd, pre { font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace; }
 code { font-size: .9em; color: #b8e7c9; }
+/* A path or a package name in the middle of a sentence is one long word, and on
+   a narrow screen one long word pushes the page wider than the screen. Inside a
+   <pre> it is left alone: that block scrolls on purpose. */
+p code, li code, td code { overflow-wrap: anywhere; }
 p code, li code, td code { background: #0e1714; border: 1px solid var(--line-soft);
   border-radius: 5px; padding: .1em .38em; }
 
@@ -76,7 +80,15 @@ kbd {
 .brand:hover { text-decoration: none; }
 .brand img { border-radius: 7px; }
 
-.topnav { display: flex; gap: 4px; margin-left: 8px; flex: 1; }
+/* Scrolls rather than pushes: the bar carries a brand, five links, a version
+   pill and a button, and a reader whose browser forces its own font draws every
+   one of them wider than this was measured with. */
+.topnav {
+  display: flex; gap: 4px; margin-left: 8px; flex: 1;
+  min-width: 0; overflow-x: auto; scrollbar-width: none;
+}
+.topnav::-webkit-scrollbar { display: none; }
+.topnav a { white-space: nowrap; }
 .topnav a {
   color: var(--dim); font-size: .92rem; padding: 6px 12px; border-radius: 8px;
 }
@@ -123,7 +135,9 @@ kbd {
 .hero {
   display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   gap: clamp(32px, 5vw, 72px); align-items: center;
-  padding: clamp(48px, 7vw, 96px) var(--gutter) clamp(56px, 7vw, 88px);
+  /* Tight under the bar on purpose: the headline is the first thing to read,
+     and a screenful of gradient above it is a scroll before anything is said. */
+  padding: clamp(28px, 3.5vw, 56px) var(--gutter) clamp(48px, 6vw, 80px);
   border-bottom: 1px solid var(--line-soft);
   background:
     radial-gradient(80% 120% at 8% 0%, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 62%),
@@ -250,6 +264,21 @@ kbd {
   border: 1px solid var(--line); box-shadow: 0 22px 50px -28px #000;
 }
 .showcase-copy h3 { margin: 0 0 12px; font-size: 1.25rem; letter-spacing: -.02em; }
+
+/* What each switch does, beside the picture of them. A description list rather
+   than a table: the pairs are a name and a sentence, and a table of two columns
+   is a table only by accident. */
+.switches { margin: 18px 0 14px; display: grid; gap: 4px 14px; }
+.switches dt {
+  color: var(--fg); font-weight: 600; font-size: .93rem; margin-top: 10px;
+}
+.switches dt:first-of-type { margin-top: 0; }
+.switches dd { margin: 0; color: var(--dim); font-size: .9rem; }
+@media (min-width: 720px) {
+  .switches { grid-template-columns: minmax(140px, auto) minmax(0, 1fr); align-items: baseline; }
+  .switches dt { margin-top: 0; }
+  .switches dd { margin-bottom: 8px; }
+}
 .showcase-copy p { color: var(--dim); max-width: var(--measure); }
 
 /* ----------------------------------------------------------------- tabs - */
@@ -403,19 +432,20 @@ td:first-child { color: var(--fg); white-space: nowrap; }
   .foot-grid > div:first-child { grid-column: 1 / -1; }
 }
 
-/* The headline's hand-placed break is a wide-screen nicety; on a phone the
-   line is shorter than the break, and it only makes a third line. */
-@media (max-width: 640px) { .hero h1 br { display: none; } }
-
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .topnav { display: none; }
   .topbar { gap: 12px; }
   .brand span { font-size: .95rem; }
+  /* The name gives way rather than pushing the buttons off the bar. */
+  .brand { min-width: 0; }
+  .brand span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
-/* The brand and the GitHub link together already fill a phone's top bar; the
-   version pill is repeated in the hero, so it is the one that goes. */
-@media (max-width: 560px) {
+/* The brand and the GitHub link together already fill a narrow top bar; the
+   version pill is repeated in the hero, so it is the one that goes. Measured
+   against a browser forcing a font of its own, which is wider than any of this
+   was drawn for -- see the copy button, which measures its own label. */
+@media (max-width: 820px) {
   .topbar { gap: 10px; }
   .pill { display: none; }
 }

@@ -180,6 +180,15 @@
       btn.setAttribute("aria-label", "Copy to clipboard");
       wrap.appendChild(btn);
 
+      /* The room the button needs, measured rather than guessed: a reader whose
+         browser forces a font of its own draws this label wider than any number
+         written into the stylesheet, and the first line of the command then runs
+         underneath it. */
+      requestAnimationFrame(function () {
+        var room = btn.offsetWidth;
+        if (room) pre.style.paddingRight = (room + 20) + "px";
+      });
+
       btn.addEventListener("click", function () {
         var text = (pre.textContent || "").replace(/\s+$/, "");
         var done = function (ok) {

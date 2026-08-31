@@ -65,7 +65,7 @@ card.paste(icon, (88, 96), icon)
 draw.text((88, 312), "whatsapp-desktop", font=font("DejaVuSans-Bold.ttf", 74), fill=FG)
 draw.text(
     (88, 404),
-    "WhatsApp for Linux — tray, notifications,\ncalls, and your desktop's own font.",
+    "WhatsApp for Linux — tray, notifications,\ncalls, and text at the size you read.",
     font=font("DejaVuSans.ttf", 34),
     fill=DIM,
     spacing=14,
