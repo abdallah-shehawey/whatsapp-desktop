@@ -28,13 +28,14 @@ const media = require('./media.js');
 
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
-const start = ({ send, on }) => {
-  const log = message => send('log', String(message));
-
-  /* WebGPU on Linux/Wayland has a broken CreateExternalTexture implementation in
-     Chromium for video streams (generating "Invalid ExternalTexture is invalid" and
-     black video call frames). Disabling navigator.gpu forces WhatsApp to use its
-     working WebGL / direct MediaStream pipeline. */
+/* WebGPU on Linux/Wayland has a broken CreateExternalTexture implementation in
+   Chromium for video streams (generating "Invalid ExternalTexture is invalid" and
+   black video call frames). Disabling navigator.gpu forces WhatsApp to use its
+   working WebGL / direct MediaStream pipeline.
+ *
+ * On its own because a call moved out into a window of its own is a second page
+ * drawing the same video, and it needs this and nothing else in here. */
+const fixVideo = () => {
   try {
     if (window.Navigator && window.Navigator.prototype && 'gpu' in window.Navigator.prototype) {
       Object.defineProperty(window.Navigator.prototype, 'gpu', {
@@ -43,6 +44,12 @@ const start = ({ send, on }) => {
       });
     }
   } catch (e) {}
+};
+
+const start = ({ send, on }) => {
+  const log = message => send('log', String(message));
+
+  fixVideo();
 
   /* ------------------------------------------------------------------ focus */
 
@@ -60,6 +67,47 @@ const start = ({ send, on }) => {
   let waStore = null;
   let waMedia = null;
   const storeLive = () => !!(waStore && waStore.ready);
+
+  /* ------------------------------------------------------------- visibility */
+
+  /* What the page is allowed to believe about being on screen.
+   *
+   * Chromium is asked never to throttle this window (backgroundThrottling in
+   * src/main.js), which is what keeps the watcher's timers running while the
+   * client sits in the tray -- and it has a second effect nobody asked for: the
+   * page goes on being told it is visible after the compositor has stopped
+   * drawing it. Measured on this session with the client minimised: the timers
+   * keep their pace, and requestAnimationFrame goes to zero.
+   *
+   * A page told it is visible and given no frames is a page waiting for
+   * animation frames that will never arrive, and WhatsApp waits in exactly that
+   * way. It is what stopped a call moved into a window of its own from
+   * answering: the camera, the screen-share button and the popped-out window's
+   * own closing all sat behind a client nobody was drawing, and came back the
+   * moment the client was brought up.
+   *
+   * So the page is told the truth, from the one place that knows it. The
+   * throttling stays off underneath: this changes what the page believes, not
+   * what Chromium does with its timers -- so the watcher keeps its pace in the
+   * tray, which a browser's hidden tab does not. */
+  let onScreen = true;
+  try {
+    Object.defineProperty(document, 'visibilityState', {
+      get: () => (onScreen ? 'visible' : 'hidden'),
+      configurable: true,
+    });
+    Object.defineProperty(document, 'hidden', {
+      get: () => !onScreen,
+      configurable: true,
+    });
+  } catch (e) {}
+
+  on('on-screen', state => {
+    state = !!state;
+    if (state === onScreen) return;
+    onScreen = state;
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
 
   on('focus', state => {
     state = !!state;
@@ -2064,4 +2112,4 @@ const start = ({ send, on }) => {
   });
 };
 
-module.exports = { start, SEP };
+module.exports = { start, fixVideo, SEP };

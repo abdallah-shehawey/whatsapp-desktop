@@ -229,15 +229,30 @@ const clampToScreen = (width, height) => {
   };
 };
 
+/* Raising a window on Wayland is done by taking it down and putting it back up
+   (see showWindow), and for the frame in between the window is genuinely not on
+   screen. The page must not hear about that frame. Told the client went away and
+   came back, WhatsApp resumes as though it had been in the background for an age
+   -- which the owner sees as the client closing and reopening itself every time
+   a banner is clicked. While the trick is in progress the honest answer is the
+   one it is on its way to: on screen. */
+let remapping = false;
+
 const pushFocus = () => {
   if (!win || win.isDestroyed()) return;
-  const active = win.isVisible() && !win.isMinimized() && win.isFocused();
+  const onScreen = remapping || (win.isVisible() && !win.isMinimized());
+  const active = onScreen && win.isFocused();
   win.webContents.send('wa:focus', active);
+  /* Whether the compositor is drawing this window at all, which is a different
+     question from whether it has the focus and the one the page cannot answer
+     for itself. See the visibility section of src/page/inject.js. */
+  win.webContents.send('wa:on-screen', onScreen);
   /* The tray is deliberately not told anything here. What it needs is tracked
      from the window's own events instead -- see trayFollowsWindow -- because
      asking the window is what got this wrong. */
-  /* A window coming back is the user arriving at whatever chat is on screen. */
-  if (active) withdrawOpen();
+  /* A window coming back is the user arriving at whatever chat is on screen --
+     and at any call the telephone is ringing for. */
+  if (active) { withdrawOpen(); withdrawRinging(); }
 };
 
 /*
@@ -367,13 +382,26 @@ const RESTORE_MS = 150;
 const showWindow = () => {
   if (!win || win.isDestroyed()) return;
 
+  /* Already up, and already the owner's. There is nothing to raise, and raising
+     it anyway means the re-map below -- which takes the window down for a frame
+     and puts the page through a rebuild to no purpose. Clicking a banner while
+     looking at the client should move to the chat and do nothing else. */
+  if (win.isVisible() && !win.isMinimized() && win.isFocused()) {
+    win.focus();
+    return;
+  }
+
   const remap = () => {
     if (!win || win.isDestroyed()) return;
+    remapping = true;
     win.hide();
     setTimeout(() => {
-      if (!win || win.isDestroyed()) return;
+      if (!win || win.isDestroyed()) { remapping = false; return; }
       win.show();
       win.focus();
+      /* Cleared a turn later, so that the events the show and the focus raise
+         both find the trick still in progress. */
+      setTimeout(() => { remapping = false; }, 0);
     }, REMAP_MS);
   };
 
@@ -471,16 +499,24 @@ const openSettings = () => {
   });
 };
 
-const applyStyle = async () => {
-  if (!win || win.isDestroyed()) return;
+/* What the page is drawn with. Lifted out of applyStyle because a call moved
+   into a window of its own is a second page of WhatsApp's, and it is this
+   client's font it should be drawn in too. */
+const styleSheet = () => {
   const family = config.get('view.font') || desktop.interfaceFont();
-  const css = [
+  return [
     style.build({
       arabicFix: config.get('view.arabic-fix'),
       fontSize: config.get('view.font-size'),
     }),
     config.get('view.force-font') ? style.aliasSheet(pageFontStack, family) : '',
   ].filter(Boolean).join('\n');
+};
+
+const applyStyle = async () => {
+  if (!win || win.isDestroyed()) return;
+  const family = config.get('view.font') || desktop.interfaceFont();
+  const css = styleSheet();
 
   try {
     if (cssKey) await win.webContents.removeInsertedCSS(cssKey);
@@ -626,11 +662,21 @@ const createWindow = () => {
 
   /* Links open in the desktop's browser. Anything that is not WhatsApp itself is
      not this client's to show: it has no address bar to tell the user where they
-     have ended up. */
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    openExternally(url);
-    return { action: 'deny' };
+     have ended up.
+   *
+   * The client's own pages are the exception, and refusing them was a bug with a
+   * dialog attached: "Move to new window" in a call is a window.open, and a page
+   * handed null back from one reads that as the browser blocking pop-ups and
+   * says exactly that. So WhatsApp gets the window it asked for. */
+  win.webContents.setWindowOpenHandler(({ url, features }) => {
+    if (!isOwnPage(url)) {
+      openExternally(url);
+      return { action: 'deny' };
+    }
+    return { action: 'allow', overrideBrowserWindowOptions: popupOptions(features) };
   });
+
+  win.webContents.on('did-create-window', adoptPopup);
 
   win.webContents.on('will-navigate', (event, url) => {
     if (isWhatsApp(url)) return;
@@ -652,8 +698,104 @@ const isWhatsApp = url => {
   }
 };
 
+/* Narrower than isWhatsApp, and deliberately so. faq.whatsapp.com is WhatsApp
+   as well, and it is still a page for a browser rather than for a window of
+   this client's: there is no address bar here and no way back. What this answers
+   true for is the client itself, and the URLs a page of it opens that carry no
+   origin of their own. */
+const isOwnPage = url => {
+  if (!url) return true;
+  if (url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('about:')) return true;
+  try {
+    return new URL(url).hostname === 'web.whatsapp.com';
+  } catch (e) {
+    return false;
+  }
+};
+
 const openExternally = url => {
   if (/^https?:|^mailto:|^tel:/i.test(url)) shell.openExternal(url).catch(() => {});
+};
+
+/* ----------------------------------------------------------------- popups */
+
+/* WhatsApp opens one window of its own: the call, moved out of the chat list by
+   "Move to new window". It comes through window.open on the client's own origin,
+   so it is allowed -- and then it is this client's window to dress, because
+   Chromium's default is an untitled box with Electron's icon and the wrong
+   font. */
+const popups = new Set();
+
+const popupOptions = features => {
+  const family = config.get('view.font') || desktop.interfaceFont();
+  /* WhatsApp says how big it wants the window; a size of this client's choosing
+     is only put on one that did not ask. */
+  const sized = /(^|,)\s*(width|height)\s*=/i.test(features || '');
+  return {
+    ...(sized ? {} : { width: 480, height: 640 }),
+    title: TITLE,
+    icon: appIcon,
+    autoHideMenuBar: true,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b141a' : '#ffffff',
+    webPreferences: {
+      /* Spelled out rather than left to what a child window inherits. The preload
+         is not optional here: without it navigator.gpu stays, and that is a call
+         window whose video comes through black -- see src/page/inject.js. The
+         marker is how the preload tells this window from the client, which is a
+         distinction the page cannot be trusted to make for it. */
+      preload: path.join(__dirname, 'preload.js'),
+      additionalArguments: ['--wa-popup'],
+      contextIsolation: false,
+      nodeIntegration: false,
+      sandbox: false,
+      autoplayPolicy: 'no-user-gesture-required',
+      defaultFontFamily: { standard: family, sansSerif: family, serif: family },
+      defaultFontSize: config.get('view.font-size'),
+      /* Never throttled, and said out loud because a child window inherits what
+         it is not told. This was tried the other way round for one build, on the
+         theory that a call window has nothing that must keep running -- and a
+         call window has the call. Wayland's compositor marks a window suspended
+         the moment something covers it, Chromium throttles a suspended page when
+         it is allowed to, and "switch to video" went from answering on the click
+         to answering seconds later. */
+      backgroundThrottling: false,
+    },
+  };
+};
+
+const adoptPopup = popup => {
+  popups.add(popup);
+  popup.on('closed', () => {
+    popups.delete(popup);
+    debug.trace('popup: closed, %d left', popups.size);
+  });
+  popup.on('close', () => debug.trace('popup: asked to close'));
+
+  const contents = popup.webContents;
+
+  contents.on('did-finish-load', async () => {
+    debug.trace('popup: loaded %s', contents.getURL());
+    contents.setZoomFactor(Number(config.get('view.zoom')) || 1);
+    const css = styleSheet();
+    if (css) await contents.insertCSS(css, { cssOrigin: 'user' }).catch(() => {});
+  });
+
+  /* Whatever this window opens in turn is a link, not a call. */
+  contents.setWindowOpenHandler(({ url }) => {
+    openExternally(url);
+    return { action: 'deny' };
+  });
+
+  contents.on('will-navigate', (event, url) => {
+    if (isWhatsApp(url)) return;
+    event.preventDefault();
+    openExternally(url);
+  });
+
+  contents.on('before-input-event', (event, input) => onPopupKey(popup, event, input));
+
+  console.log('WhatsApp asked for a window of its own; %dx%d',
+              popup.getBounds().width, popup.getBounds().height);
 };
 
 /* ------------------------------------------------------------------- keys */
@@ -682,6 +824,22 @@ const onKey = (event, input) => {
   } else if (ctrl && key === '0') {
     event.preventDefault();
     win.webContents.setZoomFactor(1);
+  }
+};
+
+/* A call window answers to fewer keys than the client does, and reload is not
+   among them: the call itself lives in the window that opened this one, so a
+   popped-out call reloaded is an empty window with no way back to it. */
+const onPopupKey = (popup, event, input) => {
+  if (input.type !== 'keyDown' || popup.isDestroyed()) return;
+  const ctrl = input.control || input.meta;
+  const key = input.key.toLowerCase();
+
+  if (ctrl && key === 'q') { event.preventDefault(); quit(); return; }
+  if (ctrl && key === 'w') { event.preventDefault(); popup.close(); return; }
+  if (ctrl && input.shift && key === 'i') {
+    event.preventDefault();
+    popup.webContents.toggleDevTools();
   }
 };
 
@@ -722,6 +880,15 @@ const playTone = () => {
 
 /* ------------------------------------------------------------ withdrawals */
 
+/* Every call this client is ringing for. A ringing banner is ongoing -- it
+   names something still happening, so nothing about reading a chat takes it
+   down -- and until now the only thing that did was the ringing stopping. A
+   call answered by opening the window instead of by clicking the banner
+   therefore left the banner in the notification centre for the rest of the
+   session. Arriving at the client is dealing with the call, whichever chat is
+   on screen, so it counts as an answer too. */
+const ringingBanners = new Set();
+
 /* A notification is an unread message made visible, so it comes down as soon as
    the message has been dealt with. Two things say that it has, and they are not
    the same thing:
@@ -756,6 +923,17 @@ const withdrawOpen = () => {
    being too young is not dropped -- nothing would ever ask again -- but deferred
    to the moment the guard is over and asked again then, because the chat may
    have gone unread once more in between. */
+/* The ringing, taken down because the owner is here. Deliberately not keyed on
+   the chat: the call is being dealt with in the client whether or not its
+   conversation is the one on screen. */
+const withdrawRinging = () => {
+  if (!banners || !ringingBanners.size) return;
+  for (const id of [...ringingBanners]) {
+    ringingBanners.delete(id);
+    if (banners.closeMessage(id)) console.log('withdrew the ringing: the client is open');
+  }
+};
+
 const withdrawRead = key => {
   const waiting = withdrawing.get(key);
   if (waiting) { clearTimeout(waiting); withdrawing.delete(key); }
@@ -1313,6 +1491,7 @@ const wireIpc = () => {
       },
     });
     if (!banner) return;
+    ringingBanners.add('ring' + SEP + note.call);
     console.log('ringing: %s in %s', note.mark, note.title);
   });
 
@@ -1321,6 +1500,7 @@ const wireIpc = () => {
      this handler's business. */
   ipcMain.on('wa:store-ring-over', (event, note) => {
     if (!storeLive || !note || !note.call || !banners) return;
+    ringingBanners.delete('ring' + SEP + note.call);
     if (banners.closeMessage('ring' + SEP + note.call))
       console.log('the telephone has stopped ringing in %s',
                   chatTitles.get(note.chat) || note.chat);
