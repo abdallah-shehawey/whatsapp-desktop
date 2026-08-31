@@ -2077,21 +2077,74 @@ const start = ({ send, on }) => {
    * right shows nothing spilling past the window.
    */
   const DRAWER = '[data-testid="drawer-right"]';
+  const SLIDE_MS = 200;
   let drawerSlide = null;
+
+  /* Where the slide starts, in pixels, or 0 while the panel is still collapsed.
+   *
+   * Never a percentage. This began as `translateX(100%)` applied on the event
+   * itself, and a percentage is resolved against the box on every frame it is
+   * sampled: when the event arrives while WhatsApp's own animation is still on
+   * its first frame -- flex-basis 0%, no width -- the offset starts at nothing
+   * and GROWS to a panel-width while the slide plays. The panel appears in
+   * place, jumps sideways and comes back. That is the glitch that shipped, and
+   * it is why the drawer looked as though it had opened from the wrong side.
+   *
+   * The side is measured rather than assumed: an Arabic interface puts this
+   * panel on the left of the window, and sliding in from the far side of the
+   * screen is the same glitch by another route. */
+  const slideOffset = panel => {
+    const box = panel.getBoundingClientRect();
+    if (!(box.width > 0)) return 0;
+    const middle = (box.left + box.right) / 2;
+    return Math.round(middle > innerWidth / 2 ? box.width : -box.width);
+  };
 
   const slideTheDrawer = () => {
     addEventListener('animationstart', event => {
       const panel = event.target;
-      /* The panel itself, not the animations WhatsApp runs on things inside it. */
+      /* The panel itself, not the animations WhatsApp runs on things inside it.
+         Message info, contact info and group info are all this one panel --
+         checked on the live page: group info renders
+         [group-info-participants-section] inside [data-testid="drawer-right"],
+         and the same keyframes start on the panel for all three. */
       if (!(panel instanceof Element) || !panel.matches || !panel.matches(DRAWER)) return;
       if (typeof panel.animate !== 'function') return;
-      try {
-        if (drawerSlide) drawerSlide.cancel();
-        drawerSlide = panel.animate(
-          [{ transform: 'translate3d(100%, 0, 0)', opacity: 0 },
-           { transform: 'none', opacity: 1 }],
-          { duration: 200, easing: 'cubic-bezier(0.16, 0.84, 0.44, 1)' });
-      } catch (err) { /* an older engine: the drawer simply appears */ }
+
+      /* A frame later, so the width is settled and can be measured once.
+       *
+       * Nothing is painted in place in the meantime, which was the worry.
+       * Measured on the live page: the event arrives on the very frame the
+       * width lands (event t == that frame's time, width already 512), and a
+       * callback registered from inside an event handler runs in THAT frame's
+       * callback list, before style and paint. Read back from a second
+       * listener added after this one -- so it runs second, in the same frame
+       * -- the panel is already at translate 512px, opacity 0. The frame the
+       * drawer becomes wide is the frame it is offset in.
+       *
+       * The retry is for the other order: an event on the frame where
+       * flex-basis is still 0% leaves nothing to measure, and one snap with no
+       * motion is better than a slide of nought pixels. A close needs no guard
+       * of its own -- measured, it starts no animation at all, the width simply
+       * drops to 0 -- but a panel that never widens gives up after three
+       * frames all the same. */
+      let tries = 3;
+      const start = () => {
+        let offset = 0;
+        try { offset = slideOffset(panel); } catch (err) { return; }
+        if (!offset) {
+          if (--tries > 0) requestAnimationFrame(start);
+          return;
+        }
+        try {
+          if (drawerSlide) drawerSlide.cancel();
+          drawerSlide = panel.animate(
+            [{ transform: 'translate3d(' + offset + 'px, 0, 0)', opacity: 0 },
+             { transform: 'none', opacity: 1 }],
+            { duration: SLIDE_MS, easing: 'cubic-bezier(0.16, 0.84, 0.44, 1)' });
+        } catch (err) { /* an older engine: the drawer simply appears */ }
+      };
+      requestAnimationFrame(start);
     }, true);
   };
 
