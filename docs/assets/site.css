@@ -92,6 +92,17 @@ kbd {
 .topnav a {
   color: var(--dim); font-size: .92rem; padding: 6px 12px; border-radius: 8px;
 }
+/* Seven sections fit a wide bar with room to spare and a narrow one only if
+   they give up their padding. Below this the nav is hidden altogether, so this
+   is the band where the choice is between tighter links and a nav that has to
+   be scrolled sideways to reach the last of them. */
+@media (max-width: 1180px) {
+  .topnav { gap: 2px; }
+  .topnav a { padding: 6px 6px; font-size: .86rem; }
+}
+@media (max-width: 1010px) {
+  .topnav a { padding: 6px 4px; font-size: .8rem; }
+}
 .topnav a:hover { color: var(--fg); background: var(--panel); text-decoration: none; }
 
 .topbar-end { display: flex; align-items: center; gap: 10px; margin-left: auto; }

@@ -53,6 +53,7 @@
     <a href="#features">Features</a>
     <a href="#install">Install</a>
     <a href="#download">Downloads</a>
+    <a href="#update">Update</a>
     <a href="#configure">Configure</a>
     <a href="#remove">Remove</a>
     <a href="#build">Build</a>
@@ -232,7 +233,8 @@
       <h2>Install</h2>
       <p class="sub">Pick your distribution and copy the commands — everything you need
       is on this page. The packages are signed and come from a repository, so your usual
-      system update keeps WhatsApp up to date with everything else.</p>
+      system update keeps WhatsApp up to date with everything else — and
+      <a href="#update">Update</a> has the commands for doing it on its own.</p>
     </div>
 
     <div class="tabs" role="tablist" aria-label="Install method">
@@ -355,17 +357,6 @@ sudo pacman -U ./whatsapp-desktop-<span data-version>1.6.1</span>-1-x86_64.pkg.t
       delete <code>/etc/xdg/autostart/io.github.shehawey.whatsapp-desktop.desktop</code>.</p>
     </div>
 
-    <div class="card">
-      <h3>Updating</h3>
-<pre><code>sudo dnf upgrade --refresh whatsapp-desktop
-sudo apt update &amp;&amp; sudo apt install --only-upgrade whatsapp-desktop
-sudo pacman -Syyu whatsapp-desktop</code></pre>
-      <p class="note">Each command fetches the repository's package list before it looks:
-      a new release can be a few hours newer than the copy your machine last downloaded,
-      and without the refresh it is simply not there yet. Your ordinary system upgrade
-      picks the client up as well — there is no updater inside it.</p>
-    </div>
-
     <p class="fpr-line">
       Everything above is signed with
       <code class="fpr">AE61&nbsp;EBAE&nbsp;9E82&nbsp;36C0&nbsp;2D44&nbsp;F731&nbsp;BAD3&nbsp;F432&nbsp;9468&nbsp;897C</code>
@@ -441,7 +432,82 @@ sha256sum -c SHA256SUMS --ignore-missing</code></pre>
   </section>
 
   <!-- -------------------------------------------------------- configure -->
-  <section id="configure" class="band band-alt">
+  <!-- ----------------------------------------------------------- update -->
+  <section id="update" class="band band-alt">
+    <div class="section-head">
+      <h2>Update</h2>
+      <p class="sub">There is no updater inside the client: it is a package like any
+      other, and your usual system upgrade carries it along. These are the commands for
+      updating it on its own, and each one refreshes the repository's package list first
+      — a release published this morning is not in the copy your machine downloaded
+      yesterday.</p>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Update method">
+      <button class="tab" role="tab" aria-selected="true"  aria-controls="u-fedora" id="tu-fedora">Fedora / RHEL</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="u-debian" id="tu-debian">Debian / Ubuntu</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="u-arch"   id="tu-arch">Arch</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="u-file"   id="tu-file">Downloaded file</button>
+    </div>
+
+    <div class="card panel" id="u-fedora" role="tabpanel" aria-labelledby="tu-fedora">
+      <p class="step">1 &middot; Update the client</p>
+<pre><code>sudo dnf upgrade --refresh whatsapp-desktop</code></pre>
+      <p class="note"><code>--refresh</code> throws away the cached package list and asks
+      the repository again. Without it dnf answers from a list that can be a day old, and
+      says there is nothing to upgrade when there is.</p>
+
+      <p class="step">2 &middot; Or with everything else <span class="c">— optional</span></p>
+<pre><code>sudo dnf upgrade --refresh</code></pre>
+    </div>
+
+    <div class="card panel" id="u-debian" role="tabpanel" aria-labelledby="tu-debian" hidden>
+      <p class="step">1 &middot; Refresh the package list</p>
+<pre><code>sudo apt update</code></pre>
+
+      <p class="step">2 &middot; Update the client</p>
+<pre><code>sudo apt install --only-upgrade whatsapp-desktop</code></pre>
+      <p class="note"><code>--only-upgrade</code> keeps apt from installing anything that
+      is not already on the machine — it upgrades this package and nothing else.</p>
+
+      <p class="step">3 &middot; Or with everything else <span class="c">— optional</span></p>
+<pre><code>sudo apt update &amp;&amp; sudo apt upgrade</code></pre>
+    </div>
+
+    <div class="card panel" id="u-arch" role="tabpanel" aria-labelledby="tu-arch" hidden>
+      <p class="step">1 &middot; Update the client</p>
+<pre><code>sudo pacman -Syu whatsapp-desktop</code></pre>
+      <p class="note">The whole system goes up with it, which is how Arch is meant to be
+      updated: upgrading one package on its own is what leaves a machine half a release
+      behind itself.</p>
+
+      <p class="step">2 &middot; If the new version is still not offered</p>
+<pre><code>sudo pacman -Syyu whatsapp-desktop</code></pre>
+      <p class="note">The second <code>y</code> downloads the database again even when
+      pacman believes the one it has is current.</p>
+    </div>
+
+    <div class="card panel" id="u-file" role="tabpanel" aria-labelledby="tu-file" hidden>
+      <p class="step">Installed from a file, not the repository</p>
+<pre><code>sudo dnf install ./whatsapp-desktop-*.rpm      <span class="c"># Fedora and friends</span>
+sudo apt install ./whatsapp-desktop_*.deb     <span class="c"># Debian, Ubuntu 24.04+</span>
+sudo pacman -U ./whatsapp-desktop-*.pkg.tar.zst  <span class="c"># Arch</span></code></pre>
+      <p class="note">Fetch the new file from <a href="#download">Downloads</a> and install
+      it over the old one — the settings, and the linked session, are in your home
+      directory and stay where they are. Nothing tells you a release is out this way,
+      which is the reason the repository exists.</p>
+    </div>
+
+    <div class="callout">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="ico"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+      <p><strong>Your session survives an update.</strong> The link to your phone and every
+      setting live in your home directory, so the client comes back to the conversation you
+      left. Restart it after an update — a running copy keeps the old files open until it
+      is quit from the tray.</p>
+    </div>
+  </section>
+
+  <section id="configure" class="band">
     <div class="section-head">
       <h2>Configure</h2>
       <p class="sub">Every switch in that window is also a line in a file, for anyone
@@ -502,7 +568,7 @@ sha256sum -c SHA256SUMS --ignore-missing</code></pre>
 
 
   <!-- ----------------------------------------------------------- remove -->
-  <section id="remove" class="band">
+  <section id="remove" class="band band-alt">
     <div class="section-head">
       <h2>Removing it</h2>
       <p class="sub">Two things went onto your machine: the client, and the repository it
@@ -577,7 +643,7 @@ sudo apt update</code></pre>
   </section>
 
   <!-- ------------------------------------------------------------ build -->
-  <section id="build" class="band band-alt">
+  <section id="build" class="band">
     <div class="section-head">
       <h2>Build it yourself</h2>
       <p class="sub">For anyone who would rather read the source than trust a package.
