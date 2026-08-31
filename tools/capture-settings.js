@@ -31,8 +31,8 @@ app.whenReady().then(() => {
   const win = new BrowserWindow({
     /* The size the client itself opens this window at (see openSettings), so
        the picture on the landing page is the window, not a rendering of it. */
-    width: 520,
-    height: 950,
+    width: 560,
+    height: 660,
     /* Frameless, like the window the client opens: capturePage takes the web
        contents, and a frame here would only shrink them. */
     frame: false,
