@@ -1820,9 +1820,17 @@ const start = ({ send, on }) => {
   /* Longer than any notification tone and far shorter than a call: a ring is
      what must never be silenced by any of this. */
   const RINGING_S = 6;
+  /* What the user asked to hear rather than something the page decided to play:
+     a voice note, an audio file, a video. WhatsApp serves all of them from a
+     blob: URL or from its own media CDN, and serves nothing else that way --
+     its tones come from static.whatsapp.net. Read by the muting below, which
+     must never touch one, and by the media controls further down, which are
+     only ever interested in one. */
+  const USER_MEDIA = /^blob:|mmg\.whatsapp\.net|pps\.whatsapp\.net|media[\w-]*\.cdn\.whatsapp\.net/i;
   let sentAt = 0;
   let muteSendTone = false;
   let mutePageTone = false;
+  let hideControlsWhenPaused = true;
   let mutedSend = false;
   let mutedArrival = false;
 
@@ -1855,6 +1863,109 @@ const start = ({ send, on }) => {
     }, true);
   };
 
+  /* ------------------------------------------ the desktop's media controls */
+
+  /*
+   * A voice note that is only paused leaves its card sitting in the
+   * notification centre, and nothing but playing the note out to its end takes
+   * it down. That is not the shell being stubborn and it is not Chromium's
+   * either -- it is the two of them agreeing on something neither was asked.
+   *
+   * Measured on the bus, against org.mpris.MediaPlayer2.chromium.instance<pid>:
+   * playing answers CanPlay true / PlaybackStatus "Playing", pausing moves the
+   * status to "Paused" and leaves CanPlay ALONE. And gnome-shell shows a player
+   * for exactly one reason -- its own mpris.js filters the list on
+   * `player.canPlay` and reads PlaybackStatus only to draw the button. So a
+   * paused note is still a player as far as the shell can tell.
+   *
+   * Chromium drops a player from its media session when the stream ends or when
+   * the element loses its resource, and pausing is neither. Losing the resource
+   * is reachable from here: blanking the src and running the load algorithm
+   * destroys the WebMediaPlayer, Chromium takes it out of the session, CanPlay
+   * goes false and the card leaves. Putting the src straight back gives the
+   * element its audio again WITHOUT putting it back in the session -- a player
+   * joins on play(), not on load -- so the note is still there to be resumed
+   * and the card returns only when it actually is.
+   *
+   * Measured end to end, driving the conversation's own buttons: playing ->
+   * CanPlay true; paused and recycled -> CanPlay false, PlaybackStatus
+   * "Stopped", currentTime still 2.52, readyState still 4, the bubble still
+   * reading its duration and offering Play; pressed again -> resumed from 2.52
+   * and CanPlay true. WhatsApp's player noticed none of it.
+   *
+   * Audio only, deliberately. A <video> stripped of its resource has nothing to
+   * draw until the seek lands again, and a flash in the middle of a video is a
+   * worse thing than a card that outstays its welcome.
+   */
+
+  /* If loadedmetadata never comes, stop waiting and let the element be. Well
+     past what a blob already in memory takes, and short enough that a press
+     held behind it is not a hang. */
+  const RESTORE_WAIT_MS = 2000;
+
+  /* Elements whose src is on its way back, and the promise that says when it
+     is. A press that lands inside that window has to wait for it: play() on an
+     element with no resource rejects, and the note would be stuck. */
+  const restoring = new WeakMap();
+
+  const conversationAudio = el => {
+    if (!el || el.tagName !== 'AUDIO') return false;
+    /* A call carries its audio on a stream and rings on a loop; neither is a
+       recording somebody chose to listen to. */
+    if (el.srcObject || el.loop === true) return false;
+    return USER_MEDIA.test(el.currentSrc || el.src || '');
+  };
+
+  /* Take the resource away and hand it back, in that order and in one go. The
+     two load() calls are what Chromium reads: the first tears the player down,
+     the second builds one that has never played and so was never enrolled. */
+  const recycle = el => {
+    if (restoring.has(el)) return;
+    const url = el.getAttribute('src') || el.src;
+    if (!url) return;
+    const at = el.currentTime;
+
+    const back = new Promise(resolve => {
+      const settle = () => {
+        clearTimeout(timer);
+        el.removeEventListener('loadedmetadata', settle);
+        /* Where the user left it. Seeking a paused element does not re-enrol
+           it -- only play() does -- so this costs nothing back. */
+        if (at > 0 && isFinite(at)) { try { el.currentTime = at; } catch (e) {} }
+        restoring.delete(el);
+        resolve();
+      };
+      const timer = setTimeout(settle, RESTORE_WAIT_MS);
+      el.addEventListener('loadedmetadata', settle);
+      el.removeAttribute('src');
+      el.load();
+      el.setAttribute('src', url);
+      el.load();
+    });
+
+    restoring.set(el, back);
+  };
+
+  /* Watched on the element itself, once, at its first play. WhatsApp's voice
+     notes are detached -- measured: isConnected false, and getRootNode answers
+     the element -- so there is no path from one to window and a capture
+     listener up there would never hear a thing. The pause event is where every
+     way a note can stop meets: the button, another note starting, the page's
+     own shortcut. */
+  const watchPlayback = el => {
+    if (el.__waWatched) return;
+    el.__waWatched = true;
+    el.addEventListener('play', () => { el.__waEnded = false; });
+    /* The end of a note is Chromium's own business: it drops that player by
+       itself and the card goes with it. WhatsApp pauses the element afterwards
+       to rewind it, and recycling there would be a reload for nothing. */
+    el.addEventListener('ended', () => { el.__waEnded = true; });
+    el.addEventListener('pause', () => {
+      if (el.__waEnded || !hideControlsWhenPaused) return;
+      if (conversationAudio(el)) recycle(el);
+    });
+  };
+
   /* Both ways a page can make a sound, because which one WhatsApp uses is not
      worth depending on: it has played its tones through an <audio> element for
      years, and the tone this client raises for its own banners goes through
@@ -1864,7 +1975,14 @@ const start = ({ send, on }) => {
     if (window.HTMLMediaElement) {
       const play = HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play = function (...args) {
+        /* Pressed again while the src is still being put back, and asked
+           before the muting is: an element mid-restore is a voice note by
+           construction, and a note is the one thing the muting must never
+           answer for. */
+        const back = restoring.get(this);
+        if (back) return back.then(() => play.apply(this, args));
         if (muted(this)) return Promise.resolve();
+        watchPlayback(this);
         return play.apply(this, args);
       };
     }
@@ -1914,7 +2032,7 @@ const start = ({ send, on }) => {
        called -- the metadata has not loaded yet -- so the RINGING_S check above
        cannot catch them. */
     const src = source.currentSrc || source.src || '';
-    if (/^blob:|mmg\.whatsapp\.net|pps\.whatsapp\.net|media[\w-]*\.cdn\.whatsapp\.net/i.test(src)) return false;
+    if (USER_MEDIA.test(src)) return false;
 
     /* Within a beat of a keystroke or a click on send: their own message. */
     if (Date.now() - sentAt <= SEND_TONE_MS) {
@@ -2097,6 +2215,7 @@ const start = ({ send, on }) => {
     }
     muteSendTone = !!(config && config.muteSendTone);
     mutePageTone = !!(config && config.mutePageTone);
+    hideControlsWhenPaused = !(config && config.hideControlsWhenPaused === false);
     log('ready on ' + location.host);
 
     /* What the page asks for, so the app can bind those families to the

@@ -628,6 +628,7 @@ const createWindow = () => {
     win.webContents.send('wa:config', {
       notifications: !!config.get('notifications.enabled'),
       downloadStickers: config.get('media.download-stickers') !== false,
+      hideControlsWhenPaused: config.get('media.hide-controls-when-paused') !== false,
       muteSendTone: !config.get('notifications.outgoing-sound'),
       /* One event, one sound, and the same one either way round: the client
          plays the desktop's tone for a message arriving whether the window is in

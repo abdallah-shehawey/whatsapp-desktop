@@ -38,6 +38,9 @@ const DEFAULTS = {
      all and always fetches them. This does the same; turn it off to have
      WhatsApp's photo switch govern stickers again. */
   'media.download-stickers': true,
+  /* Take the desktop's media card down when a voice note is paused, instead of
+     leaving it there until the note has played out. */
+  'media.hide-controls-when-paused': true,
 };
 
 /* A deliberately small INI reader: sections, key = value, # and ; comments.
@@ -151,6 +154,13 @@ class Config {
       '# off leaves every sticker as a blank space with no way to fetch it. The',
       '# phone always fetches stickers; so does this, unless it is turned off here.',
       `download-stickers = ${v['media.download-stickers']}`,
+      "# A voice note that is only paused leaves its card in the desktop's",
+      '# notification centre until the note has played out -- Chromium keeps the',
+      '# media session for a paused player, and the shell shows every session it',
+      '# can see. On, the card goes down with the pause and comes back when the',
+      '# note does. Turn it off to keep a paused note on the shell, where its',
+      '# play button can start it again.',
+      `hide-controls-when-paused = ${v['media.hide-controls-when-paused']}`,
       '',
     ].join('\n');
 

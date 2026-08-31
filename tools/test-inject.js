@@ -228,9 +228,30 @@ const fire = (type, event) => { for (const fn of listeners.get(type) || []) fn(e
    is which way it went. */
 let played = [];
 class HTMLMediaElement {
-  constructor(where) { this.where = where || ''; }
-  play() { played.push('audio'); return Promise.resolve(); }
+  constructor(where, src) {
+    this.where = where || '';
+    this.tagName = 'AUDIO';
+    this.src = src || '';
+    this.currentTime = 0;
+    this.paused = true;
+    /* How many times the load algorithm was run, which is what the media
+       controls are taken down by: one load with no src, one with it back. */
+    this.loads = 0;
+    this.handlers = {};
+  }
+  play() { played.push('audio'); this.paused = false; return Promise.resolve(); }
+  pause() { this.paused = true; this.fire('pause'); }
   closest(sel) { return this.where === sel ? {} : null; }
+  getAttribute(name) { return name === 'src' ? (this.src || null) : null; }
+  setAttribute(name, value) { if (name === 'src') this.src = value; }
+  removeAttribute(name) { if (name === 'src') this.src = ''; }
+  load() { this.loads++; }
+  addEventListener(type, fn) { (this.handlers[type] = this.handlers[type] || []).push(fn); }
+  removeEventListener(type, fn) {
+    const list = this.handlers[type];
+    if (list) this.handlers[type] = list.filter(one => one !== fn);
+  }
+  fire(type) { for (const fn of (this.handlers[type] || []).slice()) fn(); }
 }
 class AudioBufferSourceNode {
   start() { played.push('webaudio'); }
@@ -756,6 +777,62 @@ const check = (label, got, want) => {
   ringing.loop = true;
   ringing.play();
   check('a call ringing is never muted, whatever else is', played.join(), 'audio');
+
+  /* ------------------------------------------ the desktop's media controls */
+
+  /* A paused voice note used to leave its card in the notification centre until
+     the note had played out: Chromium keeps a paused player in its media
+     session, and the shell shows every session it can see. Taking the resource
+     away and handing it straight back drops the player without dropping the
+     note -- two runs of the load algorithm, the src back where it was, and the
+     position kept. */
+  const note = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/a-voice-note');
+  note.duration = 8.4;
+  note.play();
+  note.currentTime = 2.5;
+  note.pause();
+  check('pausing a voice note takes its resource away and hands it back',
+        note.loads, 2);
+  check('and the src is the one it had',
+        note.src, 'blob:https://web.whatsapp.com/a-voice-note');
+  note.currentTime = 0;                    // what the load algorithm would leave
+  note.fire('loadedmetadata');
+  check('and it is left where the user stopped it', note.currentTime, 2.5);
+
+  /* A press that lands while the src is on its way back has to wait for it:
+     play() on an element with no resource rejects, and the note would be
+     stuck. */
+  const raced = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/raced');
+  raced.play();
+  raced.currentTime = 1;
+  raced.pause();
+  played = [];
+  const pressed = raced.play();
+  check('a press inside that window does not reach the element yet', played.join(), '');
+  raced.fire('loadedmetadata');
+  await pressed;
+  check('and lands once the src is back', played.join(), 'audio');
+
+  /* The end of a note is Chromium's own business -- it drops that player by
+     itself. WhatsApp pauses the element afterwards to rewind it, and recycling
+     there would be a reload for nothing. */
+  const finished = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/finished');
+  finished.play();
+  finished.fire('ended');
+  finished.pause();
+  check('a note that played out is left alone', finished.loads, 0);
+
+  /* Everything that is not a recording somebody chose to listen to. */
+  const tone = new sandbox.HTMLMediaElement('', 'https://static.whatsapp.net/l-ut9G1w4eu.ogg');
+  tone.play();
+  tone.pause();
+  check("and so is a tone of WhatsApp's own", tone.loads, 0);
+
+  const ring = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/ringing');
+  ring.loop = true;
+  ring.play();
+  ring.pause();
+  check('and so is a call ringing', ring.loads, 0);
 
   /* ------------------------------------------ opening a chat from a banner */
 
