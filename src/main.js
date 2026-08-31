@@ -185,7 +185,15 @@ let settingsWin = null;
 let tray = null;
 let banners = null;
 let quitting = false;
-let cssKey = null;
+/* Every user stylesheet this process has put into the page, newest last. One
+   key was not enough: two overlapping applyStyle calls both read it, both
+   removed the same sheet, and both inserted -- so the older one stayed in the
+   page for ever, and being older it still beat the new one at equal
+   specificity. That is what a settings stepper pressed twice quickly does, and
+   the symptom was a text size that would go up and never come back down. */
+let cssKeys = [];
+/* The options the sheet in the page was built from, or null before there is one. */
+let drawnWith = null;
 let loadedAt = 0;
 let unreadChats = 0;
 /* How many messages are waiting, as the page counted them off the unread pills.
@@ -461,17 +469,44 @@ const setAutostart = enable => {
   }
 };
 
+/* One switch, moved. The settings window asks for this over IPC and the debug
+   rig asks for it directly, so both go the same way through the same redraws --
+   which is what makes a switch testable without a mouse. */
+const changeSetting = (key, value) => {
+  config.set(key, value);
+  config.save();
+  if (key === 'view.zoom' && win && !win.isDestroyed()) {
+    win.webContents.setZoomFactor(Number(value) || 1.0);
+  }
+  if (key === 'view.arabic-fix' || key === 'view.font-size'
+      || key === 'view.chat-font-size') {
+    applyStyle();
+  }
+  return true;
+};
+
+/* Answers with the window, so a caller that wants to look at it -- the debug
+   rig, which cannot press Ctrl+, -- has something to look at. */
 const openSettings = () => {
   if (settingsWin && !settingsWin.isDestroyed()) {
     settingsWin.show();
     settingsWin.focus();
-    return;
+    return settingsWin;
   }
 
   const isDark = nativeTheme.shouldUseDarkColors;
+  /* Sized to the panel rather than to a round number: every switch fits without
+     a scroll on a screen tall enough for it, and the clamp is what keeps the
+     window inside a laptop's work area, where it scrolls instead. */
+  const panel = clampToScreen(520, 950);
+  const settingsFont = config.get('view.font') || desktop.interfaceFont();
   settingsWin = new BrowserWindow({
-    width: 480,
-    height: 590,
+    width: panel.width,
+    height: panel.height,
+    /* Asked for the middle of the screen. Honoured on X11; on Wayland a client
+       does not place its own windows and getBounds answers 0,0 whatever is
+       asked -- GNOME centres a new window there of its own accord. */
+    center: true,
     resizable: false,
     frame: false,
     title: 'WhatsApp Settings',
@@ -483,6 +518,13 @@ const openSettings = () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      /* The desktop's font here as well, so the client's own window does not
+         arrive in Chromium's default while the page beside it is drawn in the
+         family the user chose. This covers whatever falls through to a generic
+         family; settings.html is told the name outright and puts it first. */
+      defaultFontFamily: {
+        standard: settingsFont, sansSerif: settingsFont, serif: settingsFont,
+      },
     },
   });
 
@@ -497,6 +539,8 @@ const openSettings = () => {
   settingsWin.on('closed', () => {
     settingsWin = null;
   });
+
+  return settingsWin;
 };
 
 /* What the page is drawn with. Lifted out of applyStyle because a call moved
@@ -504,32 +548,56 @@ const openSettings = () => {
    client's font it should be drawn in too. */
 const styleSheet = () => {
   const family = config.get('view.font') || desktop.interfaceFont();
+  const wanted = {
+    arabicFix: config.get('view.arabic-fix'),
+    fontSize: config.get('view.font-size'),
+    chatScale: config.get('view.chat-font-size'),
+  };
+  /* What the last sheet said, so this one can contradict it. A sheet inserted at
+     user origin cannot be removed again -- see style.js -- so a switch turned
+     off is a rule that has to be written, not one that can be left out. */
+  const sheet = style.build(wanted, drawnWith);
+  drawnWith = wanted;
   return [
-    style.build({
-      arabicFix: config.get('view.arabic-fix'),
-      fontSize: config.get('view.font-size'),
-    }),
+    sheet,
     config.get('view.force-font') ? style.aliasSheet(pageFontStack, family) : '',
   ].filter(Boolean).join('\n');
 };
 
-const applyStyle = async () => {
+const drawStyle = async () => {
   if (!win || win.isDestroyed()) return;
   const family = config.get('view.font') || desktop.interfaceFont();
   const css = styleSheet();
 
-  try {
-    if (cssKey) await win.webContents.removeInsertedCSS(cssKey);
-  } catch (e) { /* the page navigated; the old sheet went with it */ }
+  /* Every sheet, not just the last one: a key that fails to come out is worth
+     saying so about, because what it leaves behind is a rule the user cannot
+     get rid of from Settings. */
+  const stale = cssKeys;
+  cssKeys = [];
+  for (const key of stale) {
+    try {
+      await win.webContents.removeInsertedCSS(key);
+    } catch (e) { /* the page navigated; the old sheet went with it */ }
+  }
 
   /* USER origin, which is the one level whose !important beats the page's own.
      An author-level sheet loses to WhatsApp's !important rules, and that is the
      difference between the desktop font being used and being ignored. */
-  cssKey = css ? await win.webContents.insertCSS(css, { cssOrigin: 'user' }) : null;
+  if (css) cssKeys.push(await win.webContents.insertCSS(css, { cssOrigin: 'user' }));
   /* Kept reachable so the scroll probe can measure the page without it. */
-  require('./main-css.js').track(win, () => cssKey, key => { cssKey = key; });
+  require('./main-css.js').track(win, () => cssKeys[cssKeys.length - 1] || null,
+                                 key => { cssKeys = key ? [key] : []; });
   console.log('drawing in %s at %dpx%s', family, config.get('view.font-size'),
               pageFontStack ? '' : ' (waiting for the page to say what it asks for)');
+};
+
+/* One at a time. Inserting a stylesheet and taking the old one out is two round
+   trips to the renderer, and a second call arriving in between is what left two
+   sheets in the page. */
+let styling = Promise.resolve();
+const applyStyle = () => {
+  styling = styling.catch(() => {}).then(drawStyle);
+  return styling;
 };
 
 const createWindow = () => {
@@ -1206,6 +1274,10 @@ const wireIpc = () => {
       arabicFix: !!config.get('view.arabic-fix'),
       zoom: Number(config.get('view.zoom')) || 1.0,
       fontSize: Number(config.get('view.font-size')) || 16,
+      chatFontSize: Number(config.get('view.chat-font-size')) || 100,
+      /* The family the client draws the page in, so this window can be drawn in
+         it too rather than in whatever Chromium picks for a plain page. */
+      font: config.get('view.font') || desktop.interfaceFont(),
     };
   });
 
@@ -1219,17 +1291,7 @@ const wireIpc = () => {
     return true;
   });
 
-  ipcMain.handle('settings:set', (_, key, value) => {
-    config.set(key, value);
-    config.save();
-    if (key === 'view.zoom' && win && !win.isDestroyed()) {
-      win.webContents.setZoomFactor(Number(value) || 1.0);
-    }
-    if (key === 'view.arabic-fix' || key === 'view.font-size') {
-      applyStyle();
-    }
-    return true;
-  });
+  ipcMain.handle('settings:set', (_, key, value) => changeSetting(key, value));
 
   ipcMain.on('settings:close', () => {
     if (settingsWin && !settingsWin.isDestroyed()) {
@@ -1791,7 +1853,8 @@ app.whenReady().then(() => {
     title: TITLE,
   });
 
-  debug.install(() => win, () => banners, { show: showWindow });
+  debug.install(() => win, () => banners,
+                { show: showWindow, settings: openSettings, set: changeSetting });
 
   /* Follow the desktop live: a theme switched from light to dark, or a font
      changed in Settings, should not need the client restarted. */

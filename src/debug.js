@@ -471,6 +471,39 @@ const install = (getWindow, getBanners, actions = {}) => {
       return;
     }
 
+    /* Any switch the settings window has, from here -- the window itself cannot
+       be clicked by a rig, and half the questions worth asking about a setting
+       are about what it does to a page that is already open. Goes through the
+       very handler the window's own IPC call lands in.
+
+         #set view.chat-font-size 130
+         #set view.arabic-fix false
+    */
+    if (source.startsWith('#set ')) {
+      const [key, ...rest] = source.slice(5).trim().split(/\s+/);
+      const raw = rest.join(' ');
+      const value = /^(true|false)$/i.test(raw) ? /^true$/i.test(raw)
+        : raw !== '' && Number.isFinite(Number(raw)) ? Number(raw) : raw;
+      if (!actions.set) { console.log('debug: nothing here can change a setting'); return; }
+      actions.set(key, value);
+      console.log('debug: %s = %s (%s)', key, JSON.stringify(value), typeof value);
+      return;
+    }
+
+    /* The settings window, which nothing else here can reach: it is opened by a
+       keystroke with a modifier and by a tray item, and neither is available to
+       a rig driving the client from outside. What is worth reading back is the
+       size it actually got -- the panel is sized to its own content and clamped
+       to the work area, so a short screen is meant to give a shorter window. */
+    if (source === '#settings') {
+      if (!actions.settings) { console.log('debug: no settings window to open'); return; }
+      const panel = actions.settings();
+      await new Promise(resolve => setTimeout(resolve, 600));
+      console.log('debug: settings %s', panel && !panel.isDestroyed()
+        ? JSON.stringify(panel.getBounds()) : 'did not open');
+      return;
+    }
+
     if (source === '#hide') { win.hide(); console.log('debug: hidden'); return; }
     /* Through the app's own path, not a copy of it: what is being checked here
        is whether that path actually brings the window to the user. */

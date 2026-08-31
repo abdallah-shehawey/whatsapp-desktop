@@ -18,7 +18,12 @@
       --text-muted: #667781;
       --border-color: #2a3942;
       --switch-bg: #374248;
-      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      /* The desktop's own font, named outright by the main process on load.
+         Until then the generic, which fontconfig resolves to the same family --
+         a stack that names Roboto or Helvetica would be taken literally when
+         either is installed, and this window would come out in a font the page
+         beside it is not drawn in. */
+      --font-family: system-ui, sans-serif;
     }
 
     @media (prefers-color-scheme: light) {
@@ -79,7 +84,7 @@
       font-family: var(--font-family);
       background-color: var(--bg-primary);
       color: var(--text-primary);
-      font-size: 13.5px;
+      font-size: 15px;
       line-height: 1.5;
       overflow-x: hidden;
       overflow-y: auto;
@@ -105,7 +110,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 15px;
+      font-size: 16.5px;
       font-weight: 600;
       color: var(--text-primary);
     }
@@ -163,7 +168,7 @@
     }
 
     .section-title {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.8px;
@@ -201,7 +206,7 @@
       transition: all 0.2s ease;
       color: var(--text-secondary);
       font-weight: 500;
-      font-size: 12.5px;
+      font-size: 13.5px;
     }
 
     .theme-option svg {
@@ -248,13 +253,13 @@
     }
 
     .row-title {
-      font-size: 13px;
+      font-size: 14.5px;
       font-weight: 500;
       color: var(--text-primary);
     }
 
     .row-desc {
-      font-size: 11.5px;
+      font-size: 12.5px;
       color: var(--text-secondary);
       line-height: 1.35;
     }
@@ -319,8 +324,8 @@
     }
 
     .stepper-btn {
-      width: 24px;
-      height: 24px;
+      width: 27px;
+      height: 27px;
       border: none;
       background-color: var(--bg-card);
       color: var(--text-primary);
@@ -329,7 +334,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 600;
       transition: all 0.15s ease;
     }
@@ -340,16 +345,16 @@
     }
 
     .stepper-val {
-      min-width: 38px;
+      min-width: 42px;
       text-align: center;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-primary);
     }
 
     .footer-note {
       text-align: center;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-muted);
       margin-top: 2px;
       padding-bottom: 8px;
@@ -498,6 +503,18 @@
 
         <div class="row">
           <div class="row-info">
+            <div class="row-title">Chat Font Size</div>
+            <div class="row-desc">Message text only — the chat list stays the size it is</div>
+          </div>
+          <div class="stepper">
+            <button class="stepper-btn" id="chatFontOut">-</button>
+            <span class="stepper-val" id="chatFontVal">100%</span>
+            <button class="stepper-btn" id="chatFontIn">+</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="row-info">
             <div class="row-title">Arabic Text Clipping Fix</div>
             <div class="row-desc">Expand line boxes for Arabic letter descenders</div>
           </div>
@@ -532,9 +549,16 @@
     const zoomInBtn = document.getElementById('zoomIn');
     const zoomOutBtn = document.getElementById('zoomOut');
     const zoomVal = document.getElementById('zoomVal');
+    const chatFontInBtn = document.getElementById('chatFontIn');
+    const chatFontOutBtn = document.getElementById('chatFontOut');
+    const chatFontVal = document.getElementById('chatFontVal');
     const closeBtn = document.getElementById('closeBtn');
 
     let currentZoom = 1.0;
+    // A percentage of the size WhatsApp draws a message at; 100 changes nothing.
+    let chatFont = 100;
+    const CHAT_FONT_MIN = 80;
+    const CHAT_FONT_MAX = 180;
 
     function applyThemeToUI(theme) {
       document.documentElement.setAttribute('data-theme', theme || 'system');
@@ -554,6 +578,11 @@
         if (!data) return;
 
         applyThemeToUI(data.theme);
+        // The family the client draws the page in, put in front of the generic.
+        if (data.font) {
+          document.documentElement.style.setProperty(
+            '--font-family', '"' + String(data.font).replace(/"/g, '') + '", system-ui, sans-serif');
+        }
         autostartToggle.checked = !!data.autostart;
         closeToTrayToggle.checked = !!data.closeToTray;
         minimizeToTrayToggle.checked = !!data.minimizeToTray;
@@ -563,6 +592,8 @@
         arabicFixToggle.checked = !!data.arabicFix;
         currentZoom = data.zoom || 1.0;
         zoomVal.textContent = Math.round(currentZoom * 100) + '%';
+        chatFont = data.chatFontSize || 100;
+        chatFontVal.textContent = Math.round(chatFont) + '%';
       } catch (e) {
         console.error('Failed to load settings:', e);
       }
@@ -618,6 +649,20 @@
       zoomVal.textContent = Math.round(currentZoom * 100) + '%';
       if (window.api) await window.api.setSetting('view.zoom', currentZoom);
     });
+
+    // Chat Font Handlers -- the conversation only, in steps of ten per cent.
+    const setChatFont = async next => {
+      const wanted = Math.min(CHAT_FONT_MAX, Math.max(CHAT_FONT_MIN, next));
+      // Held at either end of the range: a press that changes nothing rewrites
+      // no config file and redraws no page.
+      if (wanted === chatFont) return;
+      chatFont = wanted;
+      chatFontVal.textContent = chatFont + '%';
+      if (window.api) await window.api.setSetting('view.chat-font-size', chatFont);
+    };
+
+    chatFontInBtn.addEventListener('click', () => setChatFont(chatFont + 10));
+    chatFontOutBtn.addEventListener('click', () => setChatFont(chatFont - 10));
 
     closeBtn.addEventListener('click', () => {
       if (window.api) window.api.close();

@@ -18,6 +18,10 @@ const DEFAULTS = {
   'view.theme': 'system',          // 'system' (follow desktop), 'dark', or 'light'
   'view.font': '',                 // empty: follow the desktop font
   'view.font-size': 16,            // WhatsApp sizes in rem, so this scales the client
+  /* The size of the words in a conversation only, as a percentage of the size
+     WhatsApp draws them at -- the knob the phone has under Chats. 100 changes
+     nothing at all; the chat list and the headers never move with it. */
+  'view.chat-font-size': 100,
   'view.zoom': 1.0,
   'view.force-font': true,         // draw the page in one family, like a browser told to ignore page fonts
   'view.arabic-fix': false,        // widen the clip Arabic descenders are cut against
@@ -106,6 +110,10 @@ class Config {
       `font = ${v['view.font']}`,
       '# Root font size in pixels. WhatsApp sizes in rem, so this scales the client.',
       `font-size = ${v['view.font-size']}`,
+      '# The words in a conversation, as a percentage of the size WhatsApp draws',
+      '# them at -- messages and the box you type in, and nothing else. 100 leaves',
+      '# the page exactly as WhatsApp drew it.',
+      `chat-font-size = ${Math.round(Number(v['view.chat-font-size']) || 100)}`,
       `zoom = ${Number(v['view.zoom']).toFixed(2)}`,
       '# Draw the whole page in one family, the way a browser told to ignore page fonts does.',
       `force-font = ${v['view.force-font']}`,

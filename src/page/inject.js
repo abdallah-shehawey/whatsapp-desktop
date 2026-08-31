@@ -2053,6 +2053,50 @@ const start = ({ send, on }) => {
   watchForSends();
   interceptSounds();
 
+  /* ---------------------------------------------------- the right-hand drawer */
+
+  /*
+   * Message info, contact info and in-chat search all slide in from the right,
+   * and WhatsApp animates them with `flex-basis: 0% -> 30%` over 0.2s. That is a
+   * layout property: every frame of it lays the whole app out again, the
+   * conversation re-wraps every bubble it holds, and the open stutters (frame
+   * gaps of 12 to 66ms, measured, and the same with this client's stylesheet
+   * removed -- it is not ours).
+   *
+   * The stylesheet makes that animation instant, so the width is taken in one
+   * layout (src/style.js), and the motion is put back here, on the compositor:
+   * transform and opacity never touch layout. It has to be done from JavaScript
+   * rather than in CSS because the panel is NOT unmounted when the drawer
+   * closes -- measured: it stays in the DOM at flex-basis 0% -- so a CSS
+   * animation on it plays once, at mount, and every open after the first is a
+   * snap with no motion at all. What does happen on every open is WhatsApp
+   * starting its own animation again, and that is an event.
+   *
+   * The panel is clipped by the row around it, by #app, by body and by html
+   * (all overflow: hidden, checked), so starting it a full panel-width to the
+   * right shows nothing spilling past the window.
+   */
+  const DRAWER = '[data-testid="drawer-right"]';
+  let drawerSlide = null;
+
+  const slideTheDrawer = () => {
+    addEventListener('animationstart', event => {
+      const panel = event.target;
+      /* The panel itself, not the animations WhatsApp runs on things inside it. */
+      if (!(panel instanceof Element) || !panel.matches || !panel.matches(DRAWER)) return;
+      if (typeof panel.animate !== 'function') return;
+      try {
+        if (drawerSlide) drawerSlide.cancel();
+        drawerSlide = panel.animate(
+          [{ transform: 'translate3d(100%, 0, 0)', opacity: 0 },
+           { transform: 'none', opacity: 1 }],
+          { duration: 200, easing: 'cubic-bezier(0.16, 0.84, 0.44, 1)' });
+      } catch (err) { /* an older engine: the drawer simply appears */ }
+    }, true);
+  };
+
+  slideTheDrawer();
+
   /* --------------------------------------------- the notifications WA raises */
 
   /* While the window is away WhatsApp Web raises its own notification, and it is

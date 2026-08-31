@@ -125,6 +125,138 @@ const CONVERSATION_SCROLL = `
   backface-visibility: hidden;
 }`;
 
+/*
+ * The right-hand drawer -- Message info, contact info, in-chat search -- and
+ * why opening one stutters.
+ *
+ * Measured on the live page: its entrance is
+ *
+ *   @keyframes x1h4ohyg-B { 0% { flex-basis: 0%; } 100% { flex-basis: 30%; } }
+ *
+ * run for 0.2s on the drawer itself, which is a flex item beside the
+ * conversation. flex-basis is a LAYOUT property, so every frame of that
+ * animation re-lays out the whole app: the conversation narrows a few pixels,
+ * every bubble in it re-wraps, and the drawer's own contents are laid out again
+ * on top. Frame intervals through the open, sampled with requestAnimationFrame:
+ * 12, 30, 42, 54, 66ms where the rest of the session runs at one frame. It is
+ * WhatsApp's own doing and not this client's -- the same numbers came back with
+ * the user stylesheet removed altogether, which is the first thing that was
+ * checked.
+ *
+ * So the animation is made instant here -- the width is taken in one layout --
+ * and the motion is put back in the page, on the compositor, by
+ * `slideTheDrawer` in src/page/inject.js. The duration and NOT `animation:
+ * none`: the keyframes are filled `forwards` and END at the width, so cancelling
+ * them mounts the drawer nought pixels wide and Message info stops opening at
+ * all. That shipped once.
+ *
+ * The motion cannot live here either, and that is worth writing down. The panel
+ * is NOT unmounted when the drawer closes -- measured: it stays in the DOM at
+ * flex-basis 0% -- so a CSS animation of ours on it or on its child plays once,
+ * at mount, and every open after the first is a snap with no motion. Overriding
+ * `animation-name` to point WhatsApp's own trigger at our keyframes has the same
+ * fault for the same reason: the name then never changes, so nothing ever
+ * re-starts. What DOES happen on every open is WhatsApp starting its animation
+ * again -- two opens, two `animationstart` events -- and that is an event a
+ * listener can hang a Web Animations slide on, which is what inject.js does.
+ */
+const DRAWER_MOTION = `
+#app [data-testid="drawer-right"] {
+  animation-duration: 1ms !important;
+  animation-delay: 0s !important;
+}`;
+
+/*
+ * The size of the text in a conversation, on its own.
+ *
+ * WhatsApp Web draws a message at 0.888rem -- 14.2px against the 16px root this
+ * client sets -- in a line box of 19px, and the composer at 15px in a box of
+ * 1.47em. `view.font-size` already scales all of that, and everything else with
+ * it: the chat list, the headers, the menus. This is the other knob, the one the
+ * phone has: bigger words in the conversation and a chat list left where it was.
+ *
+ * In rem rather than px, so it still follows `view.font-size`, and as one
+ * absolute value rather than a multiplier on the way down: these classes NEST --
+ * 45 of the 72 in a live conversation sit inside another -- and an `em` factor
+ * on each of them would compound to a different size per level of nesting.
+ *
+ * The line box has to be reset with the size or the taller text is drawn into
+ * the 19px box WhatsApp pinned it to. It is set on the same elements that carry
+ * the size, which is what the Arabic clip below could not do -- there the size
+ * stays as it is, and raising the line box alone shears the line.
+ *
+ * The composer gets the size and NOT the line box: its own is set in em, so it
+ * follows on its own, and a line box pinned there is what made every keystroke
+ * scroll the caret back into view.
+ *
+ * Nothing at all is emitted at 100%, so the default page is the page WhatsApp
+ * drew.
+ */
+const MESSAGE_TEXT_REM = 0.888;   // WhatsApp's own: 14.2px against a 16px root
+
+const CHAT_TEXT_SELECTORS = `
+#main [data-testid="conversation-panel-messages"] .copyable-text,
+#main [data-testid="conversation-panel-messages"] .selectable-text,
+#main [data-tab="conversation-panel-messages"] .copyable-text,
+#main [data-tab="conversation-panel-messages"] .selectable-text`;
+
+const COMPOSER_SELECTORS = `
+#main [contenteditable="true"],
+#main [contenteditable="true"] p`;
+
+const scaled = value => {
+  const factor = Number(value) / 100;
+  return Number.isFinite(factor) && Math.abs(factor - 1) >= 0.005 ? factor : 0;
+};
+
+const chatText = scale => {
+  const factor = scaled(scale);
+  if (!factor) return '';
+  const size = `calc(${MESSAGE_TEXT_REM}rem * ${factor.toFixed(2)})`;
+  return `${CHAT_TEXT_SELECTORS} {
+  font-size: ${size} !important;
+  line-height: 1.35 !important;
+}
+${COMPOSER_SELECTORS} {
+  font-size: ${size} !important;
+}`;
+};
+
+/* Putting a size back is not the same as never having set one.
+ *
+ * A user stylesheet cannot be taken out of the page again. Measured on the live
+ * client: insertCSS at user origin returns a key, removeInsertedCSS resolves for
+ * that key without complaint, and the rules are STILL applied afterwards --
+ * checked by computed style, twice, with the conversation reopened in between.
+ * So every sheet this client has ever inserted is still in the cascade, and the
+ * newest one only wins because it is the newest.
+ *
+ * Which is why "back to 100%" cannot be expressed by leaving the rule out: the
+ * sheet that said 110% is still there and still says it. It has to be overruled
+ * by name, and `revert` is what says "whatever WhatsApp itself asked for" --
+ * per element, so a quoted reply and a caption keep the sizes of their own that
+ * one flat value would have flattened.
+ *
+ * Emitted only when the last sheet did set a size, so a client that has never
+ * been asked for one carries no rule at all. */
+const chatTextRevert = () => `${CHAT_TEXT_SELECTORS},${COMPOSER_SELECTORS} {
+  font-size: revert !important;
+  line-height: revert !important;
+}`;
+
+/* The same, for the Arabic clip: turning the switch off has to undo it. */
+const ARABIC_CLIP_REVERT = `
+#main div.copyable-text:not([contenteditable]) > div,
+[contenteditable="true"] {
+  padding-bottom: revert !important;
+  margin-bottom: revert !important;
+}
+#main div.copyable-text:not([contenteditable]) > div:has(> span[dir="rtl"]),
+#main div.copyable-text:not([contenteditable]) > div:has(> span > span[dir="rtl"]),
+#pane-side div:has(> span[title][dir="rtl"]) {
+  text-align: revert !important;
+}`;
+
 
 /*
  * Aliasing, which is how the desktop font is imposed now.
@@ -190,8 +322,11 @@ const aliasSheet = (stack, family) => {
 }`).join('\n');
 };
 
-const build = ({ arabicFix, fontSize }) => {
-  const rules = [CONVERSATION_SCROLL];
+/* `before` is what the last sheet was built from, and it is not bookkeeping for
+   its own sake: see chatTextRevert -- a sheet that is in the page is in it for
+   good, so anything that was switched on has to be switched off by name. */
+const build = ({ arabicFix, fontSize, chatScale }, before) => {
+  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION];
 
   /* There is no font rule here any more, and that is the point. Forcing the
      desktop font with `* { font-family: X !important }` at user origin works and
@@ -208,7 +343,13 @@ const build = ({ arabicFix, fontSize }) => {
      in the one place this client could least afford it. */
 
   if (fontSize) rules.push(`html { font-size: ${fontSize}px !important; }`);
+
+  const chat = chatText(chatScale);
+  if (chat) rules.push(chat);
+  else if (before && scaled(before.chatScale)) rules.push(chatTextRevert());
+
   if (arabicFix) rules.push(ARABIC_CLIP);
+  else if (before && before.arabicFix) rules.push(ARABIC_CLIP_REVERT);
 
   return rules.join('\n');
 };
