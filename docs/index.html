@@ -59,10 +59,10 @@
   </nav>
   <div class="topbar-end">
     <a class="pill" href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest"
-       data-release-link title="Latest release">
+       data-release-link title="Latest release" target="_blank" rel="noopener">
       <span class="dot" aria-hidden="true"></span><span data-tag>latest</span>
     </a>
-    <a class="btn btn-ghost btn-sm" href="https://github.com/abdallah-shehawey/whatsapp-desktop">
+    <a class="btn btn-ghost btn-sm" href="https://github.com/abdallah-shehawey/whatsapp-desktop" target="_blank" rel="noopener">
       <svg viewBox="0 0 16 16" aria-hidden="true" class="ico-gh"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.7-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
       GitHub
     </a>
@@ -314,16 +314,17 @@ sudo pacman-key --lsign-key AE61EBAE9E8236C02D44F731BAD3F4329468897C</code></pre
 <pre><code>sudo tee -a /etc/pacman.conf &gt;/dev/null &lt;&lt;'EOF'
 
 [shinux]
-Server = https://abdallah-shehawey.github.io/shinux-repo/arch/$arch
+Server = https://abdallah-shehawey.github.io/shinux-repo/arch
 SigLevel = Required DatabaseOptional
 EOF</code></pre>
 
       <p class="step">3 &middot; Install</p>
-<pre><code>sudo pacman -Sy
-sudo pacman -S whatsapp-desktop</code></pre>
+<pre><code>sudo pacman -Syu whatsapp-desktop</code></pre>
       <p class="note">A native <code>.pkg.tar.zst</code> from a signed repository — not an
-      AUR recipe, so there is nothing to compile. Manjaro and EndeavourOS take the same
-      steps.</p>
+      AUR recipe, so there is nothing to compile. The <code>y</code> refreshes the package
+      list first, and the <code>u</code> is how Arch is meant to be installed into: pulling
+      one package into an out-of-date system is what breaks it. Manjaro and EndeavourOS
+      take the same steps.</p>
     </div>
 
     <div class="card panel" id="i-file" role="tabpanel" aria-labelledby="t-file" hidden>
@@ -387,7 +388,7 @@ sudo pacman -Syyu whatsapp-desktop</code></pre>
            with the real asset from the latest release; without JS these links still
            land on the release page, which is the same set of files. -->
       <a class="card dl" data-match=".x86_64.rpm" data-skip="debug"
-         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest">
+         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest" target="_blank" rel="noopener">
         <span class="dl-badge rpm">RPM</span>
         <h3>Fedora, RHEL, openSUSE</h3>
         <p class="dl-file" data-name>whatsapp-desktop-…x86_64.rpm</p>
@@ -396,7 +397,7 @@ sudo pacman -Syyu whatsapp-desktop</code></pre>
       </a>
 
       <a class="card dl" data-match="_amd64.deb"
-         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest">
+         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest" target="_blank" rel="noopener">
         <span class="dl-badge deb">DEB</span>
         <h3>Debian, Ubuntu, Mint</h3>
         <p class="dl-file" data-name>whatsapp-desktop_…_amd64.deb</p>
@@ -405,7 +406,7 @@ sudo pacman -Syyu whatsapp-desktop</code></pre>
       </a>
 
       <a class="card dl" data-match="-x86_64.pkg.tar.zst" data-skip="debug"
-         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest">
+         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest" target="_blank" rel="noopener">
         <span class="dl-badge arch">PKG</span>
         <h3>Arch, Manjaro, EndeavourOS</h3>
         <p class="dl-file" data-name>whatsapp-desktop-…pkg.tar.zst</p>
@@ -414,7 +415,7 @@ sudo pacman -Syyu whatsapp-desktop</code></pre>
       </a>
 
       <a class="card dl" data-match="-source.tar.gz"
-         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest">
+         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest" target="_blank" rel="noopener">
         <span class="dl-badge src">SRC</span>
         <h3>Source tarball</h3>
         <p class="dl-file" data-name>whatsapp-desktop-…-source.tar.gz</p>
@@ -425,9 +426,9 @@ sudo pacman -Syyu whatsapp-desktop</code></pre>
 
     <p class="dl-foot">
       Also in the release: a debug package for Arch and
-      <a data-sums-link href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest"><code>SHA256SUMS</code></a>
+      <a data-sums-link href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest" target="_blank" rel="noopener"><code>SHA256SUMS</code></a>
       over the lot.
-      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases">Older releases</a>.
+      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases" target="_blank" rel="noopener">Older releases</a>.
     </p>
 
     <div class="card verify">
@@ -615,17 +616,17 @@ makepkg -si               <span class="c"># packaging/PKGBUILD</span></code></pr
     </div>
     <nav aria-label="Project">
       <h4>Project</h4>
-      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop">Source</a>
-      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases">Releases</a>
-      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/issues">Issues</a>
-      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/blob/main/LICENSE">GPL-3.0</a>
+      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop" target="_blank" rel="noopener">Source</a>
+      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/issues" target="_blank" rel="noopener">Issues</a>
+      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/blob/main/LICENSE" target="_blank" rel="noopener">GPL-3.0</a>
     </nav>
     <nav aria-label="Related">
       <h4>Related</h4>
-      <a href="https://abdallah-shehawey.github.io/shinux-repo/">shinux repository</a>
-      <a href="https://shinux.dev/articles/rewriting-my-whatsapp-client-on-chromium">The write-up</a>
-      <a href="https://github.com/abdallah-shehawey/whatsapp">The C client</a>
-      <a href="https://github.com/abdallah-shehawey">More by the author</a>
+      <a href="https://abdallah-shehawey.github.io/shinux-repo/" target="_blank" rel="noopener">shinux repository</a>
+      <a href="https://shinux.vercel.app/articles/rewriting-my-whatsapp-client-on-chromium" target="_blank" rel="noopener">The write-up</a>
+      <a href="https://github.com/abdallah-shehawey/whatsapp" target="_blank" rel="noopener">The C client</a>
+      <a href="https://github.com/abdallah-shehawey" target="_blank" rel="noopener">More by the author</a>
     </nav>
   </div>
   <p class="foot-legal">© <span data-year>2026</span> Abdallah Shehawey</p>
