@@ -264,65 +264,60 @@ const pushFocus = () => {
 };
 
 /*
- * Whether the window is where the owner is looking, which is what the tray's
- * first item offers to change. Tracked, never asked, because both of the
- * questions that could be asked have been measured and neither can be used.
+ * Whether the window is on the screen, which is what the tray's first item
+ * offers to change. Tracked, never asked: isMinimized() answers false for a
+ * window sitting minimised in the dock under GNOME, so the menu offered to hide
+ * a window that was not on the screen. An event is a fact where a query is an
+ * opinion -- `minimize` fires when the window goes to the dock whatever
+ * isMinimized() says a moment later, and `show` and `hide` are the same.
  *
- * isMinimized() answers false for a window sitting minimised in the dock under
- * GNOME, so the menu offered to hide a window that was not on the screen: the
- * report this exists for. And isFocused() cannot be read at the moment the menu
- * is drawn, because opening that menu is itself what takes the focus away --
- * with the window open and in front, a focus-tested item read "Open WhatsApp".
+ * The focus is deliberately NOT part of the answer, and that is the fix for the
+ * second report. Opening the tray menu is itself what takes the focus off the
+ * window, so a focus-tested item was wrong the instant it was drawn; the
+ * previous version of this waited 1200ms before believing a blur, on the
+ * grounds that a menu is clicked faster than that. It is not. gnome-shell
+ * serves these items live over DBus, so a menu left open for three seconds --
+ * with WhatsApp plainly on the screen behind it -- rewrote its own first line
+ * from "Hide WhatsApp" to "Open WhatsApp" while the owner was reading it. That
+ * is the report: "بتظهر الاول صح واسيبها ثانيتين تلاته هلاقيها اتغيرت مع اني
+ * لسه فاتح الواتس".
  *
- * An event is a fact where a query is an opinion. `minimize` fires when the
- * window goes to the dock whatever isMinimized() says a moment later, and
- * `show` and `hide` are the same.
+ * A window behind another window is still a window that is up, and "hide it" is
+ * an honest thing to offer for one. A window in the dock is not, and neither is
+ * one closed to the tray -- and those two arrive as events, which is why they
+ * can be believed without asking anybody anything.
  *
- * The minimised flag does not stay true for long under Wayland and is not
- * relied on to. xdg-shell has no minimised state for a compositor to report
- * back -- a client asks to be minimised and that is the end of the
- * conversation -- so the next configure puts the window back to normal and
- * `restore` arrives seconds after a minimise nobody undid. Measured, in that
- * order, from one click. It does not matter: a window in the dock does not have
- * the focus, and that is what is actually being tested below.
- *
- * Which leaves losing the focus, the one state change with no honest event: a
- * window going behind another and a window whose tray menu just opened both
- * arrive as `blur` and are indistinguishable. So a blur is believed only if it
- * lasts. Reaching for the tray after clicking into another application takes
- * longer than this; clicking an item in a menu that has just opened takes less.
- * `focus` is applied at once and puts right anything this ever gets wrong.
+ * Which leaves the minimised flag, which under Wayland does not stay true on
+ * its own. xdg-shell has no minimised state for a compositor to report back --
+ * a client asks to be minimised and that is the end of the conversation -- so
+ * the next configure puts the window back to normal and `restore` arrives
+ * seconds after a minimise nobody undid. Measured, in that order, from one
+ * click. So a restore is believed only when the window has the focus with it: a
+ * window the owner really did fetch out of the dock is a window the compositor
+ * activated, and one still sitting in the dock is not.
  */
-const BLUR_SETTLE_MS = 1200;
-
 const trayFollowsWindow = () => {
-  let settle = null;
-  const state = { visible: false, minimized: false, focused: false };
+  const state = { visible: false, minimized: false };
 
-  const apply = () => {
-    const onScreen = state.visible && !state.minimized && state.focused;
+  const set = change => {
+    Object.assign(state, change);
+    /* Raising the window takes it down for a frame and puts it back up (see
+       showWindow), and the tray must not offer to open a window that is on its
+       way to the screen -- the same reasoning as `remapping` in pushFocus, and
+       the same answer: the honest one is where it is heading. */
+    const onScreen = remapping || (state.visible && !state.minimized);
     debug.trace('window: %s -> tray offers to %s',
       JSON.stringify(state), onScreen ? 'hide it' : 'open it');
     if (tray) tray.setWindowOnScreen(onScreen);
   };
 
-  /* One pending blur at most, and any later event overtakes it -- a window that
-     has just been hidden or minimised is not waiting to find out. */
-  const set = (change, delay = 0) => {
-    if (settle) { clearTimeout(settle); settle = null; }
-    Object.assign(state, change);
-    if (!delay) { apply(); return; }
-    settle = setTimeout(() => { settle = null; apply(); }, delay);
-  };
-
   win.on('show', () => set({ visible: true }));
-  win.on('hide', () => set({ visible: false, focused: false }));
-  win.on('minimize', () => set({ minimized: true, focused: false }));
-  win.on('restore', () => set({ minimized: false }));
-  /* Having the focus settles the other two as well: a window cannot be given it
-     while hidden or minimised, whatever an event that never arrived implies. */
-  win.on('focus', () => set({ visible: true, minimized: false, focused: true }));
-  win.on('blur', () => set({ focused: false }, BLUR_SETTLE_MS));
+  win.on('hide', () => set({ visible: false }));
+  win.on('minimize', () => set({ minimized: true }));
+  win.on('restore', () => set(win.isFocused() ? { minimized: false } : {}));
+  /* Having the focus settles both: a window cannot be given it while hidden or
+     minimised, whatever an event that never arrived implies. */
+  win.on('focus', () => set({ visible: true, minimized: false }));
 };
 
 /* Between taking the window down and putting it back up: one frame, because the
@@ -478,10 +473,7 @@ const changeSetting = (key, value) => {
   if (key === 'view.zoom' && win && !win.isDestroyed()) {
     win.webContents.setZoomFactor(Number(value) || 1.0);
   }
-  if (key === 'view.arabic-fix' || key === 'view.font-size'
-      || key === 'view.chat-font-size') {
-    applyStyle();
-  }
+  if (key === 'view.font-size' || key === 'view.chat-font-size') applyStyle();
   return true;
 };
 
@@ -495,10 +487,13 @@ const openSettings = () => {
   }
 
   const isDark = nativeTheme.shouldUseDarkColors;
-  /* Sized to the panel rather than to a round number: every switch fits without
-     a scroll on a screen tall enough for it, and the clamp is what keeps the
-     window inside a laptop's work area, where it scrolls instead. */
-  const panel = clampToScreen(520, 950);
+  /* An ordinary window, not one as tall as the screen. This used to be sized to
+     the panel -- tall enough that every switch fitted without a scroll -- which
+     on a laptop meant a column of settings from the top of the work area to the
+     bottom of it for a handful of switches. The panel scrolls; a window this
+     size is what the owner asked for, and it is what the settings window of
+     anything else on the desktop looks like. */
+  const panel = clampToScreen(560, 660);
   const settingsFont = config.get('view.font') || desktop.interfaceFont();
   settingsWin = new BrowserWindow({
     width: panel.width,
@@ -549,7 +544,6 @@ const openSettings = () => {
 const styleSheet = () => {
   const family = config.get('view.font') || desktop.interfaceFont();
   const wanted = {
-    arabicFix: config.get('view.arabic-fix'),
     fontSize: config.get('view.font-size'),
     chatScale: config.get('view.chat-font-size'),
   };
@@ -1271,7 +1265,6 @@ const wireIpc = () => {
       notifyEnabled: !!config.get('notifications.enabled'),
       notifySound: !!config.get('notifications.sound'),
       outgoingSound: !!config.get('notifications.outgoing-sound'),
-      arabicFix: !!config.get('view.arabic-fix'),
       zoom: Number(config.get('view.zoom')) || 1.0,
       fontSize: Number(config.get('view.font-size')) || 16,
       chatFontSize: Number(config.get('view.chat-font-size')) || 100,
