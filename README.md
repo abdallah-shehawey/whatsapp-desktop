@@ -9,6 +9,10 @@ is 120 KB of C against GTK4 and WebKitGTK; this one starts from an engine that
 does not need most of its workarounds. They install side by side and share
 nothing, not even a state directory.
 
+**[abdallah-shehawey.github.io/whatsapp-desktop](https://abdallah-shehawey.github.io/whatsapp-desktop/)**
+— every install command spelled out, and the newest packages read straight off
+the latest release.
+
 ## What it does
 
 - **Lives in the tray.** Closing the window keeps the client connected;
@@ -52,8 +56,10 @@ sudo apt install whatsapp-desktop     # Debian, Ubuntu 24.04+
 sudo pacman -S whatsapp-desktop       # Arch
 ```
 
-Packages are also on every [release](../../releases). It ships its own copy of
-Electron, so it needs no browser installed — 245 MB on disk, 76 MB as a `.deb`.
+Packages are also on every [release](../../releases), and the
+[website](https://abdallah-shehawey.github.io/whatsapp-desktop/#download) links
+whichever one is newest. It ships its own copy of Electron, so it needs no
+browser installed — 245 MB on disk, 76 MB as a `.deb`.
 
 The package installs a system-wide autostart entry, so the client starts hidden
 in the tray at login. To stop that: Settings → Applications → Startup, or delete
@@ -112,6 +118,8 @@ State lives in `~/.local/share/whatsapp-desktop`.
 | `src/style.js` | the user stylesheet — the font, and the room Arabic needs |
 | `src/fonts.js`, `src/tray.js`, `src/config.js`, `src/desktop.js`, `src/sound.js`, `src/debug.js` | |
 | `tools/make-icons.py` | regenerates `data/icons` — `make icons`, never hand-edit the PNGs |
+| `tools/make-og.py` | redraws the site's link-preview card — `make og` |
+| `docs/` | the landing page, served by GitHub Pages from `main` |
 | `tools/test-inject.js`, `tools/test-style.js` | `make test` |
 
 ## Notifications, when they do not appear

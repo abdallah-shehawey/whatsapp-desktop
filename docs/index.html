@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>whatsapp-desktop — WhatsApp for Linux</title>
+<meta name="description" content="An unofficial WhatsApp Web desktop client for Linux. Lives in the tray, one notification per message, voice and video calls with screen sharing, and the page drawn in your desktop's own font. Packages for Fedora, Debian, Ubuntu and Arch.">
+<meta name="theme-color" content="#0a100d">
+<meta name="color-scheme" content="dark">
+
+<link rel="canonical" href="https://abdallah-shehawey.github.io/whatsapp-desktop/">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="whatsapp-desktop">
+<meta property="og:title" content="whatsapp-desktop — WhatsApp for Linux">
+<meta property="og:description" content="Tray, notifications, calls, screen sharing and your desktop's own font. One command to install on Fedora, Debian, Ubuntu or Arch.">
+<meta property="og:url" content="https://abdallah-shehawey.github.io/whatsapp-desktop/">
+<meta property="og:image" content="https://abdallah-shehawey.github.io/whatsapp-desktop/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="preconnect" href="https://api.github.com" crossorigin>
+<link rel="stylesheet" href="assets/site.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "whatsapp-desktop",
+  "applicationCategory": "CommunicationApplication",
+  "operatingSystem": "Linux",
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "url": "https://abdallah-shehawey.github.io/whatsapp-desktop/",
+  "downloadUrl": "https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest",
+  "author": { "@type": "Person", "name": "Abdallah Shehawey" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <a class="brand" href="./">
+    <img src="assets/logo.svg" alt="" width="30" height="30">
+    <span>whatsapp-desktop</span>
+  </a>
+  <nav class="topnav" aria-label="Sections">
+    <a href="#features">Features</a>
+    <a href="#install">Install</a>
+    <a href="#download">Downloads</a>
+    <a href="#configure">Configure</a>
+    <a href="#build">Build</a>
+  </nav>
+  <div class="topbar-end">
+    <a class="pill" href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest"
+       data-release-link title="Latest release">
+      <span class="dot" aria-hidden="true"></span><span data-tag>latest</span>
+    </a>
+    <a class="btn btn-ghost btn-sm" href="https://github.com/abdallah-shehawey/whatsapp-desktop">
+      <svg viewBox="0 0 16 16" aria-hidden="true" class="ico-gh"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.7-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
+      GitHub
+    </a>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ------------------------------------------------------------- hero -->
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Linux desktop client · Electron 40 · GPL-3.0</p>
+      <h1>WhatsApp, in a window<br>of its own.</h1>
+      <p class="lead">
+        It loads <code>web.whatsapp.com</code> — the same client WhatsApp serves to a
+        browser, so nothing here is a reverse-engineered protocol and nothing puts an
+        account at risk. What is added is everything a browser tab cannot give it:
+        a tray, real desktop notifications, calls, and your own font.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#download">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="ico"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 19h16"/></svg>
+          Download <span data-tag>the latest release</span>
+        </a>
+        <a class="btn btn-ghost" href="#install">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="ico"><path d="M4 5h16v14H4z"/><path d="m7.5 9.5 2.5 2.5-2.5 2.5M13 15h4"/></svg>
+          Install from the terminal
+        </a>
+      </div>
+      <p class="hero-meta" data-release-meta>x86_64 · rpm, deb and a native Arch package</p>
+    </div>
+
+    <div class="hero-art">
+      <div class="term" role="group" aria-label="Install command">
+        <div class="term-bar">
+          <span class="tl tl-r"></span><span class="tl tl-y"></span><span class="tl tl-g"></span>
+          <span class="term-title">bash</span>
+        </div>
+<pre class="term-body"><code><span class="p">$</span> curl -fsSL https://abdallah-shehawey.github.io/shinux-repo/install.sh | sudo sh
+<span class="c">==&gt; rpm system detected, installing shinux-release</span>
+<span class="c">==&gt; done.</span>
+<span class="p">$</span> sudo dnf install whatsapp-desktop
+<span class="c">Installed:</span> <span class="g">whatsapp-desktop-<span data-version>1.6.1</span>-1.x86_64</span>
+<span class="p">$</span> whatsapp-desktop<span class="cursor"></span></code></pre>
+      </div>
+      <ul class="hero-facts">
+        <li><strong>No browser needed</strong> — it carries its own Chromium.</li>
+        <li><strong>Signed packages</strong> from the shinux repository.</li>
+        <li><strong>Updates with your system</strong>, through dnf, apt or pacman.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- features -->
+  <section id="features" class="band">
+    <div class="section-head">
+      <h2>What it does</h2>
+      <p class="sub">The parts a browser tab cannot do.</p>
+    </div>
+
+    <div class="grid">
+      <article class="card feat">
+        <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a5 5 0 0 0-5 5v3.5L5 15h14l-2-3.5V8a5 5 0 0 0-5-5Z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg></div>
+        <h3>One notification per message</h3>
+        <p>The sender, the text and the sender's picture, a click that opens that
+        conversation, and a withdrawal the moment you read it — on your phone as
+        readily as here. Media says what it is (<code>📷 Photo</code>,
+        <code>🎤 Voice message</code>) instead of looking like somebody typing the word.</p>
+      </article>
+
+      <article class="card feat">
+        <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11v12H4z"/><path d="m15 10 5-3v10l-5-3z"/></svg></div>
+        <h3>Voice and video calls</h3>
+        <p>Full WebRTC, camera and microphone permissions handled for you, and screen
+        sharing over PipeWire on Wayland — whole screens or a single window. Calls get
+        a window of their own.</p>
+      </article>
+
+      <article class="card feat">
+        <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h16"/><path d="M6 17 10.5 6h3L18 17"/><path d="M8 13h8"/></svg></div>
+        <h3>Your desktop's own font</h3>
+        <p>The whole page is drawn in the family you chose in Settings, applied live when
+        you change it. Arabic reads right to left in a banner instead of wrapping the
+        wrong way under a Latin name.</p>
+      </article>
+
+      <article class="card feat">
+        <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v10H3z"/><path d="M8 20h8"/><path d="M12 16v4"/></svg></div>
+        <h3>Lives in the tray</h3>
+        <p>Closing the window keeps the client connected and messages arriving.
+        <kbd>Ctrl</kbd>+<kbd>Q</kbd> and the tray's Quit are the two ways out, and it can
+        start hidden at login. On GNOME it waits for the AppIndicator extension rather
+        than giving up when it starts first.</p>
+      </article>
+
+      <article class="card feat">
+        <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg></div>
+        <h3>Settings and a theme switcher</h3>
+        <p>System, dark or light, autostart at login, and how the tray behaves — from
+        <kbd>Ctrl</kbd>+<kbd>,</kbd> or the tray menu. No config file needed unless you
+        want one.</p>
+      </article>
+
+      <article class="card feat">
+        <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-4.35 7-10V5l-7-2-7 2v6c0 5.65 7 10 7 10Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <h3>WhatsApp's own page, untouched</h3>
+        <p>No protocol re-implementation and no third-party bridge. Everything added
+        lives around the page, not inside the account — and it installs alongside the
+        <a href="https://github.com/abdallah-shehawey/whatsapp">C client</a> rather than
+        over it.</p>
+      </article>
+    </div>
+
+    <div class="showcase">
+      <figure>
+        <img src="assets/settings.png" alt="The whatsapp-desktop Settings window: theme, font, tray and notification options." width="480" height="590" loading="lazy" decoding="async">
+      </figure>
+      <div class="showcase-copy">
+        <h3>Settings, without a text editor</h3>
+        <p>Everything the client does is a switch: the theme, the font it draws the page
+        in, whether closing the window hides it to the tray, whether a banner makes a
+        sound, and how long one stays on screen before it is refiled silently in the
+        notification centre.</p>
+        <p>Every switch also exists in
+        <code>~/.config/whatsapp-desktop/whatsapp-desktop.conf</code> —
+        <a href="#configure">the whole table is below</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------- install -->
+  <section id="install" class="band band-alt">
+    <div class="section-head">
+      <h2>Install</h2>
+      <p class="sub">Pick your distribution — every command is on this page, nothing to
+      read anywhere else. The packages come from a GPG-signed repository, so
+      <code>dnf</code>, <code>apt</code> or <code>pacman</code> keeps the client up to
+      date with the rest of the system.</p>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Install method">
+      <button class="tab" role="tab" aria-selected="true"  aria-controls="i-any"    id="t-any">Any distro</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="i-fedora" id="t-fedora">Fedora / RHEL</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="i-debian" id="t-debian">Debian / Ubuntu</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="i-arch"   id="t-arch">Arch</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="i-file"   id="t-file">Downloaded file</button>
+    </div>
+
+    <div class="card panel" id="i-any" role="tabpanel" aria-labelledby="t-any">
+      <p class="step">1 &middot; Add the signed repository</p>
+<pre><code>curl -fsSL https://abdallah-shehawey.github.io/shinux-repo/install.sh | sudo sh</code></pre>
+      <p class="note">One script for all three package managers: it detects
+      <code>dnf</code>, <code>apt</code> or <code>pacman</code>, imports the signing key,
+      writes a single repository file under <code>/etc</code>, and stops there. It
+      installs no packages of its own. If you would rather not pipe into a shell, the
+      three tabs beside this one spell the same steps out by hand.</p>
+
+      <p class="step">2 &middot; Install the client</p>
+<pre><code>sudo dnf install whatsapp-desktop     <span class="c"># Fedora and friends</span>
+sudo apt install whatsapp-desktop     <span class="c"># Debian, Ubuntu 24.04+</span>
+sudo pacman -S whatsapp-desktop       <span class="c"># Arch</span></code></pre>
+    </div>
+
+    <div class="card panel" id="i-fedora" role="tabpanel" aria-labelledby="t-fedora" hidden>
+      <p class="step">1 &middot; Trust the signing key</p>
+<pre><code>sudo rpm --import https://abdallah-shehawey.github.io/shinux-repo/RPM-GPG-KEY-shinux</code></pre>
+
+      <p class="step">2 &middot; Add the repository</p>
+<pre><code>sudo tee /etc/yum.repos.d/shinux.repo &gt;/dev/null &lt;&lt;'EOF'
+[shinux]
+name=Shinux Repository
+baseurl=https://abdallah-shehawey.github.io/shinux-repo/rpm/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=https://abdallah-shehawey.github.io/shinux-repo/RPM-GPG-KEY-shinux
+metadata_expire=6h
+EOF</code></pre>
+
+      <p class="step">3 &middot; Install</p>
+<pre><code>sudo dnf install whatsapp-desktop</code></pre>
+      <p class="note">Fedora, RHEL, CentOS Stream, Rocky and Alma. <code>gpgcheck=1</code>
+      is what verifies the package itself; metadata verification is left off so
+      <code>dnf install &lt;TAB&gt;</code> still works as an unprivileged user.</p>
+    </div>
+
+    <div class="card panel" id="i-debian" role="tabpanel" aria-labelledby="t-debian" hidden>
+      <p class="step">1 &middot; Trust the signing key</p>
+<pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+sudo curl -fsSL -o /etc/apt/keyrings/shinux.gpg \
+  https://abdallah-shehawey.github.io/shinux-repo/shinux.gpg
+sudo chmod 0644 /etc/apt/keyrings/shinux.gpg</code></pre>
+
+      <p class="step">2 &middot; Add the repository</p>
+<pre><code>sudo curl -fsSL -o /etc/apt/sources.list.d/shinux.sources \
+  https://abdallah-shehawey.github.io/shinux-repo/shinux.sources</code></pre>
+
+      <p class="step">3 &middot; Install</p>
+<pre><code>sudo apt update
+sudo apt install whatsapp-desktop</code></pre>
+      <p class="note">Ubuntu 24.04 and later, Debian 12 and later, Mint 22 and later — the
+      package needs a <code>glibc</code> recent enough for Electron 40. The
+      <code>.sources</code> file is deb822 format; <code>apt</code> has read it since
+      Debian 12 and Ubuntu 22.04.</p>
+    </div>
+
+    <div class="card panel" id="i-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+      <p class="step">1 &middot; Trust the signing key</p>
+<pre><code>curl -fsSL https://abdallah-shehawey.github.io/shinux-repo/shinux.gpg -o /tmp/shinux.gpg
+sudo pacman-key --add /tmp/shinux.gpg
+sudo pacman-key --lsign-key AE61EBAE9E8236C02D44F731BAD3F4329468897C</code></pre>
+
+      <p class="step">2 &middot; Add the repository</p>
+<pre><code>sudo tee -a /etc/pacman.conf &gt;/dev/null &lt;&lt;'EOF'
+
+[shinux]
+Server = https://abdallah-shehawey.github.io/shinux-repo/arch/$arch
+SigLevel = Required DatabaseOptional
+EOF</code></pre>
+
+      <p class="step">3 &middot; Install</p>
+<pre><code>sudo pacman -Sy
+sudo pacman -S whatsapp-desktop</code></pre>
+      <p class="note">A native <code>.pkg.tar.zst</code> from a signed repository — not an
+      AUR recipe, so there is nothing to compile. Manjaro and EndeavourOS take the same
+      steps.</p>
+    </div>
+
+    <div class="card panel" id="i-file" role="tabpanel" aria-labelledby="t-file" hidden>
+      <p class="step">Install a file you already downloaded</p>
+<pre><code>sudo dnf install ./whatsapp-desktop-<span data-version>1.6.1</span>-1.x86_64.rpm
+sudo apt install ./whatsapp-desktop_<span data-version>1.6.1</span>_amd64.deb
+sudo pacman -U ./whatsapp-desktop-<span data-version>1.6.1</span>-1-x86_64.pkg.tar.zst</code></pre>
+      <p class="note">The leading <code>./</code> matters: without it both
+      <code>dnf</code> and <code>apt</code> look for a package by that name in a
+      repository instead of reading the file. Grab the file from
+      <a href="#download">the downloads below</a>.</p>
+      <p class="note"><strong>This does not update itself.</strong> A file install stays
+      at the version you fetched — the repository above is the only reason to prefer it.</p>
+    </div>
+
+    <div class="callout">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="ico"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+      <p><strong>First run.</strong> Launch <em>WhatsApp</em> from your applications menu
+      or run <code>whatsapp-desktop</code>, then link it the way you would link a browser:
+      on your phone, <em>Settings → Linked devices → Link a device</em>, and scan the code
+      on screen. Nothing is typed into this client but the QR scan.</p>
+    </div>
+
+    <div class="callout">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="ico"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+      <p>The package installs a system-wide autostart entry, so the client starts hidden
+      in the tray at login. To stop that: <em>Settings → Applications → Startup</em>, or
+      delete <code>/etc/xdg/autostart/io.github.shehawey.whatsapp-desktop.desktop</code>.</p>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h3>Updating</h3>
+<pre><code>sudo dnf upgrade whatsapp-desktop
+sudo apt update &amp;&amp; sudo apt install --only-upgrade whatsapp-desktop
+sudo pacman -Syu whatsapp-desktop</code></pre>
+        <p class="note">Installed from the repository, a plain system upgrade picks it up
+        with everything else — there is no updater inside the client.</p>
+      </div>
+      <div class="card">
+        <h3>Removing it</h3>
+<pre><code>sudo dnf remove whatsapp-desktop
+sudo apt purge whatsapp-desktop
+sudo pacman -Rns whatsapp-desktop</code></pre>
+        <p class="note">Your session and settings live in
+        <code>~/.local/share/whatsapp-desktop</code> and
+        <code>~/.config/whatsapp-desktop</code>; delete those two directories to leave
+        nothing behind.</p>
+      </div>
+    </div>
+
+    <p class="fpr-line">
+      Everything above is signed with
+      <code class="fpr">AE61&nbsp;EBAE&nbsp;9E82&nbsp;36C0&nbsp;2D44&nbsp;F731&nbsp;BAD3&nbsp;F432&nbsp;9468&nbsp;897C</code>
+    </p>
+  </section>
+
+  <!-- -------------------------------------------------------- downloads -->
+  <section id="download" class="band">
+    <div class="section-head">
+      <h2>Downloads</h2>
+      <p class="sub">
+        Straight from the latest GitHub release —
+        <strong data-tag>the latest release</strong><span data-release-date></span>.
+        Every file is built by CI from the tag, never uploaded by hand.
+      </p>
+    </div>
+
+    <div class="dl-grid" data-assets>
+      <!-- Static skeleton. site.js replaces the href, size and digest of each card
+           with the real asset from the latest release; without JS these links still
+           land on the release page, which is the same set of files. -->
+      <a class="card dl" data-match=".x86_64.rpm" data-skip="debug"
+         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest">
+        <span class="dl-badge rpm">RPM</span>
+        <h3>Fedora, RHEL, openSUSE</h3>
+        <p class="dl-file" data-name>whatsapp-desktop-…x86_64.rpm</p>
+        <p class="dl-meta"><span data-size>—</span><span class="sep">·</span>x86_64</p>
+        <p class="dl-sum" data-digest></p>
+      </a>
+
+      <a class="card dl" data-match="_amd64.deb"
+         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest">
+        <span class="dl-badge deb">DEB</span>
+        <h3>Debian, Ubuntu, Mint</h3>
+        <p class="dl-file" data-name>whatsapp-desktop_…_amd64.deb</p>
+        <p class="dl-meta"><span data-size>—</span><span class="sep">·</span>amd64</p>
+        <p class="dl-sum" data-digest></p>
+      </a>
+
+      <a class="card dl" data-match="-x86_64.pkg.tar.zst" data-skip="debug"
+         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest">
+        <span class="dl-badge arch">PKG</span>
+        <h3>Arch, Manjaro, EndeavourOS</h3>
+        <p class="dl-file" data-name>whatsapp-desktop-…pkg.tar.zst</p>
+        <p class="dl-meta"><span data-size>—</span><span class="sep">·</span>x86_64</p>
+        <p class="dl-sum" data-digest></p>
+      </a>
+
+      <a class="card dl" data-match="-source.tar.gz"
+         href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest">
+        <span class="dl-badge src">SRC</span>
+        <h3>Source tarball</h3>
+        <p class="dl-file" data-name>whatsapp-desktop-…-source.tar.gz</p>
+        <p class="dl-meta"><span data-size>—</span><span class="sep">·</span>any arch</p>
+        <p class="dl-sum" data-digest></p>
+      </a>
+    </div>
+
+    <p class="dl-foot">
+      Also in the release: a debug package for Arch and
+      <a data-sums-link href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest"><code>SHA256SUMS</code></a>
+      over the lot.
+      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases">Older releases</a>.
+    </p>
+
+    <div class="card verify">
+      <h3>Verify what you downloaded</h3>
+<pre><code>curl -fLO <span data-sums-url>https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest/download/SHA256SUMS</span>
+sha256sum -c SHA256SUMS --ignore-missing</code></pre>
+      <p class="note">Packages from the shinux repository are GPG-signed as well, and
+      <code>dnf</code>, <code>apt</code> and <code>pacman</code> check that for you.</p>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------- configure -->
+  <section id="configure" class="band band-alt">
+    <div class="section-head">
+      <h2>Configure</h2>
+      <p class="sub">Every key optional, in
+      <code>~/.config/whatsapp-desktop/whatsapp-desktop.conf</code>. State lives in
+      <code>~/.local/share/whatsapp-desktop</code>.</p>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h3>Keys</h3>
+        <table class="keys">
+          <tbody>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd></td><td>zoom in, out, reset</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>,</kbd></td><td>Settings</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd></td><td>devtools</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Q</kbd></td><td>quit for real</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>closes the emoji panel</td></tr>
+            <tr><td>window close</td><td>hides to the tray, stays connected</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Configuration file</h3>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>[view] font</code></td><td>GNOME's</td><td>family for everything the client draws</td></tr>
+            <tr><td><code>[view] font-size</code></td><td><code>16</code></td><td>root size in px — WhatsApp sizes in rem</td></tr>
+            <tr><td><code>[view] zoom</code></td><td><code>1.0</code></td><td>also set with <kbd>Ctrl</kbd>+<kbd>+</kbd>/<kbd>-</kbd></td></tr>
+            <tr><td><code>[view] force-font</code></td><td><code>true</code></td><td>draw the page in one family</td></tr>
+            <tr><td><code>[view] arabic-fix</code></td><td><code>false</code></td><td>widen the boxes Arabic descenders are clipped against</td></tr>
+            <tr><td><code>[window] width</code>, <code>height</code></td><td><code>1200×800</code></td><td>remembered on exit</td></tr>
+            <tr><td><code>[behaviour] close-to-tray</code></td><td><code>true</code></td><td>closing leaves the client running</td></tr>
+            <tr><td><code>[behaviour] minimize-to-tray</code></td><td><code>false</code></td><td>minimise is not close</td></tr>
+            <tr><td><code>[notifications] enabled</code></td><td><code>true</code></td><td>off hands notifications back to Chromium</td></tr>
+            <tr><td><code>[notifications] sound</code></td><td><code>true</code></td><td>a tone for the banners this client raises</td></tr>
+            <tr><td><code>[notifications] outgoing-sound</code></td><td><code>false</code></td><td>WhatsApp's tone for a message <em>you</em> send</td></tr>
+            <tr><td><code>[notifications] whatsapp-sound</code></td><td><code>false</code></td><td>let WhatsApp play its own arrival tone</td></tr>
+            <tr><td><code>[notifications] banner-seconds</code></td><td><code>12</code></td><td>before a banner is refiled silently</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="ico"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+      <p><strong>No banners on GNOME?</strong> The tray needs the AppIndicator extension,
+      and GNOME suppresses banners while a window is fullscreen, while presence is BUSY,
+      and while <em>show-banners</em> is off. Check that a plain
+      <code>notify-send hello world</code> floats first.</p>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ build -->
+  <section id="build" class="band">
+    <div class="section-head">
+      <h2>Build it yourself</h2>
+      <p class="sub">Needs Node and nothing else. GPL-3.0 — icon origins are recorded in
+      <code>data/icons/NOTICE</code>.</p>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+<pre><code>git clone https://github.com/abdallah-shehawey/whatsapp-desktop
+cd whatsapp-desktop
+make            <span class="c"># fetches Electron</span>
+make install    <span class="c"># ~/.local, plus a desktop entry and icons</span>
+make autostart  <span class="c"># also start hidden at login</span>
+make test       <span class="c"># replays a chat list past the watcher</span></code></pre>
+      </div>
+      <div class="card">
+        <h3>Or build a package</h3>
+<pre><code>packaging/build-rpm.sh    <span class="c"># dist/*.rpm</span>
+packaging/build-deb.sh    <span class="c"># dist/*.deb</span>
+makepkg -si               <span class="c"># packaging/PKGBUILD</span></code></pre>
+        <p class="note">The same three scripts CI runs on every <code>v*.*.*</code> tag,
+        so a local build is the same package as the release.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-foot">
+  <div class="foot-grid">
+    <div>
+      <div class="brand foot-brand">
+        <img src="assets/logo.svg" alt="" width="26" height="26"><span>whatsapp-desktop</span>
+      </div>
+      <p class="foot-note">An unofficial client. Not affiliated with, endorsed by, or
+      connected to WhatsApp LLC or Meta. WhatsApp is a trademark of its owner.</p>
+    </div>
+    <nav aria-label="Project">
+      <h4>Project</h4>
+      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop">Source</a>
+      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases">Releases</a>
+      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/issues">Issues</a>
+      <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/blob/main/LICENSE">GPL-3.0</a>
+    </nav>
+    <nav aria-label="Related">
+      <h4>Related</h4>
+      <a href="https://abdallah-shehawey.github.io/shinux-repo/">shinux repository</a>
+      <a href="https://shinux.dev/articles/rewriting-my-whatsapp-client-on-chromium">The write-up</a>
+      <a href="https://github.com/abdallah-shehawey/whatsapp">The C client</a>
+      <a href="https://github.com/abdallah-shehawey">More by the author</a>
+    </nav>
+  </div>
+  <p class="foot-legal">© <span data-year>2026</span> Abdallah Shehawey</p>
+</footer>
+
+<script src="assets/site.js" defer></script>
+</body>
+</html>

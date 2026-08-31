@@ -118,6 +118,11 @@ uninstall: no-autostart
 icons:
 	python3 tools/make-icons.py
 
+# The link-preview card the landing page advertises. Committed under docs/, so
+# run this only when the wording or the launcher icon changes.
+og:
+	python3 tools/make-og.py
+
 # Replays a chat list past src/page/inject.js in plain node -- no browser, no
 # account. Every notification bug this client has had lived in that file.
 test:
@@ -153,4 +158,4 @@ package: package-deb package-rpm package-arch package-source
 clean:
 	rm -rf node_modules
 
-.PHONY: all install autostart no-autostart uninstall icons test run package-deb package-rpm package-arch package-source package clean
+.PHONY: all install autostart no-autostart uninstall icons og test run package-deb package-rpm package-arch package-source package clean
