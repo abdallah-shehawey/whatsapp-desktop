@@ -24,7 +24,6 @@ const DEFAULTS = {
   'view.chat-font-size': 100,
   'view.zoom': 1.0,
   'view.force-font': true,         // draw the page in one family, like a browser told to ignore page fonts
-  'view.arabic-fix': false,        // widen the clip Arabic descenders are cut against
   'window.width': 1200,
   'window.height': 800,
   'behaviour.close-to-tray': true,
@@ -117,10 +116,6 @@ class Config {
       `zoom = ${Number(v['view.zoom']).toFixed(2)}`,
       '# Draw the whole page in one family, the way a browser told to ignore page fonts does.',
       `force-font = ${v['view.force-font']}`,
-      '# Give Arabic descenders room in the boxes WhatsApp clips them against.',
-      '# Off by default: Chromium measures a line against every font in it, so',
-      '# the clipping WebKit caused does not happen here.',
-      `arabic-fix = ${v['view.arabic-fix']}`,
       '',
       '[window]',
       `width = ${Math.round(v['window.width'])}`,

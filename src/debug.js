@@ -177,7 +177,7 @@ const install = (getWindow, getBanners, actions = {}) => {
         font: `* { font-family: ${style.stack(family)} !important; }`,
         size: 'html { font-size: 16px !important; }',
         full: `* { font-family: ${style.stack(family)} !important; }\nhtml { font-size: 16px !important; }`,
-        shipped: style.build({ arabicFix: false, fontSize: 16 }),
+        shipped: style.build({ fontSize: 16 }),
       };
       await require('./main-css.js').set(pieces[which] || '');
       console.log('debug: stylesheet -> %s', which);
@@ -486,7 +486,7 @@ const install = (getWindow, getBanners, actions = {}) => {
        very handler the window's own IPC call lands in.
 
          #set view.chat-font-size 130
-         #set view.arabic-fix false
+         #set view.font-size 18
     */
     if (source.startsWith('#set ')) {
       const [key, ...rest] = source.slice(5).trim().split(/\s+/);

@@ -42,6 +42,11 @@ const stack = (family, lead) => {
  * page was designed on -- and in a bubble it lands on a span inside a div pinned
  * at 19px, which shears five pixels off every line. That version shipped once
  * from the GTK client and came straight back out.
+ *
+ * There is no switch for this. It was one for a while, and a switch for
+ * "should the letters have their tails" is not a preference -- an owner who
+ * turns it off gets a bug back, and one who never finds it reads shorn Arabic
+ * for ever. The same goes for MESSAGE_BIDI below.
  */
 const ARABIC_CLIP = `
 /* The clipping box in a bubble is the div directly under .copyable-text. */
@@ -56,32 +61,6 @@ const ARABIC_CLIP = `
    ever does get shorn in the list here, the rule that belongs is this same clip
    widening on "#pane-side div:has(> span[title])" -- never a line-height, which
    in the GTK client shifted every Arabic line off the page's own rhythm. */
-/* Arabic that wraps.
- *
- * WhatsApp marks the SPAN holding the text dir="rtl" and leaves the block around
- * it dir="ltr" with text-align: start -- which, on a left-to-right block,
- * resolves to left. An inline span's direction fixes the order of words within a
- * line and nothing else: alignment belongs to the block. So the first line of an
- * Arabic message looks right because it fills the width, and every line after it
- * is flush against the LEFT margin, which is the report.
- *
- * Measured on a live bubble rather than guessed: the div reads
- * direction "ltr", text-align "start", and the span inside it dir="rtl",
- * direction "rtl".
- *
- * text-align rather than direction, because direction on the block would move
- * the timestamp and the ticks that sit inside the same bubble. :has() asks the
- * only question that matters -- did WhatsApp itself decide this text is
- * right-to-left -- so a Latin message in the same conversation is untouched. */
-#main div.copyable-text:not([contenteditable]) > div:has(> span[dir="rtl"]),
-#main div.copyable-text:not([contenteditable]) > div:has(> span > span[dir="rtl"]) {
-  text-align: right;
-}
-/* The same thing in a quoted reply and in the chat list, where the preview is a
-   span[title] inside a block the page leaves left-to-right. */
-#pane-side div:has(> span[title][dir="rtl"]) {
-  text-align: right;
-}
 
 /* The composer clips the same way. A taller line box here is a trap: WhatsApp
    already sets 1.47em on it, and one pixel of overflow makes the box scrollable,
@@ -89,6 +68,148 @@ const ARABIC_CLIP = `
 [contenteditable="true"] {
   padding-bottom: 0.35em !important;
   margin-bottom: -0.35em !important;
+}`;
+
+/*
+ * Which way each line of a message reads, and which margin it sits against.
+ *
+ * All of this was measured on the live client, on the very messages that were
+ * reported. Guessing at it produced three wrong fixes in a row, so the shape of
+ * a message body is written down here in full:
+ *
+ *   div.copyable-text                       -- the message body
+ *     div                                   -- direction ltr, text-align start
+ *       span.selectable-text[dir=ltr|rtl]   -- INLINE, unicode-bidi isolate,
+ *         span   "first line\\n"            white-space pre-wrap. WhatsApp
+ *         span   "\\n"                      splits the text at every newline and
+ *         span[dir=rtl] "…\\n"              gives each piece a span of its own.
+ *         span   "last line, no newline"    Those pieces are display:block --
+ *       span[aria-hidden] "6:03 PM"         except the last, which stays inline.
+ *
+ * Three separate faults, and each needs a different half of the rules below.
+ *
+ * ONE. WhatsApp marks a line dir="rtl" when it runs the other way from the
+ * message -- and then puts `text-align: end` on that very span. On a
+ * right-to-left line `end` is the LEFT margin, so every Arabic line inside an
+ * English message was flush left while the English lines were flush right. That
+ * is the report: "الانجليزي بقي علي اليمين والعربي بقي علي الشمال". The same
+ * class lands on the <li> of a bulleted list, with the same result.
+ *
+ * TWO. A message that is all Arabic has nothing marked at all: the last piece
+ * of it is an INLINE span, so the block that lays its lines out is
+ * span.selectable-text, which is itself inline -- and the block above THAT is
+ * the div, which is left-to-right. So the first line of a wrapping Arabic
+ * message filled the width and looked right, and every line after it was flush
+ * left. Making span.selectable-text display:block puts the message in a box of
+ * its own, whose direction is the one WhatsApp worked out for the message.
+ *
+ * THREE. The timestamp is an invisible inline span that reserves room at the
+ * end of the last line for the real clock, which is drawn over it. "End" in a
+ * left-to-right block is the right margin -- which is exactly where a
+ * right-to-left last line puts its text, so the clock sat on top of the words:
+ * "الساعه لازقه في اخر سطر في الرساله". Once the body is display:block that
+ * span is pushed onto a line of its own and cannot collide with anything.
+ *
+ * `unicode-bidi: plaintext` is what makes a line take its direction from its
+ * own first strong character rather than from the message's, so a line that
+ * opens with an emoji, a bullet or a bracket still reads the way its words do.
+ * It goes on the line spans and NOT on span.selectable-text, and that
+ * distinction cost an afternoon: plaintext on an INLINE box makes it an
+ * isolate, an isolate contributes no direction to the paragraph around it, and
+ * a paragraph with no direction in it falls back to left-to-right. Put
+ * plaintext on the body and the last inline line hides the only Arabic in the
+ * box from it, so `text-align: start` resolves to left and the fix undoes
+ * itself. Measured, both ways round: with `isolate` on the body the lines came
+ * back flush right (0px from the right margin), with `plaintext` they were
+ * flush left.
+ *
+ * What plaintext costs, and it is left as it is: a line with NO strong character
+ * in it -- one that is nothing but emoji -- has no direction to take, and rules
+ * P2/P3 of the bidi algorithm end at left-to-right. So the emoji line at the
+ * foot of an Arabic message sits against the left margin while the words above
+ * it sit against the right. Measured on both surfaces, so at least they agree:
+ * flush left in a bubble and flush left in a community thread. There is no CSS
+ * for "plaintext, but fall back to this element's direction", and the
+ * alternative is worse -- taking the direction from the message would put a
+ * whole English line inside an Arabic one on the right, which is the report
+ * this rule exists to answer.
+ *
+ * !important throughout, and not for emphasis: this sheet is inserted at USER
+ * origin, where a normal declaration loses to the page's own. Only an important
+ * one at user origin outranks an author rule -- which `text-align: end` is.
+ */
+const MESSAGE_BIDI = `
+/* The body of a message: a box of its own, aligned to the start of the
+   direction WhatsApp worked out for it. */
+#main div.copyable-text:not([contenteditable]) > div > span.selectable-text {
+  display: block !important;
+  unicode-bidi: isolate !important;
+  text-align: start !important;
+}
+/* Each line in it: its own direction, from its own first strong character, and
+   the start margin of that direction. Arabic right, English left, whatever
+   either of them happens to begin with. */
+#main div.copyable-text:not([contenteditable]) > div > span.selectable-text > span,
+#main div.copyable-text:not([contenteditable]) > div > span.selectable-text ul,
+#main div.copyable-text:not([contenteditable]) > div > span.selectable-text li {
+  unicode-bidi: plaintext !important;
+  text-align: start !important;
+}
+/* A community thread -- the panel behind "6 replies" -- and why none of the
+   above reaches it. It is mounted OUTSIDE #main, in a [role="dialog"], and it
+   holds no div.copyable-text at all: measured on the live panel, 43 message
+   bodies inside #main and none outside it. So every rule so far missed it and
+   its Arabic sat flush left while the same message in the conversation behind
+   it sat flush right.
+
+   Its shape is not a bubble's:
+
+     div[data-testid="comment-row"]      -- one reply
+       div[data-testid="group-chat-profile-picture"]
+       div ... span  "Youssef"  "+20 …"  "11:44 AM"   -- the sender line
+       div                               -- block, direction ltr, text-align start
+         span[data-testid=selectable-text][dir=auto]  -- INLINE, isolate,
+                                            white-space: PRE-LINE, and the whole
+                                            message in it, newlines and all.
+
+   WhatsApp does NOT split a thread reply into a span per line the way it splits
+   a bubble -- measured: 6 reply texts, 0 nested spans, the newlines still in the
+   text node. So there are no line spans to hang plaintext on, and it goes on
+   the block itself, where pre-line has already made each newline a forced break
+   and therefore a bidi paragraph of its own. That is the OPPOSITE of the rule
+   above, where plaintext on the body undoes the fix, and the difference is the
+   pre-line span: measured, three ways round, on a box widened to leave slack on
+   both sides, so that a flush line reads in either direction --
+
+     the line              as shipped   isolate   plaintext
+     "سطر عربي"                left       right     right
+     "وسطر تاني اقصر"          left       right     right
+     "Hello world here"        left       left      left
+     "مرحبا بالعالم"           left       left      RIGHT   <- the only one that
+     "and english again"       left       left      left       gets all three
+     "(emoji) مرحبا بك"        left       right     right
+     "(emoji) welcome"         left       RIGHT     left
+     "https://example.com/x"   left       left      left
+     "الرابط ده مهم"           left       left      right
+
+   isolate gets the all-Arabic reply right and nothing else: the span carries
+   dir="auto", so ONE direction is worked out for the whole message from its
+   first strong character, and every line of a mixed one is dragged to that
+   side. The timestamp needs nothing here -- it is drawn in the sender line
+   above, not reserved at the end of the last one.
+
+   The descender clip is not repeated for this panel and does not need to be:
+   every box from the text up to the scroller is overflow: visible, so there is
+   nothing here to shear a final ن against. */
+[data-testid="comment-row"] span[data-testid="selectable-text"] {
+  display: block !important;
+  unicode-bidi: plaintext !important;
+  text-align: start !important;
+}
+/* A quoted reply and the chat list, where the preview is a span[title] inside a
+   block the page leaves left-to-right. */
+#pane-side div:has(> span[title][dir="rtl"]) {
+  text-align: right;
 }`;
 
 /*
@@ -189,20 +310,33 @@ const DRAWER_MOTION = `
  * follows on its own, and a line box pinned there is what made every keystroke
  * scroll the caret back into view.
  *
+ * A community thread counts as a conversation here. Its panel is outside #main,
+ * so it was left at WhatsApp's own 14.2px while the chat behind it was drawn at
+ * the asked-for size -- measured with view.chat-font-size at 110: 15.6px in the
+ * conversation, 15.0px in the reply box beneath it, 14.2px in the replies. It is
+ * the same words in the same conversation, so it follows the same knob. The
+ * panel is found by the rows it holds rather than by its own marker, which is
+ * the thoroughly generic `confirm-popup`.
+ *
  * Nothing at all is emitted at 100%, so the default page is the page WhatsApp
  * drew.
  */
 const MESSAGE_TEXT_REM = 0.888;   // WhatsApp's own: 14.2px against a 16px root
 
+const THREAD = '[data-testid="popup-contents"]:has([data-testid="comment-row"])';
+
 const CHAT_TEXT_SELECTORS = `
 #main [data-testid="conversation-panel-messages"] .copyable-text,
 #main [data-testid="conversation-panel-messages"] .selectable-text,
 #main [data-tab="conversation-panel-messages"] .copyable-text,
-#main [data-tab="conversation-panel-messages"] .selectable-text`;
+#main [data-tab="conversation-panel-messages"] .selectable-text,
+[data-testid="comment-row"] .selectable-text`;
 
 const COMPOSER_SELECTORS = `
 #main [contenteditable="true"],
-#main [contenteditable="true"] p`;
+#main [contenteditable="true"] p,
+${THREAD} [contenteditable="true"],
+${THREAD} [contenteditable="true"] p`;
 
 const scaled = value => {
   const factor = Number(value) / 100;
@@ -243,20 +377,6 @@ const chatTextRevert = () => `${CHAT_TEXT_SELECTORS},${COMPOSER_SELECTORS} {
   font-size: revert !important;
   line-height: revert !important;
 }`;
-
-/* The same, for the Arabic clip: turning the switch off has to undo it. */
-const ARABIC_CLIP_REVERT = `
-#main div.copyable-text:not([contenteditable]) > div,
-[contenteditable="true"] {
-  padding-bottom: revert !important;
-  margin-bottom: revert !important;
-}
-#main div.copyable-text:not([contenteditable]) > div:has(> span[dir="rtl"]),
-#main div.copyable-text:not([contenteditable]) > div:has(> span > span[dir="rtl"]),
-#pane-side div:has(> span[title][dir="rtl"]) {
-  text-align: revert !important;
-}`;
-
 
 /*
  * Aliasing, which is how the desktop font is imposed now.
@@ -325,8 +445,11 @@ const aliasSheet = (stack, family) => {
 /* `before` is what the last sheet was built from, and it is not bookkeeping for
    its own sake: see chatTextRevert -- a sheet that is in the page is in it for
    good, so anything that was switched on has to be switched off by name. */
-const build = ({ arabicFix, fontSize, chatScale }, before) => {
-  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION];
+const build = ({ fontSize, chatScale }, before) => {
+  /* ARABIC_CLIP and MESSAGE_BIDI are unconditional, so nothing here has to be
+     written back out to undo them -- which is the whole reason `before` exists
+     for the rules that are not. */
+  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION, ARABIC_CLIP, MESSAGE_BIDI];
 
   /* There is no font rule here any more, and that is the point. Forcing the
      desktop font with `* { font-family: X !important }` at user origin works and
@@ -347,9 +470,6 @@ const build = ({ arabicFix, fontSize, chatScale }, before) => {
   const chat = chatText(chatScale);
   if (chat) rules.push(chat);
   else if (before && scaled(before.chatScale)) rules.push(chatTextRevert());
-
-  if (arabicFix) rules.push(ARABIC_CLIP);
-  else if (before && before.arabicFix) rules.push(ARABIC_CLIP_REVERT);
 
   return rules.join('\n');
 };

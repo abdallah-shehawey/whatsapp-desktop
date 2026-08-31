@@ -17,7 +17,6 @@ ipcMain.handle('settings:get', () => ({
   notifyEnabled: true,
   notifySound: true,
   outgoingSound: false,
-  arabicFix: false,
   zoom: 1.0,
   fontSize: 16,
   chatFontSize: 100,

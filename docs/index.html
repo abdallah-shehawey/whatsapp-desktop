@@ -147,7 +147,8 @@
         <h3>Text the size you want it</h3>
         <p>Make the messages bigger or smaller from Settings — the conversation only, so
         your chat list stays where it was. The whole app is drawn in your desktop's own
-        font, and Arabic reads right to left everywhere, notifications included.</p>
+        font, and Arabic reads right to left everywhere — line by line, in the
+        conversation, in the replies to a community post, and in the notifications.</p>
       </article>
 
       <article class="card feat">
@@ -217,8 +218,6 @@
           <dd>The words in a conversation only: bigger messages, and a chat list that
           stays the size it is.</dd>
 
-          <dt>Arabic Text Clipping Fix</dt>
-          <dd>Room for the tails of ن and ي in the boxes WhatsApp clips them against.</dd>
         </dl>
         <p class="note">All of it lands in
         <code>~/.config/whatsapp-desktop/whatsapp-desktop.conf</code> —
@@ -542,7 +541,6 @@ sudo pacman -U ./whatsapp-desktop-*.pkg.tar.zst  <span class="c"># Arch</span></
             <tr><td><code>[view] chat-font-size</code></td><td><code>100</code></td><td>size of the messages only, as a %</td></tr>
             <tr><td><code>[view] zoom</code></td><td><code>1.0</code></td><td>also set with <kbd>Ctrl</kbd>+<kbd>+</kbd>/<kbd>-</kbd></td></tr>
             <tr><td><code>[view] force-font</code></td><td><code>true</code></td><td>draw the page in one family</td></tr>
-            <tr><td><code>[view] arabic-fix</code></td><td><code>false</code></td><td>widen the boxes Arabic descenders are clipped against</td></tr>
             <tr><td><code>[window] width</code>, <code>height</code></td><td><code>1200×800</code></td><td>remembered on exit</td></tr>
             <tr><td><code>[behaviour] close-to-tray</code></td><td><code>true</code></td><td>closing leaves the client running</td></tr>
             <tr><td><code>[behaviour] minimize-to-tray</code></td><td><code>false</code></td><td>minimise is not close</td></tr>

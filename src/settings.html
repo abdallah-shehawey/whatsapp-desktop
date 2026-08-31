@@ -512,17 +512,6 @@
             <button class="stepper-btn" id="chatFontIn">+</button>
           </div>
         </div>
-
-        <div class="row">
-          <div class="row-info">
-            <div class="row-title">Arabic Text Clipping Fix</div>
-            <div class="row-desc">Expand line boxes for Arabic letter descenders</div>
-          </div>
-          <label class="switch">
-            <input type="checkbox" id="arabicFixToggle">
-            <span class="slider"></span>
-          </label>
-        </div>
       </div>
     </div>
 
@@ -545,7 +534,6 @@
     const notifyToggle = document.getElementById('notifyToggle');
     const notifySoundToggle = document.getElementById('notifySoundToggle');
     const outgoingSoundToggle = document.getElementById('outgoingSoundToggle');
-    const arabicFixToggle = document.getElementById('arabicFixToggle');
     const zoomInBtn = document.getElementById('zoomIn');
     const zoomOutBtn = document.getElementById('zoomOut');
     const zoomVal = document.getElementById('zoomVal');
@@ -589,7 +577,6 @@
         notifyToggle.checked = !!data.notifyEnabled;
         notifySoundToggle.checked = !!data.notifySound;
         outgoingSoundToggle.checked = !!data.outgoingSound;
-        arabicFixToggle.checked = !!data.arabicFix;
         currentZoom = data.zoom || 1.0;
         zoomVal.textContent = Math.round(currentZoom * 100) + '%';
         chatFont = data.chatFontSize || 100;
@@ -631,10 +618,6 @@
 
     outgoingSoundToggle.addEventListener('change', async () => {
       if (window.api) await window.api.setSetting('notifications.outgoing-sound', outgoingSoundToggle.checked);
-    });
-
-    arabicFixToggle.addEventListener('change', async () => {
-      if (window.api) await window.api.setSetting('view.arabic-fix', arabicFixToggle.checked);
     });
 
     // Zoom Handlers

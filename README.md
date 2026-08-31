@@ -23,16 +23,26 @@ the latest release.
   first at login.
 - **Draws everything in the desktop's font**, applied live when you change it,
   and the conversation's own text size is a switch of its own: bigger or
-  smaller messages with the chat list left where it was.
+  smaller messages with the chat list left where it was. A community thread
+  counts as a conversation here, replies and reply box both.
 - **One notification per message**, with the sender, the text and the sender's
   picture, a click that opens that conversation, and a withdrawal the moment you
   open the chat or read it on your phone. Each message is its own entry rather
   than a replacement for the last, media says what kind it is (`📷 Photo`,
   `🏷 Sticker`, `🎤 Voice message`) so it cannot be mistaken for somebody typing
-  the word, and Arabic reads right to left in the banner instead of wrapping
-  the wrong way under a Latin name. Nothing is announced for a message you sent
+  the word, and every line of a banner reads the way its own words do rather
+  than taking its direction from the Latin name in front of it. Nothing is announced for a message you sent
   yourself, a muted group is silent unless you were mentioned in it, and
   do-not-disturb silences the tone as well as the banner.
+- **Arabic reads like Arabic.** Every line of a message takes its direction
+  from its own first strong character, so Arabic sits against the right margin
+  and English against the left in the same message — whichever of them the
+  message happens to open with, and whatever emoji or punctuation comes first.
+  In a bubble and in the replies to a community post alike; the panel behind
+  “6 replies” is built nothing like a bubble and had to be taught separately.
+  Descenders get the room WhatsApp's line boxes do not leave them, and the
+  timestamp is kept off the last line of the text instead of landing on top of
+  it. None of this is a switch: it is how the client draws a conversation.
 - **Banners come down on the client's own clock.** GNOME shows one at a time,
   queues three behind it and drops the rest, so each banner is closed after
   twelve seconds and refiled silently in the notification centre.
@@ -99,7 +109,6 @@ make test       # replays a chat list past the watcher, no browser needed
 | `[view] chat-font-size` | `100` | the conversation's text, as a percentage of WhatsApp's own |
 | `[view] zoom` | `1.0` | also set with `Ctrl` `+`/`-` |
 | `[view] force-font` | `true` | draw the page in one family |
-| `[view] arabic-fix` | `false` | widen the boxes WhatsApp clips Arabic descenders against |
 | `[window] width`, `height` | `1200x800` | remembered on exit |
 | `[behaviour] close-to-tray` | `true` | closing the window leaves the client running |
 | `[behaviour] minimize-to-tray` | `false` | minimise is not close |
