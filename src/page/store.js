@@ -644,7 +644,13 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
       title: titleOf(chat),
       sender: group ? nameOf(msg.author || msg.from, msg.notifyName) : '',
       group,
-      mark: (aimed ? aimed + ' ' : '') + (mark || ''),
+      /* Two different things, and they used to be one string. The kind of
+         message goes in front of its words -- "Photo look at this" -- and the
+         mark for a message aimed at the user is a line of its own above the
+         sender, the way the phone writes it. Glued together, the second read as
+         part of the first. */
+      aimed,
+      mark: mark || '',
       text: textOf(msg),
       mention: !!aimed,
       muted: isMuted(chat),

@@ -1461,6 +1461,11 @@ const wireIpc = () => {
        a photo with no caption is its mark alone, and a message of words has none
        at all. */
     const said = [mark, note.text].filter(Boolean).join(' ');
+    /* And a message aimed at the user says so on a line of its own, above the
+       sender: "You got a reply" and then "Mega: تيست", which is the shape the
+       phone raises for the same message. */
+    const aimed = note.aimed ? String(note.aimed).trim() : '';
+    const above = aimed ? aimed + '\n' : '';
 
     /* Two ways to put a name in front of a line, and the difference is not
        cosmetic. A message is "Mega: نتقابل بكرة" -- the colon says Mega SAID
@@ -1469,10 +1474,10 @@ const wireIpc = () => {
        claim otherwise. Either way the direction comes from the message and the
        name is isolated inside it, so a Latin name cannot reorder an Arabic
        line. */
-    const body = note.join === 'space'
+    const body = above + (note.join === 'space'
       ? bidi.paragraph((note.sender ? bidi.isolate(note.sender) + ' ' : '') + said,
                        bidi.directionOf(said))
-      : bidi.line(note.sender, said);
+      : bidi.line(note.sender, said));
     const banner = banners.show({
       /* The message and no other. This used to be the chat, the sender and the
          text hashed together, which is as close to a message's identity as
@@ -1490,7 +1495,7 @@ const wireIpc = () => {
       /* What the banner may say with previews turned off. The page names it when
          the mark alone would not -- a reaction has no mark, and "New message" is
          the wrong thing to call one. */
-      redacted: note.redacted || mark || 'New message',
+      redacted: above + (note.redacted || mark || 'New message'),
       icon: note.avatar,
       onClick: () => {
         showWindow();

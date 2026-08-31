@@ -145,14 +145,26 @@ const kindOf = message => {
    does this. */
 const pushName = name => String(name == null ? '' : name).replace(/^~\s*/, '').trim();
 
+/* What goes in front of a message aimed at the user in particular -- on a line
+   of its own, above the sender, which is where the phone puts it and what it
+   says there.
+
+   In words, and not in a glyph. It was an arrow before, in the monochrome the
+   marks below use, and on a machine whose fonts do not cover the text form of
+   U+21A9 the shell drew it as an empty box: a banner that said a message was
+   aimed at you with a shape that means nothing. A word cannot fall back to
+   nothing. The @ stays because it is ASCII and every font has it. */
+const MENTION_MARK = '@ You were mentioned';
+const REPLY_MARK = 'You got a reply';
+
 /* What WhatsApp puts in front of the sender when a message is aimed at the user
    in particular. It is not a name, and the split below read it as one: a banner
    went out reading "Replied to you: ~Ahmed: ..." with the wrong half of that in
    the place a sender belongs. Lifted off and turned back into what it is -- a
    mark on the message -- which is how the phone shows it too. */
 const AIMED_AT_US = [
-  { text: /^(?:replied to you|رد عليك)\s*[:\u061b\u003a]\s*/i, mark: mono('\u21A9') + ' ' },
-  { text: /^(?:mentioned you|ذكرك)\s*[:\u061b\u003a]\s*/i,     mark: '@ ' },
+  { text: /^(?:replied to you|رد عليك)\s*[:\u061b\u003a]\s*/i, mark: REPLY_MARK + '\n' },
+  { text: /^(?:mentioned you|ذكرك)\s*[:\u061b\u003a]\s*/i,     mark: MENTION_MARK + '\n' },
 ];
 
 /* Whether the run in front of a colon can be somebody's name.
@@ -242,11 +254,6 @@ const MARKS = {
   template_button_reply: '',
   list_response:         '',
 };
-
-/* What goes in front of a message aimed at the user in particular, in the same
-   monochrome as the rest. */
-const MENTION_MARK = '@';
-const REPLY_MARK = mono('↩');
 
 module.exports = { kindOf, pushName, readBody, mediaFromWords, STICKER, MISSED,
                    RINGING, MARKS, MENTION_MARK, REPLY_MARK, TEXT, mono };

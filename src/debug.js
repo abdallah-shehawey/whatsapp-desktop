@@ -223,6 +223,7 @@ const install = (getWindow, getBanners, actions = {}) => {
       const banners = getBanners && getBanners();
       if (!banners) { console.log('debug: no banners to raise'); return; }
       const bidi = require('./bidi.js');
+      const wording = require('./wording.js');
       const kinds = [
         ['\u{1F49F} Sticker', ''],
         ['\u{1F4F7} Photo', ''],
@@ -236,7 +237,7 @@ const install = (getWindow, getBanners, actions = {}) => {
          '\u0639\u0634\u0627\u0646 \u0646\u0634\u0648\u0641 \u0627\u0644\u0633\u0637\u0631 ' +
          '\u0627\u0644\u062A\u0627\u0646\u064A \u0628\u064A\u0628\u062F\u0623 \u0645\u0646 ' +
          '\u0641\u064A\u0646', ''],
-        ['\u062A\u0645\u0627\u0645 \u064A\u0627 \u0645\u0639\u0644\u0645', '\u21A9\uFE0F '],
+        ['\u062A\u0645\u0627\u0645 \u064A\u0627 \u0645\u0639\u0644\u0645', wording.REPLY_MARK + '\n'],
       ];
       let n = 0;
       for (const [message, mark] of kinds) {

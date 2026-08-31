@@ -8,7 +8,8 @@
  */
 'use strict';
 
-const { kindOf, pushName, readBody, mediaFromWords, MARKS, REPLY_MARK } =
+const { kindOf, pushName, readBody, mediaFromWords, MARKS, REPLY_MARK,
+        MENTION_MARK } =
   require('../src/wording.js');
 
 let failures = 0;
@@ -81,11 +82,17 @@ check('"replied to you" is a mark on the message, not the person who wrote it',
       readBody('Replied to you: ~Ahmed: جميل').sender, 'Ahmed');
 check('and the message is what they actually said',
       readBody('Replied to you: ~Ahmed: جميل').message, 'جميل');
-check('and the mark travels separately, to go in front of the line',
-      readBody('Replied to you: ~Ahmed: جميل').mark, REPLY_MARK + ' ');
+/* On a line of its own, above the sender, which is where the phone puts it. */
+check('and the mark travels separately, to go on the line above',
+      readBody('Replied to you: ~Ahmed: جميل').mark, REPLY_MARK + '\n');
+/* In words. It was an arrow, and a machine without the text form of U+21A9 in
+   any of its fonts drew an empty box in the one place a banner explains why it
+   is louder than the chat's own settings. */
+check('and it is words, with nothing in it that a font can fail to draw',
+      /^[\x20-\x7E]+$/.test(REPLY_MARK), true);
 
-check('a mention is marked with the sign WhatsApp uses for one',
-      readBody('Mentioned you: Ahmed: يا عبدالله').mark, '@ ');
+check('a mention says so as well, keeping the sign WhatsApp uses for one',
+      readBody('Mentioned you: Ahmed: يا عبدالله').mark, MENTION_MARK + '\n');
 check('and it too leaves the sender where a sender belongs',
       readBody('Mentioned you: Ahmed: يا عبدالله').sender, 'Ahmed');
 
