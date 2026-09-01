@@ -256,7 +256,7 @@ const pushFocus = () => {
      for itself. See the visibility section of src/page/inject.js. */
   win.webContents.send('wa:on-screen', onScreen);
   /* The tray is deliberately not told anything here. What it needs is tracked
-     from the window's own events instead -- see trayFollowsWindow -- because
+     from the window's own events instead -- see traceWindowState -- because
      asking the window is what got this wrong. */
   /* A window coming back is the user arriving at whatever chat is on screen --
      and at any call the telephone is ringing for. */
@@ -264,51 +264,45 @@ const pushFocus = () => {
 };
 
 /*
- * Whether the window is on the screen, which is what the tray's first item
- * offers to change. Tracked, never asked: isMinimized() answers false for a
- * window sitting minimised in the dock under GNOME, so the menu offered to hide
- * a window that was not on the screen. An event is a fact where a query is an
- * opinion -- `minimize` fires when the window goes to the dock whatever
- * isMinimized() says a moment later, and `show` and `hide` are the same.
+ * Whether the window is on the screen, narrated for whoever is reading the log.
  *
- * The focus is deliberately NOT part of the answer, and that is the fix for the
- * second report. Opening the tray menu is itself what takes the focus off the
- * window, so a focus-tested item was wrong the instant it was drawn; the
- * previous version of this waited 1200ms before believing a blur, on the
- * grounds that a menu is clicked faster than that. It is not. gnome-shell
- * serves these items live over DBus, so a menu left open for three seconds --
- * with WhatsApp plainly on the screen behind it -- rewrote its own first line
- * from "Hide WhatsApp" to "Open WhatsApp" while the owner was reading it. That
- * is the report: "بتظهر الاول صح واسيبها ثانيتين تلاته هلاقيها اتغيرت مع اني
- * لسه فاتح الواتس".
+ * The tray used to be told: its first item read "Hide WhatsApp" or "Open
+ * WhatsApp" depending on this, and three rounds of work went into computing it
+ * honestly -- isMinimized() answers false for a window sitting in the dock under
+ * GNOME, and the focus cannot be part of the answer because opening the tray
+ * menu is itself what takes the focus off the window. Both of those were real
+ * and both are fixed. The item still read wrong, one open behind, and the reason
+ * turned out not to be in this file at all: gnome-shell does not re-read a menu
+ * that changed while it was closed until it is already drawing it. So the tray
+ * stopped asking and offers both, and the whole question moved to tray.js, where
+ * that is written down.
  *
- * A window behind another window is still a window that is up, and "hide it" is
- * an honest thing to offer for one. A window in the dock is not, and neither is
- * one closed to the tray -- and those two arrive as events, which is why they
- * can be believed without asking anybody anything.
+ * What is left is the state itself, which is worth keeping because it is the
+ * one account of the window that comes from events rather than from queries --
+ * an event is a fact where a query is an opinion. `minimize` fires when the
+ * window goes to the dock whatever isMinimized() says a moment later, and `show`
+ * and `hide` are the same.
  *
- * Which leaves the minimised flag, which under Wayland does not stay true on
- * its own. xdg-shell has no minimised state for a compositor to report back --
- * a client asks to be minimised and that is the end of the conversation -- so
- * the next configure puts the window back to normal and `restore` arrives
- * seconds after a minimise nobody undid. Measured, in that order, from one
- * click. So a restore is believed only when the window has the focus with it: a
- * window the owner really did fetch out of the dock is a window the compositor
- * activated, and one still sitting in the dock is not.
+ * The minimised flag under Wayland does not stay true on its own. xdg-shell has
+ * no minimised state for a compositor to report back -- a client asks to be
+ * minimised and that is the end of the conversation -- so the next configure
+ * puts the window back to normal and `restore` arrives seconds after a minimise
+ * nobody undid. Measured, in that order, from one click. So a restore is
+ * believed only when the window has the focus with it: a window the owner really
+ * did fetch out of the dock is a window the compositor activated, and one still
+ * sitting in the dock is not.
  */
-const trayFollowsWindow = () => {
+const traceWindowState = () => {
   const state = { visible: false, minimized: false };
 
   const set = change => {
     Object.assign(state, change);
     /* Raising the window takes it down for a frame and puts it back up (see
-       showWindow), and the tray must not offer to open a window that is on its
-       way to the screen -- the same reasoning as `remapping` in pushFocus, and
-       the same answer: the honest one is where it is heading. */
+       showWindow), so a window mid-remap is reported as where it is heading --
+       the same reasoning as `remapping` in pushFocus. */
     const onScreen = remapping || (state.visible && !state.minimized);
-    debug.trace('window: %s -> tray offers to %s',
-      JSON.stringify(state), onScreen ? 'hide it' : 'open it');
-    if (tray) tray.setWindowOnScreen(onScreen);
+    debug.trace('window: %s -> %s', JSON.stringify(state),
+      onScreen ? 'on the screen' : 'away');
   };
 
   win.on('show', () => set({ visible: true }));
@@ -674,7 +668,7 @@ const createWindow = () => {
 
   for (const event of ['show', 'hide', 'focus', 'blur', 'restore']) win.on(event, pushFocus);
 
-  trayFollowsWindow();
+  traceWindowState();
 
   win.once('ready-to-show', () => {
     if (!hidden) showWindow();

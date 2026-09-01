@@ -113,10 +113,6 @@ class TrayIcon {
     this.handlers = { onShow, onHide, onQuit, onSettings, onSetTheme, getTheme };
     this.title = title;
     this.unread = false;
-    /* On the screen: shown, and not minimised to the dock. Deliberately not
-       "in front of the user" -- see the note in main.js, where opening this very
-       menu is what makes that question unanswerable. */
-    this.onScreen = false;
 
     this.tray = null;
     this.stopWaiting = waitForHost(() => this.build());
@@ -136,13 +132,48 @@ class TrayIcon {
   }
 
   render() {
+    this.renderMenu();
+    this.renderIcon();
+  }
+
+  /*
+   * Two items where there was one, and the reason is in gnome-shell rather than
+   * here.
+   *
+   * The single item read "Hide WhatsApp" while the window was up and "Open
+   * WhatsApp" while it was away, and this process got that right: measured on
+   * the bus, hiding the window bumped the menu's revision and rewrote the label
+   * within milliseconds. What the owner saw was the OLD label -- the menu opened
+   * after a hide still offered to hide, and only the open after that one was
+   * right. Stale by exactly one, every time.
+   *
+   * The appindicator extension is why, and it says so plainly
+   * (dbusMenu.js, `_onSignal`): a `LayoutUpdated` that arrives while its menu is
+   * closed is not read, only flagged, and the flag is answered by an
+   * asynchronous GetLayout at the moment the menu is opened -- by which time the
+   * popup has already been drawn from the layout it had cached. Watched on the
+   * session bus: this client emitted LayoutUpdated on every hide and show and
+   * gnome-shell did not call GetLayout once. Nothing this process sends can beat
+   * a draw that happens before the request for it goes out, so a label that has
+   * to change cannot be trusted to.
+   *
+   * So neither of them changes. Both are offered, both always do what they say,
+   * and either is harmless when it is not the one wanted: opening a window that
+   * is already up raises it, and hiding one that is already away is nothing at
+   * all. A menu that never has to be rebuilt cannot be served stale.
+   */
+  renderMenu() {
     if (!this.tray) return;
     const currentTheme = this.handlers.getTheme ? this.handlers.getTheme() : 'system';
 
     this.tray.setContextMenu(Menu.buildFromTemplate([
       {
-        label: this.onScreen ? 'Hide WhatsApp' : 'Open WhatsApp',
-        click: () => (this.onScreen ? this.handlers.onHide : this.handlers.onShow)(),
+        label: 'Open WhatsApp',
+        click: () => this.handlers.onShow && this.handlers.onShow(),
+      },
+      {
+        label: 'Hide WhatsApp',
+        click: () => this.handlers.onHide && this.handlers.onHide(),
       },
       { type: 'separator' },
       {
@@ -175,6 +206,13 @@ class TrayIcon {
       { type: 'separator' },
       { label: 'Quit', accelerator: 'Ctrl+Q', click: () => this.handlers.onQuit && this.handlers.onQuit() },
     ]));
+  }
+
+  /* The icon and its tooltip, which are not the menu -- and are kept apart from
+     it because a message arriving would otherwise throw the whole menu away and
+     build another, for a change that never touched a single item of it. */
+  renderIcon() {
+    if (!this.tray) return;
     this.tray.setToolTip(this.unread ? `${this.title} — unread messages` : this.title);
     this.tray.setImage(this.unread ? this.icons.attention : this.icons.normal);
   }
@@ -186,13 +224,7 @@ class TrayIcon {
   setAttention(unread) {
     if (unread === this.unread) return;
     this.unread = unread;
-    this.render();
-  }
-
-  setWindowOnScreen(onScreen) {
-    if (onScreen === this.onScreen) return;
-    this.onScreen = onScreen;
-    this.render();
+    this.renderIcon();
   }
 
   destroy() {
