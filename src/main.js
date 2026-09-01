@@ -26,6 +26,7 @@ const debug = require('./debug.js');
 const sound = require('./sound.js');
 const fonts = require('./fonts.js');
 const autostart = require('./autostart.js');
+const links = require('./links.js');
 
 const APP_ID = 'io.github.shehawey.whatsapp-desktop';
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
@@ -679,6 +680,10 @@ const createWindow = () => {
 
   win.webContents.on('did-finish-load', async () => {
     loadedAt = Date.now();
+    if (pendingChat) {
+      win.webContents.send('wa:open-link', { phone: pendingChat.phone, wantsText: !!pendingChat.text });
+      pendingChat = null;
+    }
     await applyStyle();
     win.webContents.setZoomFactor(Number(config.get('view.zoom')) || 1);
     win.webContents.send('wa:config', {
@@ -770,8 +775,47 @@ const isOwnPage = url => {
   }
 };
 
+/*
+ * A link this client is not showing, handed to whatever does show it -- with one
+ * exception. A wa.me or api.whatsapp.com link is a chat, and sending the owner
+ * out to a browser so that the browser can hand the chat straight back is a
+ * round trip nobody asked for. Those are opened here. See src/links.js.
+ */
 const openExternally = url => {
+  const chat = links.from(url);
+  if (chat) { openLinkedChat(chat, 'a link in the page'); return; }
   if (/^https?:|^mailto:|^tel:/i.test(url)) shell.openExternal(url).catch(() => {});
+};
+
+/* A chat asked for before there was a page to ask, and the message that came
+   with it. The message is held here rather than sent to the page and asked for
+   back: it is this process's to type, and a channel the page can put words into
+   is a channel that can be made to type them. */
+let pendingChat = null;
+let pendingText = '';
+
+/*
+ * A chat, opened by phone number rather than by clicking a row in the list --
+ * which is the only way to reach somebody who is not in it yet.
+ *
+ * The page does the work, through WhatsApp's own openChatWithContact, so this
+ * costs no reload: measured on the live client, the conversation changed in
+ * about a second with the URL still at web.whatsapp.com. The window is raised
+ * first because a link followed from a browser is somebody asking for this
+ * client, not for a chat to change behind a tray icon.
+ */
+const openLinkedChat = (chat, why) => {
+  if (!chat || !win || win.isDestroyed()) return;
+  console.log('opening a chat with +%s%s (%s)', chat.phone,
+              chat.text ? ' with a message ready to send' : '', why);
+  showWindow();
+  /* A link that started this client arrives before there is a page to tell, and
+     a send into a window still loading is a send into nothing. It is held and
+     handed over by did-finish-load; the page waits from there for WhatsApp's own
+     modules, which take a few seconds more. */
+  pendingText = chat.text || '';
+  if (loadedAt) win.webContents.send('wa:open-link', { phone: chat.phone, wantsText: !!pendingText });
+  else pendingChat = chat;
 };
 
 /* ----------------------------------------------------------------- popups */
@@ -1302,6 +1346,32 @@ const wireIpc = () => {
 
   ipcMain.on('wa:focus-request', showWindow);
 
+  /* The page could not find WhatsApp's own modules for opening a chat, so it is
+     asked for the page WhatsApp serves for the purpose. A reload, and the last
+     resort: it is what still works on the morning those module names change. */
+  ipcMain.on('wa:link-unresolved', (event, chat) => {
+    const phone = links.digitsOf(chat && chat.phone);
+    if (!phone || !win || win.isDestroyed()) return;
+    const query = 'phone=' + encodeURIComponent(phone) +
+                  (pendingText ? '&text=' + encodeURIComponent(pendingText) : '');
+    pendingText = '';
+    console.log('loading WhatsApp\'s own send page for +%s', phone);
+    win.loadURL('https://web.whatsapp.com/send?' + query).catch(() => {});
+  });
+
+  /* The composer is up and empty, so the message the link carried can go in.
+     Not with execCommand from the page: an evaluated script has no user gesture
+     behind it and WhatsApp's editor takes the call and stays empty -- measured,
+     and the same finding the #type probe in debug.js is written around.
+     insertText goes in through the path a keyboard uses, and only this process
+     can call it. */
+  ipcMain.on('wa:composer-ready', () => {
+    if (!pendingText || !win || win.isDestroyed()) return;
+    win.webContents.focus();
+    win.webContents.insertText(pendingText);
+    console.log('put the link\'s message in the composer (%d characters)', pendingText.length);
+    pendingText = '';
+  });
 
   /* The chat list watcher nudges us for every message it sees land, which is what
      makes a banner per message possible at all. The document title cannot do that
@@ -1779,10 +1849,23 @@ const chromeUserAgent = () => {
 };
 
 app.on('second-instance', (event, argv) => {
+  /* Where a whatsapp: link lands. xdg-open starts a second copy with the URL on
+     its command line; the lock sends that copy home and its argv arrives here. */
+  const chat = links.inArgv(argv);
+  if (chat) { openLinkedChat(chat, 'a link from the desktop'); return; }
   /* A --hidden launch that finds one already running exits without raising the
      window: that is the login autostart arriving on top of a client the user
      started themselves. */
   if (!argv.includes('--hidden')) showWindow();
+});
+
+/* macOS delivers the same thing as an event rather than as argv. Nothing here
+   runs there yet, and one line costs less than the next person finding out. */
+app.on('open-url', (event, url) => {
+  const chat = links.from(url);
+  if (!chat) return;
+  event.preventDefault();
+  openLinkedChat(chat, 'a link from the desktop');
 });
 
 app.on('window-all-closed', () => {
@@ -1832,6 +1915,14 @@ app.whenReady().then(() => {
 
   wireIpc();
   createWindow();
+
+  /* The scheme, and the link that may have asked for this window in the first
+     place. Both after createWindow, because the second one needs somewhere to
+     put the chat. */
+  console.log('whatsapp: links -> %s',
+              links.claim(app, APP_ID, { enabled: config.get('links.claim-scheme') !== false }));
+  const launchedFor = links.inArgv(process.argv);
+  if (launchedFor) openLinkedChat(launchedFor, 'the link this client was started for');
 
   tray = new TrayIcon({
     normal: iconFile(24, `status/${APP_ID}-tray.png`),

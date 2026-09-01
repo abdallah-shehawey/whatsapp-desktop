@@ -44,6 +44,10 @@ const DEFAULTS = {
   /* Take the desktop's media card down when a voice note is paused, instead of
      leaving it there until the note has played out. */
   'media.hide-controls-when-paused': true,
+  /* Ask the desktop to open whatsapp: links with this client rather than in a
+     browser tab -- what "Open app" on api.whatsapp.com hands over. Turn it off
+     to leave the scheme with whatever already holds it; see src/links.js. */
+  'links.claim-scheme': true,
 };
 
 /* A deliberately small INI reader: sections, key = value, # and ; comments.

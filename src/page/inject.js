@@ -1275,6 +1275,95 @@ const start = ({ send, on }) => {
     setTimeout(refreshOpen, 400);
   });
 
+  /*
+   * A chat asked for by phone number: a whatsapp: or wa.me link, followed from
+   * outside this window. See src/links.js for how one gets here.
+   *
+   * A row cannot answer this. The number may belong to somebody who has never
+   * written, and the chat list has nothing to press. WhatsApp's own
+   * openChatWithContact does exactly the right thing -- it finds or creates the
+   * chat and opens it -- and it was measured here: the conversation changed in
+   * about a second, with the URL still on web.whatsapp.com and no reload. The
+   * reload is the fallback, because /send?phone= is a page WhatsApp itself
+   * serves and it works even on the morning these module names change.
+   *
+   * The wait is for WhatsApp, not for the page. A link that started this client
+   * arrives while the registry is still being built, so the modules are asked
+   * for until they answer -- the same shape as the store's own wait.
+   */
+  const LINK_WAIT_MS = 60000;
+  const LINK_POLL_MS = 400;
+
+  const openByNumber = (phone, wantsText, waitedFor) => {
+    const grab = name => {
+      try { return typeof window.require === 'function' ? window.require(name) : null; }
+      catch (err) { return null; }
+    };
+    const wf = grab('WAWebWidFactory');
+    const action = grab('WAWebOpenChatWithContactAction');
+
+    if (!wf || !action || typeof action.openChatWithContact !== 'function') {
+      if (waitedFor < LINK_WAIT_MS) {
+        setTimeout(() => openByNumber(phone, wantsText, waitedFor + LINK_POLL_MS), LINK_POLL_MS);
+        return;
+      }
+      /* Handed back to the app, which still has the link that started this and
+         can load WhatsApp's own /send page for it -- text and all, which /send
+         puts in the composer itself. Costs a reload, which is why it is last. */
+      log('WhatsApp\'s modules never answered for +' + phone + '; asking for its own page');
+      send('link-unresolved', { phone: phone });
+      return;
+    }
+
+    let wid;
+    try { wid = wf.createUserWidOrThrow(phone); }
+    catch (err) { log('cannot open +' + phone + ': ' + err.message); return; }
+
+    Promise.resolve(action.openChatWithContact(wid)).then(() => {
+      log('opened a chat with +' + phone);
+      setTimeout(refreshOpen, 400);
+      if (wantsText) setTimeout(() => focusComposer(0), 400);
+    }).catch(err => log('cannot open +' + phone + ': ' + err.message));
+  };
+
+  /*
+   * The composer, focused and reported -- and NOT typed into here.
+   *
+   * Text that came with a link belongs in front of the owner, unsent: this
+   * client sends nothing on its own. What it must not do is put it there with
+   * execCommand, which an evaluated script has no user gesture behind: WhatsApp's
+   * editor takes the call, answers true and stays empty. Measured, twice, and it
+   * is the same finding the #type probe in debug.js is written around. So the
+   * page only says "the box is up, focused and empty" and the app types it in
+   * through the path a keyboard uses.
+   *
+   * The retry is because a composer mounted for a chat that has just been opened
+   * is not focusable for the first few hundred milliseconds. A composer with
+   * something already in it is a draft, and a link is not worth losing one over.
+   */
+  const FOCUS_TRIES = 12;
+
+  const focusComposer = tries => {
+    const box = document.querySelector('#main footer div[contenteditable="true"]');
+    if (box && (box.innerText || '').trim()) {
+      log('left the message out: the composer already has a draft');
+      return;
+    }
+    if (box) {
+      box.click();
+      box.focus();
+      if (document.activeElement === box) { send('composer-ready', null); return; }
+    }
+    if (tries < FOCUS_TRIES) { setTimeout(() => focusComposer(tries + 1), 300); return; }
+    log('no composer to put the link\'s message in');
+  };
+
+  on('open-link', chat => {
+    const phone = chat && chat.phone;
+    if (!phone) return;
+    openByNumber(String(phone), !!(chat && chat.wantsText), 0);
+  });
+
   /* ------------------------------------------------------- Escape and panels */
 
   /*

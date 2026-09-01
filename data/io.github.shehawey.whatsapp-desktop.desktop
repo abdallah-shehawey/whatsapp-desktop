@@ -7,6 +7,9 @@ Icon=io.github.shehawey.whatsapp-desktop
 Terminal=false
 Categories=Network;InstantMessaging;
 Keywords=whatsapp;chat;messaging;
+# Makes this client an option for the links "Open app" hands to the desktop;
+# see src/links.js, which then asks to be the default.
+MimeType=x-scheme-handler/whatsapp;
 StartupNotify=true
 StartupWMClass=WhatsApp
 SingleMainWindow=true

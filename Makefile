@@ -130,6 +130,7 @@ test:
 	@node tools/test-bidi.js
 	@node tools/test-wording.js
 	@node tools/test-style.js
+	@node tools/test-links.js
 
 run:
 	@env -u ELECTRON_RUN_AS_NODE npm start
