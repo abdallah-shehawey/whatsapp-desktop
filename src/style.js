@@ -155,6 +155,48 @@ const MESSAGE_BIDI = `
   unicode-bidi: plaintext !important;
   text-align: start !important;
 }
+/* A bulleted list, and the side its bullets need room on.
+ *
+ * A line that begins "• " is not text to WhatsApp: it builds a real
+ * <ul dir="ltr"> of <li dir="auto">, draws the bullet as a ::before rather than
+ * a marker (list-style-type is none), and lays the gutter out to the left --
+ * the list carries an inline-start margin and each item a padding-left, both of
+ * which are the LEFT under the dir="ltr" it puts on the list. An Arabic item
+ * resolves right-to-left from its own text, so its bullet is drawn at the RIGHT
+ * margin, where nothing reserved it any room. Measured on the reported message:
+ * every list line started 3.96px OUTSIDE the bubble's clipping box -- the width
+ * of the 4px gap the ::before carries as margin-right -- and overflow:hidden
+ * sheared the bullet and the first letter off each of them. That is the report,
+ * "العربي اول كذا حرف من كذا سطر بيتاكل": only the bulleted lines, and only in a
+ * message long enough for the bubble to reach its full width, because a bubble
+ * narrower than that simply grew by the 4px instead.
+ *
+ * So the list is turned round -- direction, rather than a margin of our own,
+ * because the indent WhatsApp puts on it is a logical one and flipping the
+ * direction moves it to the side the items read from without this file having
+ * to know how wide it is. The item's own gutter is physical and has to be
+ * named: 12px, which is what WhatsApp asks for on the other side. Measured
+ * after: 16px of slack inside the box, bullets drawn, nothing sheared.
+ *
+ * :dir() is what keeps this off an English list -- it matches the direction
+ * the item actually resolved to, which for dir="auto" is the only place that
+ * answer exists. An ordered list is deliberately not included: its numbers are
+ * real ::markers and it was measured NOT to overflow when its items run
+ * right-to-left. */
+#main div.copyable-text:not([contenteditable]) > div > span.selectable-text ul:has(> li:dir(rtl)) {
+  direction: rtl !important;
+}
+#main div.copyable-text:not([contenteditable]) > div > span.selectable-text li:dir(rtl) {
+  padding-left: 0 !important;
+  padding-right: 12px !important;
+}
+/* And the gap between a bullet and its words, which WhatsApp writes as
+   margin-right -- the far side of the bullet once the line reads the other
+   way. The logical form is the same 4px in a left-to-right list. */
+#main div.copyable-text:not([contenteditable]) > div > span.selectable-text li::before {
+  margin-right: 0 !important;
+  margin-inline-end: 4px !important;
+}
 /* A community thread -- the panel behind "6 replies" -- and why none of the
    above reaches it. It is mounted OUTSIDE #main, in a [role="dialog"], and it
    holds no div.copyable-text at all: measured on the live panel, 43 message
