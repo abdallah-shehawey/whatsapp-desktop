@@ -381,14 +381,6 @@ const traceWindowState = () => {
   });
 };
 
-/* Between taking the window down and putting it back up: one frame, because the
-   gap is what the owner watches the icon leave the dock for. Measured at 0, 16,
-   40 and 120ms and the window came back with the focus at every one of them,
-   twice each -- so the shortest is not bought with reliability. One turn of the
-   loop rather than none, so that the unmap is certainly processed and not
-   folded into the map by some other compositor. */
-const REMAP_MS = 16;
-
 /*
  * The window, brought to the user -- which on Wayland is not what asking for it
  * does.
@@ -458,39 +450,46 @@ const showWindow = () => {
     return;
   }
 
+  /* Down and up again in one turn of the loop, with no frame in between. The
+     frame was insurance -- a compositor that sees an unmap and a map together is
+     free to fold them into no change at all, and then nothing is raised -- and
+     it was bought at the dock's expense: for that frame this app has no window
+     up, which is what a dock reads as not running, so an unpinned icon leaves it
+     and the icons beside it close over the space. Measured on mutter, three
+     runs out of three from the dock and two out of two from behind another
+     window, the window comes back with the focus either way. */
   remapping = true;
   win.hide();
-  setTimeout(() => {
-    if (!win || win.isDestroyed()) { remapping = false; return; }
-    /* A window taken down while it was minimised keeps that state in Ozone --
-       hide() unmaps it and leaves it kMinimized, measured -- and showing it in
-       that state ends the process, the whole of it:
-         FATAL wayland_toplevel_window.cc:806 "Should not be called with
-         kMinimized state"
-       so the un-minimising is done here, in the gap, while nothing is up.
-     *
-     * Here rather than before the hide, which is where it used to be and is
-     * the whole of the notification that flashed. Wayland has no unminimise:
-     * Ozone spends a restore as an activation request, and a request from a
-     * window the owner is not using is exactly what focus stealing prevention
-     * is for -- the shell refuses it, marks the window as wanting attention
-     * and posts "WhatsApp is ready", then withdraws it a frame later when the
-     * re-map takes the focus honestly. Asking on behalf of a window with no
-     * surface up asks the compositor for nothing, so there is nothing to
-     * refuse and nothing to announce.
-     *
-     * isMinimized() is the right question and the only one: it reads the very
-     * state Ozone refuses to be shown in, which is not the same thing as
-     * whether the window is in the dock. The tracked flag deliberately is not
-     * consulted -- it answers the other question, and restoring a window that
-     * is merely maximised would un-maximise it. */
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-    /* Cleared a turn later, so that the events the show and the focus raise
-       both find the trick still in progress. */
-    setTimeout(() => { remapping = false; }, 0);
-  }, REMAP_MS);
+
+  /* A window taken down while it was minimised keeps that state in Ozone --
+     hide() unmaps it and leaves it kMinimized, measured -- and showing it in
+     that state ends the process, the whole of it:
+       FATAL wayland_toplevel_window.cc:806 "Should not be called with
+       kMinimized state"
+     so the un-minimising is done here, between the two, while nothing is up.
+   *
+   * Here rather than before the hide, which is where it used to be and is
+   * the whole of the notification that flashed. Wayland has no unminimise:
+   * Ozone spends a restore as an activation request, and a request from a
+   * window the owner is not using is exactly what focus stealing prevention
+   * is for -- the shell refuses it, marks the window as wanting attention
+   * and posts "WhatsApp is ready", then withdraws it a frame later when the
+   * re-map takes the focus honestly. Asking on behalf of a window with no
+   * surface up asks the compositor for nothing, so there is nothing to
+   * refuse and nothing to announce.
+   *
+   * isMinimized() is the right question and the only one: it reads the very
+   * state Ozone refuses to be shown in, which is not the same thing as
+   * whether the window is in the dock. The tracked flag deliberately is not
+   * consulted -- it answers the other question, and restoring a window that
+   * is merely maximised would un-maximise it. */
+  if (win.isMinimized()) win.restore();
+
+  win.show();
+  win.focus();
+  /* Cleared a turn later, so that the events the show and the focus raise both
+     find the trick still in progress. */
+  setTimeout(() => { remapping = false; }, 0);
 };
 
 const hideWindow = () => {
