@@ -30,6 +30,13 @@ install -Dm644 "$ROOT/README.md" "$STAGE/root/usr/share/doc/whatsapp-desktop/REA
 
 mkdir -p "$STAGE/root/DEBIAN"
 INSTALLED_SIZE=$(du -sk "$STAGE/root" | awk '{print $1}')
+
+# `dbus` and a session bus are the tray's, not Chromium's. The tray writes the
+# protocol onto the bus socket itself (src/dbus.js) rather than linking
+# libdbus-1-3, because owning its menu is the only way to keep the item ids still
+# -- and with no bus running there is no tray at all. Debian splits the session
+# bus in two: dbus-user-session provides default-dbus-session-bus, dbus-x11
+# provides dbus-session-bus, and either will do.
 cat > "$STAGE/root/DEBIAN/control" <<CONTROL
 Package: whatsapp-desktop
 Version: $VERSION
@@ -39,7 +46,7 @@ Architecture: $ARCH
 Maintainer: Abdallah Shehawey <shehawey9@gmail.com>
 Homepage: https://github.com/abdallah-shehawey/whatsapp-desktop
 Installed-Size: $INSTALLED_SIZE
-Depends: libasound2, libatk-bridge2.0-0, libatk1.0-0, libatspi2.0-0, libc6, libcairo2, libcups2, libdbus-1-3, libdrm2, libexpat1, libfontconfig1, libfreetype6, libgbm1, libgdk-pixbuf-2.0-0, libglib2.0-0, libglib2.0-bin, libgtk-3-0, libnspr4, libnss3, libpango-1.0-0, libwayland-client0, libwayland-cursor0, libwayland-egl1, libx11-6, libx11-xcb1, libxcb1, libxcomposite1, libxcursor1, libxdamage1, libxext6, libxfixes3, libxi6, libxinerama1, libxkbcommon0, libxrandr2, libxshmfence1
+Depends: dbus, default-dbus-session-bus | dbus-session-bus, libasound2, libatk-bridge2.0-0, libatk1.0-0, libatspi2.0-0, libc6, libcairo2, libcups2, libdbus-1-3, libdrm2, libexpat1, libfontconfig1, libfreetype6, libgbm1, libgdk-pixbuf-2.0-0, libglib2.0-0, libglib2.0-bin, libgtk-3-0, libnspr4, libnss3, libpango-1.0-0, libwayland-client0, libwayland-cursor0, libwayland-egl1, libx11-6, libx11-xcb1, libxcb1, libxcomposite1, libxcursor1, libxdamage1, libxext6, libxfixes3, libxi6, libxinerama1, libxkbcommon0, libxrandr2, libxshmfence1
 Recommends: libsecret-1-0, fonts-noto-color-emoji, fonts-noto-core
 Description: WhatsApp Web desktop client for Linux
  WhatsApp Web in a dedicated Chromium window with a system tray,

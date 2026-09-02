@@ -9,7 +9,9 @@
  * the window in each of the states the tray has to tell apart, and "#focus"
  * asks for it back the plain way -- between them they drive the tray without a
  * tray to click, which matters because the states differ and only one of them
- * can be reached by hiding. "#state" prints what the window believes. "#gpu"
+ * can be reached by hiding. "#toggle" is the tray's own item -- the one thing it
+ * offers -- run against whichever of those states the window is in. "#state"
+ * prints what the window believes and what the tray reads. "#gpu"
  * prints which of Chromium's pipelines are hardware accelerated -- the answer to
  * "why does scrolling lag when the browser does not" -- and "#scroll" measures a
  * real one, sixty wheel events with the page's frame intervals sampled around
@@ -523,10 +525,33 @@ const install = (getWindow, getBanners, actions = {}) => {
         visible: win.isVisible(), focused: win.isFocused(), minimized: win.isMinimized() }));
       return;
     }
+    /* The tray's one item, run from here because a rig cannot click a tray --
+       and which of show or hide it picks, against a window that is hidden,
+       minimised or plainly up, is the whole question about it. Goes through the
+       very handler the menu item is wired to. */
+    if (source === '#toggle') {
+      if (!actions.toggle) { console.log('debug: nothing here to toggle'); return; }
+      const before = actions.inFront ? actions.inFront() : null;
+      actions.toggle();
+      await new Promise(resolve => setTimeout(resolve, 900));
+      console.log('debug: toggle from %s -> %s',
+        before === null ? 'unknown' : before ? 'in front' : 'away',
+        JSON.stringify({ visible: win.isVisible(), focused: win.isFocused(),
+          minimized: win.isMinimized(),
+          onScreen: actions.onScreen ? actions.onScreen() : null,
+          inFront: actions.inFront ? actions.inFront() : null }));
+      return;
+    }
+
     if (source === '#state') {
       console.log('debug: %s', JSON.stringify({
         visible: win.isVisible(), focused: win.isFocused(),
         minimized: win.isMinimized(), zoom: win.webContents.getZoomFactor(),
+        /* What the tray asks. Tracked from events, and the two of these that are
+           allowed to disagree with the rest -- `inFront` deliberately so, for a
+           moment, after a blur that was only a menu taking the keyboard. */
+        onScreen: actions.onScreen ? actions.onScreen() : null,
+        inFront: actions.inFront ? actions.inFront() : null,
       }));
       return;
     }

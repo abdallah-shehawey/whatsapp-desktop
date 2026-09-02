@@ -31,10 +31,18 @@ Requires:       atk
 Requires:       at-spi2-atk
 Requires:       cairo
 Requires:       cups-libs
+# The session bus itself, not the library: the tray does not link libdbus at all.
+# It writes the protocol onto the socket in $DBUS_SESSION_BUS_ADDRESS (see
+# src/dbus.js), because owning the menu is the only way to keep its item ids
+# still, and a client that borrows a menu cannot. Without a bus running there is
+# no tray at all -- so the daemon is named here, where dbus-libs below only ever
+# covered Chromium's own linkage.
+Requires:       dbus
 Requires:       dbus-libs
-# gdbus, which is how the tray asks whether a status icon host is listening
-# and waits for one that is not up yet. gtk3 already pulls it in; it is named
-# here because the tray, not the toolkit, is what stops working without it.
+# gdbus, which is how the Electron tray -- the fallback, for a session this
+# client cannot reach the bus of -- asks whether a status icon host is listening.
+# gtk3 already pulls it in; it is named here because the tray, not the toolkit,
+# is what stops working without it.
 Requires:       glib2
 Requires:       gtk3
 Requires:       libX11

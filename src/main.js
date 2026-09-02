@@ -265,24 +265,26 @@ const pushFocus = () => {
 };
 
 /*
- * Whether the window is on the screen, narrated for whoever is reading the log.
+ * Where the window is, and whether the owner is looking at it -- the whole of
+ * what the tray's one item needs, both for the word it wears and for what its
+ * click does.
  *
- * The tray used to be told: its first item read "Hide WhatsApp" or "Open
- * WhatsApp" depending on this, and three rounds of work went into computing it
- * honestly -- isMinimized() answers false for a window sitting in the dock under
- * GNOME, and the focus cannot be part of the answer because opening the tray
- * menu is itself what takes the focus off the window. Both of those were real
- * and both are fixed. The item still read wrong, one open behind, and the reason
- * turned out not to be in this file at all: gnome-shell does not re-read a menu
- * that changed while it was closed until it is already drawing it. So the tray
- * stopped asking and offers both, and the whole question moved to tray.js, where
- * that is written down.
+ * Three rounds of work went into computing this honestly and each of them was
+ * needed: isMinimized() answers false for a window sitting in the dock under
+ * GNOME; the focus cannot simply be read, because opening the tray menu is
+ * itself what takes the focus off the window; and the focus cannot be left out
+ * either, because a window standing behind the editor is one the owner is
+ * reaching for. The first is why this is tracked from events at all, the second
+ * is what FOCUS_GRACE_MS below is for, and the third is the report this last
+ * round answers.
  *
- * What is left is the state itself, which is worth keeping because it is the
- * one account of the window that comes from events rather than from queries --
- * an event is a fact where a query is an opinion. `minimize` fires when the
- * window goes to the dock whatever isMinimized() says a moment later, and `show`
- * and `hide` are the same.
+ * The state is worth keeping for the reason it was built: it is the one account
+ * of the window that comes from events rather than from queries -- an event is a
+ * fact where a query is an opinion. `minimize` fires when the window goes to the
+ * dock whatever isMinimized() says a moment later, and `show` and `hide` are the
+ * same. Asking isVisible() instead, which is the obvious thing to write, answers
+ * true for a window sitting in the dock: the click asking for that window back
+ * would take it away instead.
  *
  * The minimised flag under Wayland does not stay true on its own. xdg-shell has
  * no minimised state for a compositor to report back -- a client asks to be
@@ -293,26 +295,90 @@ const pushFocus = () => {
  * did fetch out of the dock is a window the compositor activated, and one still
  * sitting in the dock is not.
  */
+const windowState = { visible: false, minimized: false, focused: false };
+
+/* Raising the window takes it down for a frame and puts it back up (see
+   showWindow), so a window mid-remap is reported as where it is heading -- the
+   same reasoning as `remapping` in pushFocus. */
+const windowOnScreen = () => remapping || (windowState.visible && !windowState.minimized);
+
+/*
+ * When the focus last left the window. Kept because the tray has to tell two
+ * blurs apart, and only the clock can.
+ *
+ * A window that is up but behind something is not a window the owner is looking
+ * at, and the tray's item should offer to fetch it rather than to put it away --
+ * which is the whole of the report this answers. Whether the owner is looking at
+ * it is the focus, and the focus is exactly what asking about the tray destroys:
+ * opening a status icon menu on GNOME takes a modal grab, the window loses the
+ * keyboard, and the question "is this window in front?" is then asked of a
+ * window that looks unfocused because it is being asked about.
+ *
+ * So a blur that has only just happened is not believed. Nothing a person can do
+ * takes the focus off this window and opens the tray inside this many
+ * milliseconds; the grab does it in single figures. And a blur that arrives
+ * after the menu has asked cannot mislead it either, because the answer is
+ * frozen when the menu opens -- see AboutToShow in tray-sni.js.
+ */
+const FOCUS_GRACE_MS = 400;
+let blurredAt = 0;
+let graceTimer = null;
+
+/* On the screen and the owner's -- what the tray's one item reads and what its
+   click does. */
+const windowInFront = () => remapping || (windowOnScreen() &&
+  (windowState.focused || Date.now() - blurredAt < FOCUS_GRACE_MS));
+
 const traceWindowState = () => {
-  const state = { visible: false, minimized: false };
+  /* The raw stream, before anything is made of it: which events the compositor
+     actually sends and in what order is the whole question about this window,
+     and it is asked again every time the tray reads wrong. */
+  for (const event of ['show', 'hide', 'focus', 'blur', 'minimize', 'restore']) {
+    win.on(event, () => debug.trace('window event: %s %s', event, JSON.stringify({
+      visible: win.isVisible(), minimized: win.isMinimized(), focused: win.isFocused() })));
+  }
 
   const set = change => {
-    Object.assign(state, change);
-    /* Raising the window takes it down for a frame and puts it back up (see
-       showWindow), so a window mid-remap is reported as where it is heading --
-       the same reasoning as `remapping` in pushFocus. */
-    const onScreen = remapping || (state.visible && !state.minimized);
-    debug.trace('window: %s -> %s', JSON.stringify(state),
+    Object.assign(windowState, change);
+    const onScreen = windowOnScreen();
+    debug.trace('window: %s -> %s', JSON.stringify(windowState),
       onScreen ? 'on the screen' : 'away');
+    /* The word on the tray's one item, and what its click will do. Only a
+       change reaches the desktop. */
+    if (tray) tray.setInFront(windowInFront());
   };
 
-  win.on('show', () => set({ visible: true }));
-  win.on('hide', () => set({ visible: false }));
+  /* Only this program hides and shows this window, and both events arrive when
+     it does -- so these two own `visible` outright and nothing else writes it.
+     That is not fussiness. `focus` used to set it as well, on the reasoning that
+     a window cannot be given the focus while hidden, and the compositor does not
+     agree: hide the window from the tray's own menu and the focus comes back to
+     it as the menu's grab is released, seconds after it left the screen. The
+     tray then believed the window was up, so its item still said "Minimize to
+     Tray" and its click hid an already hidden window -- which is precisely the
+     "it does nothing, and the next time I open the tray the word is right"
+     report. Hiding it again is what emitted the second `hide` that put the word
+     right, one open too late. */
+  win.on('show', () => set({ visible: true, minimized: false }));
+  win.on('hide', () => set({ visible: false, focused: false }));
   win.on('minimize', () => set({ minimized: true }));
   win.on('restore', () => set(win.isFocused() ? { minimized: false } : {}));
-  /* Having the focus settles both: a window cannot be given it while hidden or
-     minimised, whatever an event that never arrived implies. */
-  win.on('focus', () => set({ visible: true, minimized: false }));
+  /* Having the focus settles the dock: a window in it does not hold the
+     keyboard, whatever a `restore` that never arrived implies. */
+  win.on('focus', () => { clearTimeout(graceTimer); set({ minimized: false, focused: true }); });
+  win.on('blur', () => {
+    blurredAt = Date.now();
+    set({ focused: false });
+    /* And again when the grace above runs out, because the grace is the only
+       reason the tray was not told. Without this the desktop keeps "Minimize to
+       Tray" in its cache until something else about the window moves, and it is
+       from that cache that the menu is drawn -- before anything said here can
+       reach it. The tray ignores this while its menu is open; see setInFront. */
+    clearTimeout(graceTimer);
+    graceTimer = setTimeout(() => {
+      if (tray) tray.setInFront(windowInFront());
+    }, FOCUS_GRACE_MS + 50);
+  });
 };
 
 /* Between taking the window down and putting it back up: one frame, because the
@@ -322,10 +388,6 @@ const traceWindowState = () => {
    loop rather than none, so that the unmap is certainly processed and not
    folded into the map by some other compositor. */
 const REMAP_MS = 16;
-
-/* And between un-minimising and that, for the same reason -- the window has to
-   have finished coming out of the dock before it is taken down again. */
-const RESTORE_MS = 150;
 
 /*
  * The window, brought to the user -- which on Wayland is not what asking for it
@@ -372,10 +434,17 @@ const RESTORE_MS = 150;
  * arrives. There is no withdrawing somebody else's notification, so the only
  * way not to see it is not to earn it.
  *
- * Being briefly always-on-top was the other measured way through and was
- * rejected twice over: it is _NET_WM_STATE_ABOVE under another name, so what a
- * Wayland compositor makes of it is the compositor's business -- and the owner
- * keeps windows of their own on top, which this would have climbed over.
+ * Nor is the re-map one option among several. Measured on GNOME 50, against a
+ * second client holding the focus -- because a window asking for the focus it
+ * already has proves nothing -- focus() on its own, moveTop() and being briefly
+ * always-on-top all leave the window exactly where it was, and only the re-map
+ * brings it forward with the focus. Always-on-top had been written up here as
+ * the other way through; it is not one any more, whatever it once did.
+ *
+ * The cost is paid in the dock. A client with no window up is a client that is
+ * not running, so for the frame in between the icon leaves an unpinned dock and
+ * the icons beside it close the gap, which reads as a flicker. Pinning the app
+ * settles it: a favourite keeps its place and only the running dot blinks.
  */
 const showWindow = () => {
   if (!win || win.isDestroyed()) return;
@@ -389,47 +458,56 @@ const showWindow = () => {
     return;
   }
 
-  const remap = () => {
-    if (!win || win.isDestroyed()) return;
-    remapping = true;
-    win.hide();
-    setTimeout(() => {
-      if (!win || win.isDestroyed()) { remapping = false; return; }
-      win.show();
-      win.focus();
-      /* Cleared a turn later, so that the events the show and the focus raise
-         both find the trick still in progress. */
-      setTimeout(() => { remapping = false; }, 0);
-    }, REMAP_MS);
-  };
-
-  /* A window sitting minimised in the dock cannot simply be shown: doing it
-     takes Ozone's own life, measured, the whole process gone --
-       FATAL wayland_toplevel_window.cc "Should not be called with kMinimized
-       state"
-     -- so the minimised state is cleared first and the re-map runs against a
-     normal window. isMinimized() is the right question here and the only one:
-     it reads the very state Ozone refuses to be shown in, which is not the same
-     thing as whether the window is in the dock. The tracked flag deliberately
-     is not consulted, because it answers the other question and restoring a
-     window that is merely maximised would un-maximise it.
-   *
-   * Restoring is not the end of it. Restore and ask for the focus and the
-   * window comes back behind whatever the owner was using -- focused false,
-   * twice out of two -- because an un-minimised window is still a window that
-   * is already up, and those do not get the focus for the asking. Only the
-   * re-map does: focused true, twice out of two. */
-  if (win.isMinimized()) {
-    win.restore();
-    setTimeout(remap, RESTORE_MS);
-    return;
-  }
-  remap();
+  remapping = true;
+  win.hide();
+  setTimeout(() => {
+    if (!win || win.isDestroyed()) { remapping = false; return; }
+    /* A window taken down while it was minimised keeps that state in Ozone --
+       hide() unmaps it and leaves it kMinimized, measured -- and showing it in
+       that state ends the process, the whole of it:
+         FATAL wayland_toplevel_window.cc:806 "Should not be called with
+         kMinimized state"
+       so the un-minimising is done here, in the gap, while nothing is up.
+     *
+     * Here rather than before the hide, which is where it used to be and is
+     * the whole of the notification that flashed. Wayland has no unminimise:
+     * Ozone spends a restore as an activation request, and a request from a
+     * window the owner is not using is exactly what focus stealing prevention
+     * is for -- the shell refuses it, marks the window as wanting attention
+     * and posts "WhatsApp is ready", then withdraws it a frame later when the
+     * re-map takes the focus honestly. Asking on behalf of a window with no
+     * surface up asks the compositor for nothing, so there is nothing to
+     * refuse and nothing to announce.
+     *
+     * isMinimized() is the right question and the only one: it reads the very
+     * state Ozone refuses to be shown in, which is not the same thing as
+     * whether the window is in the dock. The tracked flag deliberately is not
+     * consulted -- it answers the other question, and restoring a window that
+     * is merely maximised would un-maximise it. */
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    /* Cleared a turn later, so that the events the show and the focus raise
+       both find the trick still in progress. */
+    setTimeout(() => { remapping = false; }, 0);
+  }, REMAP_MS);
 };
 
 const hideWindow = () => {
   if (!win || win.isDestroyed()) return;
   win.hide();
+};
+
+/* The tray's one item, and the whole of what it does -- for the hosts that
+   deliver a click on the icon itself, where there is no menu and so no word to
+   have promised anything. GNOME is not one of them: it opens the menu instead,
+   and there the item acts on the word it is wearing (see tray-sni.js).
+ *
+ * "In front" rather than "on screen", because a window sitting behind the editor
+ * is one the owner is asking for, not one they are asking to put away. */
+const toggleWindow = () => {
+  if (windowInFront()) hideWindow();
+  else showWindow();
 };
 
 const setTheme = theme => {
@@ -1927,17 +2005,30 @@ app.whenReady().then(() => {
   tray = new TrayIcon({
     normal: iconFile(24, `status/${APP_ID}-tray.png`),
     attention: iconFile(24, `status/${APP_ID}-tray-attention.png`),
+    onToggle: toggleWindow,
+    /* Shown and put away are separate here, rather than one toggle, because the
+       menu decides which of the two it is offering when it opens and the click
+       has to do what the word said -- not what has become true in the seconds
+       the menu spent open. */
     onShow: showWindow,
     onHide: hideWindow,
+    /* Asked again as the menu opens, so the item cannot be caught wearing the
+       wrong word because an event went missing. */
+    getInFront: windowInFront,
     onQuit: quit,
     onSettings: openSettings,
     onSetTheme: setTheme,
     getTheme: () => config.get('view.theme') || 'system',
     title: TITLE,
+    appId: APP_ID,
   });
+  /* The tray is built after the window, so the events that would have told it
+     where the window is have already been and gone. */
+  tray.setInFront(windowInFront());
 
   debug.install(() => win, () => banners,
-                { show: showWindow, settings: openSettings, set: changeSetting });
+                { show: showWindow, toggle: toggleWindow, onScreen: windowOnScreen,
+                  inFront: windowInFront, settings: openSettings, set: changeSetting });
 
   /* Follow the desktop live: a theme switched from light to dark, or a font
      changed in Settings, should not need the client restarted. */

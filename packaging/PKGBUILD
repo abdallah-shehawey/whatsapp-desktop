@@ -6,6 +6,8 @@ pkgdesc='WhatsApp Web desktop client for Linux with tray integration and Arabic 
 arch=('x86_64')
 url='https://github.com/abdallah-shehawey/whatsapp-desktop'
 license=('GPL-3.0-only')
+# 'dbus' here is the session bus the tray speaks to directly (src/dbus.js), not
+# a library it links: with no bus running there is no tray icon at all.
 depends=('alsa-lib' 'at-spi2-core' 'cairo' 'cups' 'dbus' 'glib2' 'gtk3' 'libdrm' 'libx11' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxrandr' 'mesa' 'nspr' 'nss' 'pango' 'zlib')
 makedepends=('git' 'npm' 'make')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/abdallah-shehawey/whatsapp-desktop/archive/refs/tags/v$pkgver.tar.gz")

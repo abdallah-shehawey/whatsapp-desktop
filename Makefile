@@ -131,6 +131,7 @@ test:
 	@node tools/test-wording.js
 	@node tools/test-style.js
 	@node tools/test-links.js
+	@node tools/test-tray.js
 
 run:
 	@env -u ELECTRON_RUN_AS_NODE npm start

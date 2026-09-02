@@ -30,6 +30,7 @@
 'use strict';
 
 const { Tray, Menu, nativeImage } = require('electron');
+const { SniTray } = require('./tray-sni');
 const { execFile, spawn } = require('child_process');
 
 const WATCHER = 'org.kde.StatusNotifierWatcher';
@@ -104,15 +105,21 @@ const waitForHost = onHost => {
   return stop;
 };
 
-class TrayIcon {
-  constructor({ normal, attention, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme, title = 'WhatsApp' }) {
+class ElectronTray {
+  constructor({ normal, attention, onToggle, onShow, onHide, onQuit, onSettings,
+                onSetTheme, getTheme, title = 'WhatsApp' }) {
     this.icons = {
       normal: nativeImage.createFromPath(normal),
       attention: nativeImage.createFromPath(attention || normal),
     };
-    this.handlers = { onShow, onHide, onQuit, onSettings, onSetTheme, getTheme };
+    this.handlers = { onToggle, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme };
     this.title = title;
     this.unread = false;
+    /* Where the window was when this was last told. The word above it cannot
+       move -- see renderMenu -- but what the click does still should, and the
+       last thing an event said is a better answer than asking a window the
+       desktop has been holding the keyboard away from. */
+    this.inFront = null;
 
     this.tray = null;
     this.stopWaiting = waitForHost(() => this.build());
@@ -122,7 +129,9 @@ class TrayIcon {
     if (this.tray) return;
     try {
       this.tray = new Tray(this.icons.normal);
-      this.tray.on('click', () => this.handlers.onShow && this.handlers.onShow());
+      /* A click on the icon, where one is delivered at all: no menu was drawn,
+         so nothing was promised and the app may decide for itself. */
+      this.tray.on('click', () => this.handlers.onToggle && this.handlers.onToggle());
     } catch (e) {
       console.log(`tray: could not be created (${e.message})`);
       this.tray = null;
@@ -137,30 +146,39 @@ class TrayIcon {
   }
 
   /*
-   * Two items where there was one, and the reason is in gnome-shell rather than
-   * here.
+   * One item, one word, and the word never changes -- because changing it is
+   * what breaks the button.
    *
-   * The single item read "Hide WhatsApp" while the window was up and "Open
-   * WhatsApp" while it was away, and this process got that right: measured on
-   * the bus, hiding the window bumped the menu's revision and rewrote the label
-   * within milliseconds. What the owner saw was the OLD label -- the menu opened
-   * after a hide still offered to hide, and only the open after that one was
-   * right. Stale by exactly one, every time.
+   * The wording ought to follow the window, the way Telegram's does, and it was
+   * built that way and measured. What came back settles it. Electron offers one
+   * lever, setContextMenu, and pulling it renumbers the whole menu: read off the
+   * session bus, the item was id 19 before a hide and id 28 after, every other
+   * id moved with it, and the layout revision went 2 -> 3.
    *
-   * The appindicator extension is why, and it says so plainly
-   * (dbusMenu.js, `_onSignal`): a `LayoutUpdated` that arrives while its menu is
-   * closed is not read, only flagged, and the flag is answered by an
-   * asynchronous GetLayout at the moment the menu is opened -- by which time the
-   * popup has already been drawn from the layout it had cached. Watched on the
-   * session bus: this client emitted LayoutUpdated on every hide and show and
-   * gnome-shell did not call GetLayout once. Nothing this process sends can beat
-   * a draw that happens before the request for it goes out, so a label that has
-   * to change cannot be trusted to.
+   * gnome-shell draws its popup from the layout it cached, and that cache holds
+   * the old ids as surely as it holds the old word. So the click lands on an id
+   * that no longer exists: `Event(19, 'clicked')` against this client answers
+   * "error occurred in Event" and the window does not move. That is the whole of
+   * the bug that has been chased through three designs -- not a stale word, a
+   * dead click. Open the tray, click, nothing; open it again and it works,
+   * because by then the shell has re-read the layout.
    *
-   * So neither of them changes. Both are offered, both always do what they say,
-   * and either is harmless when it is not the one wanted: opening a window that
-   * is already up raises it, and hiding one that is already away is nothing at
-   * all. A menu that never has to be rebuilt cannot be served stale.
+   * Both of Electron's other openings are shut. `menuItem.label` and
+   * `menuItem.visible` are plain JS properties: measured against Electron 40,
+   * assigning to either sends no signal, changes no layout and moves no
+   * revision. A property update -- `ItemsPropertiesUpdated`, which the shell
+   * applies to an open popup, and which is how Telegram keeps its own wording
+   * right -- cannot be sent from here at all. Telegram is Qt, owns its dbusmenu,
+   * keeps its ids for the life of the process and rewrites the label when the
+   * shell asks with `AboutToShow`. Reaching that from here means writing the
+   * StatusNotifierItem and its menu by hand over DBus, the way the GTK client
+   * did, rather than using Electron's Tray.
+   *
+   * So: never rebuilt, therefore never renumbered, therefore the first click
+   * always works. The word says both things it does, and which one happens is
+   * decided from where the window last reported itself -- see act(). Left click
+   * on the icon asks the app instead, where a host delivers one at all; GNOME's
+   * opens the menu instead.
    */
   renderMenu() {
     if (!this.tray) return;
@@ -168,12 +186,10 @@ class TrayIcon {
 
     this.tray.setContextMenu(Menu.buildFromTemplate([
       {
-        label: 'Open WhatsApp',
-        click: () => this.handlers.onShow && this.handlers.onShow(),
-      },
-      {
-        label: 'Hide WhatsApp',
-        click: () => this.handlers.onHide && this.handlers.onHide(),
+        /* Telegram's words for the half that needed better ones: the window is
+           not being closed, it is going where this icon is. */
+        label: 'Open / Minimize to Tray',
+        click: () => this.act(),
       },
       { type: 'separator' },
       {
@@ -217,6 +233,20 @@ class TrayIcon {
     this.tray.setImage(this.unread ? this.icons.attention : this.icons.normal);
   }
 
+  /* Whichever half of the word applies. Read from what the window last said
+     rather than asked now, because the menu that was clicked has had the
+     keyboard for as long as it was open. */
+  act() {
+    const h = this.handlers;
+    if (this.inFront && h.onHide) h.onHide();
+    else if (!this.inFront && h.onShow) h.onShow();
+    else if (h.onToggle) h.onToggle();
+  }
+
+  /* The Electron tray's word never moves, for the reason written over
+     renderMenu, so this only remembers, and nothing is redrawn. */
+  setInFront(inFront) { this.inFront = inFront; }
+
   /* Marked, never counted: WhatsApp's own title counts unread CHATS, not
      messages, so a number drawn from it would be wrong for exactly the case a
      number is wanted. The state is kept whether or not there is an icon to draw
@@ -232,6 +262,67 @@ class TrayIcon {
     if (!this.tray) return;
     try { this.tray.destroy(); } catch (e) {}
     this.tray = null;
+  }
+}
+
+/*
+ * Which of the two to use, decided at runtime rather than in the build.
+ *
+ * The one above is Electron's and is honest about what it cannot do. The one in
+ * tray-sni.js speaks StatusNotifierItem itself, keeps its ids, and can therefore
+ * let the item say where the window is. That is the whole reason it was written
+ * -- but it needs a session bus, and a machine without one still has to get a
+ * tray icon rather than an error. So it is tried, and if the bus is not there or
+ * will not have us, Electron's takes over.
+ *
+ * Everything before the answer arrives is remembered and replayed into whichever
+ * one wins, because the window is up and reporting itself long before a bus
+ * handshake comes back.
+ */
+class TrayIcon {
+  constructor(options) {
+    this.impl = null;
+    this.queued = { unread: false, inFront: null };
+
+    const sni = new SniTray(options);
+    sni.start(err => {
+      if (err) {
+        console.log(`tray: this desktop would not be spoken to directly (${err.message}); using Electron's tray`);
+        this.adopt(new ElectronTray(options));
+        return;
+      }
+      console.log('tray: one item, and its wording follows the window');
+      this.adopt(sni);
+    });
+  }
+
+  adopt(impl) {
+    this.impl = impl;
+    impl.setAttention(this.queued.unread);
+    if (this.queued.inFront !== null) impl.setInFront(this.queued.inFront);
+  }
+
+  setInFront(inFront) {
+    this.queued.inFront = inFront;
+    if (this.impl) this.impl.setInFront(inFront);
+  }
+
+  setAttention(unread) {
+    this.queued.unread = unread;
+    if (this.impl) this.impl.setAttention(unread);
+  }
+
+  /* A setting changed under the menu -- the theme radio, which both of them draw
+     from the same getter. */
+  render() {
+    if (!this.impl) return;
+    if (this.impl.render) this.impl.render();
+    else if (this.impl.pushProperties) this.impl.pushProperties([5, 6, 7]);
+  }
+
+  destroy() {
+    if (this.impl) this.impl.destroy();
+    this.impl = null;
   }
 }
 
