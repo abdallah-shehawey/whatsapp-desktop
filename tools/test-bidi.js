@@ -8,6 +8,12 @@
  * right margin and every line after it against the left -- which is the report
  * this module exists to answer.
  *
+ * One paragraph is meant literally, and half of what is checked below is that
+ * nothing here ever writes a second one: the notification centre gives a
+ * collapsed message a single line of body and offers the arrow that opens the
+ * rest only when Pango cut something, so a banner broken into two paragraphs
+ * shows the first and loses the message. See BREAKS in src/bidi.js.
+ *
  * Nothing here needs Electron or a desktop: it is text in and text out.
  */
 'use strict';
@@ -15,24 +21,19 @@
 const bidi = require('../src/bidi.js');
 const wording = require('../src/wording.js');
 
-const RLM = '\u200f';
-const LRM = '\u200e';
-const FSI = '\u2068';
-const PDI = '\u2069';
-/* The line break a banner is actually written with. GNOME Shell turns a newline
-   into a space before Pango sees it -- see BREAK in src/bidi.js -- so a test
-   that spelled these with "\n" was testing something no notification daemon
-   would ever be handed. */
-const PS = '\u2029';
+const RLM = '‏';
+const LRM = '‎';
+const FSI = '⁨';
+const PDI = '⁩';
 
 let failures = 0;
 const check = (label, got, want) => {
   if (got === want) { console.log('  ok   ' + label); return; }
   failures++;
   const show = text => JSON.stringify(text)
-    .replace(/\\u200f/g, '<RLM>').replace(/\\u200e/g, '<LRM>')
-    .replace(/\\u2068/g, '<FSI>').replace(/\\u2069/g, '<PDI>')
-    .replace(/\\u2029/g, '<PS>\n         ');
+    .replace(/‏/g, '<RLM>').replace(/‎/g, '<LRM>')
+    .replace(/⁨/g, '<FSI>').replace(/⁩/g, '<PDI>')
+    .replace(/\u2029/g, '<PS>').replace(/\u2028/g, '<LS>');
   console.log('  FAIL ' + label + '\n         got  ' + show(got) +
               '\n         want ' + show(want));
 };
@@ -107,35 +108,30 @@ check('a Latin one left to right',
 check('and one made of digits is left exactly as it is',
       bidi.paragraph('+20 10 03734117'), '+20 10 03734117');
 
-/* A banner of several lines is several bidi paragraphs, so one mark at the head
-   of it only ever settles the first line. Each line states its own direction --
-   this is the same message that reads wrong in the conversation, an English
-   headline over Arabic body copy. */
-check('every line of a banner is marked, from its own first strong character',
+/* ------------------------------------------------------------ one paragraph */
+
+/* A message written on several lines arrives as one. The break is not dropped
+   for tidiness: the shell's message list opens a collapsed notification only
+   when Pango ellipsized it, a short first line is never ellipsized, and every
+   line after the break is clipped out of a one-line allocation with no arrow
+   left to reach it by. Run together, the whole message is in the one line the
+   list will cut, and the arrow comes back with it. */
+check('a message of several lines is run together into one paragraph',
       bidi.paragraph('We are hiring / IT\nتبحث سلسله مطاعم\nرواتب مجزيه'),
-      LRM + 'We are hiring / IT' + PS + RLM + 'تبحث سلسله مطاعم' + PS + RLM + 'رواتب مجزيه');
-/* A line with nothing strong in it is still left alone, line by line. */
-check('a blank line between them is left as it is',
+      LRM + 'We are hiring / IT تبحث سلسله مطاعم رواتب مجزيه');
+/* A blank line is a break like any other and leaves no gap of its own. */
+check('a blank line between them leaves one space and no more',
       bidi.paragraph('رواتب مجزيه\n\n01148813215'),
-      RLM + 'رواتب مجزيه' + PS + PS + '01148813215');
-/* Only the first line of a banner has a name in front of it, so only that line
-   needs the direction stating for it. The lines under it are read the way any
-   other line is -- this is the message from the report, an English headline
-   over Arabic body copy, sent into a group by somebody with a Latin name. */
-check('the name settles the line it is on, and no line under it',
-      bidi.line('Mo farhat', 'We are hiring / IT\nتبحث سلسله مطاعم\nرواتب مجزيه'),
-      LRM + FSI + 'Mo farhat' + PDI + ': ' + FSI + 'We are hiring / IT' + PDI + PS +
-      RLM + 'تبحث سلسله مطاعم' + PS + RLM + 'رواتب مجزيه');
-check('and an Arabic message under the same name keeps every line of it Arabic',
-      bidi.line('Mo farhat', 'تبحث سلسله مطاعم\nرواتب مجزيه'),
-      LRM + FSI + 'Mo farhat' + PDI + ': ' + FSI + 'تبحث سلسله مطاعم' + PDI + PS +
-      RLM + 'رواتب مجزيه');
-/* A first line with nothing strong in it must not decide for the message, so
-   the whole message is read before the name is placed: this one goes under it,
-   on the strength of a second line the first says nothing about. */
-check('an opening emoji leans on nothing but its own isolate',
-      bidi.line('Ahmed', '👍\nتمام يا معلم'),
-      LRM + FSI + 'Ahmed' + PDI + ': ' + FSI + '👍' + PDI + PS + RLM + 'تمام يا معلم');
+      RLM + 'رواتب مجزيه 01148813215');
+check('the same message under a name is one isolate, not several lines',
+      bidi.line('Mo farhat', 'We are hiring / IT\nتبحث سلسله مطاعم'),
+      LRM + FSI + 'Mo farhat' + PDI + ': ' + FSI + 'We are hiring / IT تبحث سلسله مطاعم' + PDI);
+/* And the separator this module used to write is flattened on the way in the
+   same way a newline is, so text that has been through it once cannot come back
+   carrying a break. */
+check('the paragraph separator is flattened too, wherever it came from',
+      bidi.line('Ahmed', 'one\u2029two'),
+      LRM + FSI + 'Ahmed' + PDI + ': ' + FSI + 'one two' + PDI);
 
 /* The report the isolate exists for: an English word inside an Arabic sentence.
    Flattened into the left-to-right line the name needs, "local" would be pulled
@@ -147,45 +143,70 @@ check('an English word inside an Arabic message stays inside it',
 check('and the isolated message is what decides its own direction',
       bidi.directionOf('شكله مشغل الاجينت local'), 'rtl');
 
-/* ------------------------------------------------ the lines above a message */
+/* ------------------------------------------------- the mark, in front of it */
 
-/* A mark and a message, each on its own line. This is the shape that was asked
-   for -- "you got a reply :" and then the message under it -- and it is the one
-   the old newline could not deliver, because the shell replaced it with a space
-   and ran the two together. */
-check('a mark stands on its own line above the sender',
-      bidi.stack(bidi.paragraph(wording.REPLY_MARK), bidi.line('Salah', 'تمام يا معلم')),
-      LRM + 'You got a reply:' + PS +
-      LRM + FSI + 'Salah' + PDI + ': ' + FSI + 'تمام يا معلم' + PDI);
+/* What a message carries rather than what it says, at the head of the line the
+   sender and the message share. It used to stand on a line of its own, which is
+   where the phone puts it and what was asked for; the notification centre took
+   the message away for it. */
+check('a mark opens the line the sender and the message share',
+      bidi.line('Salah', 'تمام يا معلم', wording.REPLY_MARK),
+      LRM + 'Replied to you: ' + FSI + 'Salah' + PDI + ': ' + FSI + 'تمام يا معلم' + PDI);
 
-/* Nothing is written for a part that is not there: an ordinary message must not
-   open with a blank line where a mark would have gone. */
-check('and a message with no mark does not open with a blank line',
-      bidi.stack('', bidi.line('Ahmed', 'on my way')),
+/* A direct chat has no name to isolate, and with a mark in front of it the
+   message stops speaking for the paragraph: the mark opens it, the paragraph is
+   left to right because the mark is, and the message goes inside an isolate so
+   an Arabic one still runs right to left inside the line. */
+check('and on a direct message it opens a line with no name on it',
+      bidi.line('', 'يعم خد راحتك', wording.MENTION_MARK),
+      LRM + 'Mentioned you: ' + FSI + 'يعم خد راحتك' + PDI);
+
+/* Nothing is written for a mark that is not there: an ordinary message must not
+   open with a space where a mark would have gone. */
+check('a message with no mark is exactly the line it always was',
+      bidi.line('Ahmed', 'on my way', ''),
       LRM + FSI + 'Ahmed' + PDI + ': ' + FSI + 'on my way' + PDI);
-check('a stack of nothing is nothing', bidi.stack('', null, undefined), '');
+check('and a mark of nothing but spaces counts as no mark at all',
+      bidi.line('Ahmed', 'on my way', '   '),
+      LRM + FSI + 'Ahmed' + PDI + ': ' + FSI + 'on my way' + PDI);
 
-/* The one thing that must never leave this module. A newline in a banner is a
-   space by the time Pango is handed it, and every mark this module writes would
-   be stranded mid-sentence with it. */
+/* The one thing that must never leave this module. A banner is one paragraph:
+   a newline is a space by the time Pango is handed it, and a paragraph
+   separator survives to break the line and take the message with it. */
 for (const [label, body] of [
   ['a message of several lines', bidi.line('Mega', 'one\ntwo\nthree')],
-  ['a mark above a sender', bidi.stack(bidi.paragraph(wording.MENTION_MARK),
-                                       bidi.line('Mega', 'يا عبدالله'))],
+  ['a marked message', bidi.line('Mega', 'يا عبدالله', wording.MENTION_MARK)],
+  ['a message that already carried a separator', bidi.line('Mega', 'one\u2029two')],
   ['a paragraph on its own', bidi.paragraph('one\ntwo')],
-]) check('no newline survives ' + label, /\n/.test(body), false);
+  ['a redacted body', bidi.words(wording.REPLY_MARK, 'Photo\nAlbum')],
+]) check('no line break of any kind survives ' + label,
+         /[\n\u2028\u2029]/.test(body), false);
 
 /* A reaction is this client describing what somebody did, not quoting them, so
    the name carries no colon -- and it is pinned left the same way. */
 check('a reaction names the person without claiming they said it',
       bidi.did('Mega', 'reacted \u{1F602} to: نتقابل بكرة'),
       LRM + FSI + 'Mega' + PDI + ' ' + FSI + 'reacted \u{1F602} to: نتقابل بكرة' + PDI);
+check('and a reaction aimed at the user takes the mark the same way',
+      bidi.did('Mega', 'reacted \u{1F602} to: نتقابل بكرة', wording.REPLY_MARK),
+      LRM + 'Replied to you: ' + FSI + 'Mega' + PDI + ' ' +
+      FSI + 'reacted \u{1F602} to: نتقابل بكرة' + PDI);
+
+/* The body a banner shows with previews turned off is not laid out at all: it
+   names a kind of message rather than showing one, and the parts that are there
+   are run together on the one line a banner has. */
+check('a redacted body is words and nothing else',
+      bidi.words(wording.MENTION_MARK, '\u{1F4F7} Photo'),
+      'Mentioned you: \u{1F4F7} Photo');
+check('and the parts that are not there are not written',
+      bidi.words('', null, 'New message'), 'New message');
+check('nothing to say is nothing', bidi.words(), '');
 
 /* Nothing may come back undefined or throw: a banner with no text is a banner
    nobody can read, and these are called in front of every one of them. */
 check('nothing in, nothing out', bidi.line(null, null), '');
 check('a name with no message still produces a line',
-      bidi.line('Mega', ''), LRM + FSI + 'Mega' + PDI + ': ');
+      bidi.line('Mega', ''), LRM + FSI + 'Mega' + PDI + ':');
 
 console.log(failures ? `\n${failures} failed` : '\nbidi checks pass');
 process.exit(failures ? 1 : 0);

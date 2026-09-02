@@ -655,9 +655,9 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
       group,
       /* Two different things, and they used to be one string. The kind of
          message goes in front of its words -- "Photo look at this" -- and the
-         mark for a message aimed at the user is a line of its own above the
-         sender, the way the phone writes it. Glued together, the second read as
-         part of the first. */
+         mark for a message aimed at the user goes in front of the sender, at
+         the head of the line, the way WhatsApp writes it itself. Glued
+         together, the second read as part of the first. */
       aimed,
       mark: mark || '',
       text: textOf(msg),

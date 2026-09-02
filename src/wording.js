@@ -145,23 +145,31 @@ const kindOf = message => {
    does this. */
 const pushName = name => String(name == null ? '' : name).replace(/^~\s*/, '').trim();
 
-/* What goes in front of a message aimed at the user in particular -- on a line
-   of its own, above the sender, which is where the phone puts it and what it
-   says there.
+/* What goes in front of a message aimed at the user in particular: WhatsApp's
+   own words for it, at the head of the same line the sender and the message
+   share -- "Mentioned you: Mega: ..." -- which is what WhatsApp Web writes into
+   the notification it raises itself, and what a browser puts on the screen when
+   it raises that notification unaltered.
+
+   That is the point of them being these words and not better ones. Two were
+   written here instead -- "@ You were mentioned", "You got a reply" -- and the
+   owner asked for WhatsApp's back: "الكلمه كمان نفسها بتاعه المنشن والريبلاي
+   برضو فكك من بتاعتنا خليك في دي". They are also what the regexes below already
+   read off WhatsApp's own body, so the mark is now lifted and put back down
+   unchanged, in English wherever the page is read in English.
 
    In words, and not in a glyph. It was an arrow before, in the monochrome the
    marks below use, and on a machine whose fonts do not cover the text form of
    U+21A9 the shell drew it as an empty box: a banner that said a message was
    aimed at you with a shape that means nothing. A word cannot fall back to
-   nothing. The @ stays because it is ASCII and every font has it. */
-/* Each ends in a colon and each stands on a line of its own, which is what the
-   colon is there to promise: the thing it introduces is under it, not after it.
-   "ما تخلي دي في السطر الاول لواحده وبعدين نقطتين وبعدها الرساله في السطر اللي
-   بعده". The line under it is the sender and the message; joining the two is
-   bidi.stack's job, and it is the only thing that knows which character the
-   notification daemon will keep. */
-const MENTION_MARK = '@ You were mentioned:';
-const REPLY_MARK = 'You got a reply:';
+   nothing.
+
+   The colon belongs to the mark and stays with it: what follows on the line is
+   what it introduces. Standing them on a LINE of their own was tried, asked for
+   and shipped, and the notification centre took the message away for it -- see
+   BREAKS in bidi.js, which is where that lives now. */
+const MENTION_MARK = 'Mentioned you:';
+const REPLY_MARK = 'Replied to you:';
 
 /* What WhatsApp puts in front of the sender when a message is aimed at the user
    in particular. It is not a name, and the split below read it as one: a banner

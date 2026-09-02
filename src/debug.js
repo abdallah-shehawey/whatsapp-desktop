@@ -240,10 +240,10 @@ const install = (getWindow, getBanners, actions = {}) => {
          '\u0627\u0644\u062A\u0627\u0646\u064A \u0628\u064A\u0628\u062F\u0623 \u0645\u0646 ' +
          '\u0641\u064A\u0646', ''],
         ['\u062A\u0645\u0627\u0645 \u064A\u0627 \u0645\u0639\u0644\u0645', wording.REPLY_MARK],
-        /* Several lines, and not all of them the same way round. One mark at the
-           head of a banner only ever settles its first line -- a newline ends a
-           bidi paragraph -- so this is the one that catches a line reverting to
-           whatever it happens to open with. */
+        /* A message the sender wrote on several lines, which arrives here as one
+           paragraph: the breaks are flattened to spaces so that nothing is left
+           stranded under a line the notification centre will not open. This is
+           the one that shows what that looks like. */
         ['We are hiring / IT\n' +
          '\u062A\u0628\u062D\u062B \u0633\u0644\u0633\u0644\u0647 \u0645\u0637\u0627\u0639\u0645 ' +
          '\u0639\u0646 \u0645\u0647\u0646\u062F\u0633 IT\n' +
@@ -255,7 +255,7 @@ const install = (getWindow, getBanners, actions = {}) => {
           identity: 'debug' + Date.now() + (n++),
           key: '__debug__',
           title: bidi.paragraph('WhatsApp \u2014 test'),
-          body: bidi.stack(bidi.paragraph(mark), bidi.line('Ahmed', message)),
+          body: bidi.line('Ahmed', message, mark),
         });
       }
       console.log('debug: raised %d banners, one per kind', n);

@@ -1556,8 +1556,8 @@ const wireIpc = () => {
          down. */
       key: note.chat || note.title,
       title: bidi.paragraph(pushName(note.title)),
-      body: bidi.stack(bidi.paragraph(mark), bidi.line(sender, message)),
-      redacted: bidi.stack(mark, kindOf(message)),
+      body: bidi.line(sender, message, mark),
+      redacted: bidi.words(mark, kindOf(message)),
       icon: note.avatar,
       onClick: () => {
         showWindow();
@@ -1658,23 +1658,22 @@ const wireIpc = () => {
        a photo with no caption is its mark alone, and a message of words has none
        at all. */
     const said = [mark, note.text].filter(Boolean).join(' ');
-    /* And a message aimed at the user says so on a line of its own, above the
-       sender: "You got a reply:" and then "Mega: تيست", which is the shape the
-       phone raises for the same message. It is bidi.stack that joins them,
-       because the character that survives the trip to the notification daemon
-       is not the newline this used to be written with -- see BREAK in bidi.js,
-       and the banner that arrived as one long line because of it. */
+    /* And a message aimed at the user says so in front of the sender, in
+       WhatsApp's own words: "Replied to you: Mega: تيست". It opens the line
+       rather than standing above it, and the line is all there is -- a banner
+       broken into two paragraphs loses everything under the first one in the
+       notification centre, which is the note on BREAKS in bidi.js. */
     const aimed = note.aimed ? String(note.aimed).trim() : '';
 
     /* Two ways to put a name in front of a line, and the difference is not
        cosmetic. A message is "Mega: نتقابل بكرة" -- the colon says Mega SAID
        this. A reaction is "Mega reacted 😂 to: ..." -- Mega said none of it,
        this client is describing what they did, and a colon after the name would
-       claim otherwise. Either way the name is isolated and pinned to the left
-       margin, and the message keeps its own direction under it. */
-    const body = bidi.stack(bidi.paragraph(aimed),
-                            note.join === 'space' ? bidi.did(note.sender, said)
-                                                  : bidi.line(note.sender, said));
+       claim otherwise. Either way the mark opens the line, the name is isolated
+       and pinned to the left margin, and the message keeps its own direction
+       inside an isolate of its own. */
+    const body = note.join === 'space' ? bidi.did(note.sender, said, aimed)
+                                       : bidi.line(note.sender, said, aimed);
     const banner = banners.show({
       /* The message and no other. This used to be the chat, the sender and the
          text hashed together, which is as close to a message's identity as
@@ -1692,7 +1691,7 @@ const wireIpc = () => {
       /* What the banner may say with previews turned off. The page names it when
          the mark alone would not -- a reaction has no mark, and "New message" is
          the wrong thing to call one. */
-      redacted: bidi.stack(aimed, note.redacted || mark || 'New message'),
+      redacted: bidi.words(aimed, note.redacted || mark || 'New message'),
       icon: note.avatar,
       onClick: () => {
         showWindow();

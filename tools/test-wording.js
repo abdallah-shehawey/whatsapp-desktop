@@ -82,19 +82,27 @@ check('"replied to you" is a mark on the message, not the person who wrote it',
       readBody('Replied to you: ~Ahmed: جميل').sender, 'Ahmed');
 check('and the message is what they actually said',
       readBody('Replied to you: ~Ahmed: جميل').message, 'جميل');
-/* On a line of its own, above the sender, which is where the phone puts it. The
-   break is not written here: bidi.stack joins the two, and it is the only thing
-   that knows which character a notification daemon will keep. */
-check('and the mark travels separately, to go on the line above',
+/* It travels separately from the sender and the message so that bidi.line can
+   put it at the head of the paragraph, in front of the isolated name -- which is
+   where it has to go: a banner broken into two paragraphs loses everything under
+   the first line in the notification centre. */
+check('and the mark travels separately, to go in front of the line',
       readBody('Replied to you: ~Ahmed: جميل').mark, REPLY_MARK);
+/* And it is WhatsApp's own words, put back down exactly as they were lifted.
+   Two better ones were written here and taken out again: "الكلمه كمان نفسها
+   بتاعه المنشن والريبلاي برضو فكك من بتاعتنا خليك في دي". */
+check('and it is the words WhatsApp itself wrote, with its colon',
+      REPLY_MARK, 'Replied to you:');
 /* In words. It was an arrow, and a machine without the text form of U+21A9 in
    any of its fonts drew an empty box in the one place a banner explains why it
    is louder than the chat's own settings. */
 check('and it is words, with nothing in it that a font can fail to draw',
       /^[\x20-\x7E]+$/.test(REPLY_MARK), true);
 
-check('a mention says so as well, keeping the sign WhatsApp uses for one',
+check('a mention says so as well, in the words WhatsApp uses for one',
       readBody('Mentioned you: Ahmed: يا عبدالله').mark, MENTION_MARK);
+check('and those words are WhatsApp\'s, not this client\'s',
+      MENTION_MARK, 'Mentioned you:');
 check('and it too leaves the sender where a sender belongs',
       readBody('Mentioned you: Ahmed: يا عبدالله').sender, 'Ahmed');
 
