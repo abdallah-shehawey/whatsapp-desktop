@@ -109,4 +109,12 @@ assert.strictEqual(style.build({ fontSize: 16, chatScale: 100 },
    left over from the switch would be the newest rule and would undo them. */
 assert.doesNotMatch(shipped, /revert/);
 
+/* The placeholder avatar in the group-invite dialog, which WhatsApp draws at
+   212px inside a 104px box. `max-` and not `width` is the whole point: the rule
+   has to shrink the one icon that does not fit and leave every icon that does
+   exactly where it was, so a plain `width: 100%` here would be the bug. */
+assert.match(shipped, /span\[data-icon\] > svg \{[^}]*max-width: 100%/);
+assert.match(shipped, /span\[data-icon\] > svg \{[^}]*max-height: 100%/);
+assert.doesNotMatch(shipped, /span\[data-icon\] > svg \{[^}]*[^-]width: 100%/);
+
 console.log('style checks pass');

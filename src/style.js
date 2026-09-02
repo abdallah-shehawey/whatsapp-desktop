@@ -289,6 +289,32 @@ const CONVERSATION_SCROLL = `
 }`;
 
 /*
+ * A placeholder avatar that is drawn bigger than the hole it is drawn in.
+ *
+ * WhatsApp gives every one of these icons the presentational attributes
+ * `width="212" height="212"` and relies on a stylesheet to size it down. For the
+ * `-refreshed` icons that stylesheet exists; for the plain `default-group` the
+ * group-invite dialog uses, it does not -- measured on the live page, side by
+ * side in one report: `default-group-refreshed` came out 31x31 in its 31x31 box,
+ * and `default-group` came out 212x212 in a 104x104 box whose overflow is
+ * hidden. So a fifth of the icon is drawn and the rest is cut away, which is a
+ * group avatar as an off-centre grey blob -- and it is WhatsApp's own, not this
+ * client's: nothing here has ever styled an svg.
+ *
+ * The rule is `max-` and not `width`, deliberately. It can only ever shrink an
+ * icon that does not fit, so every icon that WhatsApp does size correctly is
+ * left exactly as it was -- verified across the six on that page, wordmark and
+ * lock and key included, all unchanged to the pixel. The viewBox and
+ * `preserveAspectRatio="xMidYMid meet"` that come with each icon are what put
+ * the shrunk one back in the middle, in shape.
+ */
+const ICON_FIT = `
+span[data-icon] > svg {
+  max-width: 100%;
+  max-height: 100%;
+}`;
+
+/*
  * The right-hand drawer -- Message info, contact info, in-chat search -- and
  * why opening one stutters.
  *
@@ -488,10 +514,10 @@ const aliasSheet = (stack, family) => {
    its own sake: see chatTextRevert -- a sheet that is in the page is in it for
    good, so anything that was switched on has to be switched off by name. */
 const build = ({ fontSize, chatScale }, before) => {
-  /* ARABIC_CLIP and MESSAGE_BIDI are unconditional, so nothing here has to be
-     written back out to undo them -- which is the whole reason `before` exists
-     for the rules that are not. */
-  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION, ARABIC_CLIP, MESSAGE_BIDI];
+  /* ARABIC_CLIP, MESSAGE_BIDI and ICON_FIT are unconditional, so nothing here
+     has to be written back out to undo them -- which is the whole reason
+     `before` exists for the rules that are not. */
+  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION, ARABIC_CLIP, MESSAGE_BIDI, ICON_FIT];
 
   /* There is no font rule here any more, and that is the point. Forcing the
      desktop font with `* { font-family: X !important }` at user origin works and
