@@ -38,6 +38,54 @@ check('a verb this client cannot perform is not answered', () => {
   assert.strictEqual(links.from('whatsapp://settings'), null);
 });
 
+/* ------------------------------------------------------------ group invites */
+
+check('what "Open app" on an invite page hands to the desktop', () => {
+  /* Read off the live chat.whatsapp.com page, not guessed:
+     ["WhatsAppApiOpenUrl","open_custom_url",[],[{"url":"whatsapp:\/\/chat\/?code=…"}]] */
+  assert.deepStrictEqual(links.from('whatsapp://chat/?code=IZ4FM0ZHJRN7hMFsxlQTcx'),
+                         { invite: 'IZ4FM0ZHJRN7hMFsxlQTcx' });
+  assert.deepStrictEqual(links.from('whatsapp://chat?code=IZ4FM0ZHJRN7hMFsxlQTcx'),
+                         { invite: 'IZ4FM0ZHJRN7hMFsxlQTcx' });
+});
+
+check('the invite link people share, and the tracking chat.whatsapp.com hangs off it', () => {
+  assert.deepStrictEqual(links.from('https://chat.whatsapp.com/IZ4FM0ZHJRN7hMFsxlQTcx'),
+                         { invite: 'IZ4FM0ZHJRN7hMFsxlQTcx' });
+  assert.deepStrictEqual(links.from('https://chat.whatsapp.com/IZ4FM0ZHJRN7hMFsxlQTcx?s=cl&p=a&mlu=4&ilr=4'),
+                         { invite: 'IZ4FM0ZHJRN7hMFsxlQTcx' });
+});
+
+check('the older /invite/<code> form, and a trailing slash', () => {
+  assert.deepStrictEqual(links.from('https://chat.whatsapp.com/invite/IZ4FM0ZHJRN7hMFsxlQTcx'),
+                         { invite: 'IZ4FM0ZHJRN7hMFsxlQTcx' });
+  assert.deepStrictEqual(links.from('https://chat.whatsapp.com/IZ4FM0ZHJRN7hMFsxlQTcx/'),
+                         { invite: 'IZ4FM0ZHJRN7hMFsxlQTcx' });
+});
+
+check('where "Continue to WhatsApp Web" points, which is where this client goes too', () => {
+  assert.deepStrictEqual(
+    links.from('https://web.whatsapp.com/accept?code=IZ4FM0ZHJRN7hMFsxlQTcx&utm_campaign=wa_chat_v2'),
+    { invite: 'IZ4FM0ZHJRN7hMFsxlQTcx' });
+});
+
+check('an invite page with no code on it is not an invite', () => {
+  assert.strictEqual(links.from('https://chat.whatsapp.com/'), null);
+  assert.strictEqual(links.from('https://chat.whatsapp.com'), null);
+  assert.strictEqual(links.from('whatsapp://chat/'), null);
+  assert.strictEqual(links.from('https://web.whatsapp.com/accept'), null);
+  /* Short enough to be a truncated link rather than a code. */
+  assert.strictEqual(links.from('https://chat.whatsapp.com/abc'), null);
+});
+
+check('a code is the base64url alphabet and nothing else', () => {
+  assert.strictEqual(links.inviteOf('IZ4FM0ZHJRN7hMFsxlQTcx'), 'IZ4FM0ZHJRN7hMFsxlQTcx');
+  assert.strictEqual(links.inviteOf('has a space in it'), '');
+  assert.strictEqual(links.inviteOf('../../etc/passwd'), '');
+  assert.strictEqual(links.inviteOf(''), '');
+  assert.strictEqual(links.inviteOf(null), '');
+});
+
 /* --------------------------------------------------------------- the web links */
 
 check('the "Chat on WhatsApp with …" page', () => {
@@ -63,10 +111,6 @@ check('a number written the way a person writes one', () => {
 
 check('a wa.me short code, which only WhatsApp can resolve, goes to a browser', () => {
   assert.strictEqual(links.from('https://wa.me/message/ABCDEFGHIJKLM1'), null);
-});
-
-check('a group invite is a decision, not a chat, and is left to its own page', () => {
-  assert.strictEqual(links.from('https://chat.whatsapp.com/ABCDEFabcdef123456'), null);
 });
 
 check('the client itself is not a link to a chat', () => {
@@ -97,6 +141,26 @@ check('an ordinary launch carries no link', () => {
   assert.strictEqual(links.inArgv(['/usr/lib/whatsapp-desktop/whatsapp-desktop', '--hidden']), null);
   assert.strictEqual(links.inArgv([]), null);
   assert.strictEqual(links.inArgv(undefined), null);
+});
+
+check('an invite is found there too', () => {
+  const argv = ['/usr/lib/whatsapp-desktop/whatsapp-desktop',
+                'whatsapp://chat/?code=IZ4FM0ZHJRN7hMFsxlQTcx'];
+  assert.deepStrictEqual(links.inArgv(argv), { invite: 'IZ4FM0ZHJRN7hMFsxlQTcx' });
+});
+
+/* ---------------------------------------- the ones with nowhere else to go */
+
+check('a whatsapp: verb this client cannot act on is named rather than eaten', () => {
+  assert.strictEqual(links.unhandled('whatsapp://call?phone=201501899476'), 'call');
+  assert.strictEqual(links.unhandled('whatsapp://settings'), 'settings');
+});
+
+check('and nothing else is named, because everything else has a browser', () => {
+  assert.strictEqual(links.unhandled('https://example.com/'), '');
+  assert.strictEqual(links.unhandled('not a url at all'), '');
+  assert.strictEqual(links.unhandled(''), '');
+  assert.strictEqual(links.unhandled(undefined), '');
 });
 
 /* ------------------------------------------------------------------ the claim */

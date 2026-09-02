@@ -1294,11 +1294,15 @@ const start = ({ send, on }) => {
   const LINK_WAIT_MS = 60000;
   const LINK_POLL_MS = 400;
 
+  /* WhatsApp's own module registry, asked for one name, and never trusted to
+     answer: contextIsolation is off so `window.require` is Meta's, and it is
+     private -- see src/page/store.js for the same guard around the same idea. */
+  const grab = name => {
+    try { return typeof window.require === 'function' ? window.require(name) : null; }
+    catch (err) { return null; }
+  };
+
   const openByNumber = (phone, wantsText, waitedFor) => {
-    const grab = name => {
-      try { return typeof window.require === 'function' ? window.require(name) : null; }
-      catch (err) { return null; }
-    };
     const wf = grab('WAWebWidFactory');
     const action = grab('WAWebOpenChatWithContactAction');
 
@@ -1362,6 +1366,105 @@ const start = ({ send, on }) => {
     const phone = chat && chat.phone;
     if (!phone) return;
     openByNumber(String(phone), !!(chat && chat.wantsText), 0);
+  });
+
+  /*
+   * A group invite, opened where the client already is.
+   *
+   * This cost a reload until now, and the reload was the report: `/accept?code=`
+   * is WhatsApp's own page for an invite, loading it brings the whole client up
+   * again, and on the way it moved the window to whichever workspace the browser
+   * was on and then showed no dialog at all -- "it was impossible to join the
+   * group without WhatsApp Web". Every other WhatsApp client on Linux puts the
+   * invite up without reloading anything.
+   *
+   * Measured on the live page, and this is the whole of it: the dialog is
+   * `WAWebGroupInviteLinkModal.react`, its props are `{ groupCode, source }` and
+   * nothing else, and it is NOT in the bundle this client boots with -- going to
+   * /accept adds exactly one module to a registry of 17964, and that is the one.
+   * `WAWebGroupInviteLinkModalLoadable.react` is what fetches it: that one IS in
+   * the bundle, it is an ordinary React component, and rendering it pulls the
+   * chunk down. So the dialog goes up through WhatsApp's own ModalManager --
+   * verified with the chat list still behind it and the URL still at
+   * web.whatsapp.com: group photo, name, when it was created, who is already in
+   * it, Cancel and Join group. Nothing is joined without that button.
+   *
+   * A code the server will not have answers in the same dialog and in WhatsApp's
+   * own words ("Couldn't join this group. Please try again later."), which is
+   * the other reason to let WhatsApp draw this rather than draw one here.
+   *
+   * The wait and the fallback are openByNumber's, for openByNumber's two
+   * reasons: a link that started this client arrives while the registry is still
+   * being built, and on the morning these names change the reload still works.
+   *
+   * The wait is for the chat list as well as for the modules, and that is a
+   * measured requirement rather than caution. A link that STARTS this client
+   * resolves those modules about six seconds before WhatsApp has drawn anything:
+   * asked then, ModalManager takes the call, answers nothing, and does not even
+   * fetch the modal's chunk -- sampled every 200ms through a cold start, the
+   * dialog was never on the page for a single frame. #pane-side is the app being
+   * up, and a modal opened after it appears is one WhatsApp keeps.
+   */
+  const INVITE_SETTLE_MS = 1500;
+
+  const openInvite = (code, waitedFor, retried) => {
+    const React = grab('react');
+    const loadable = grab('WAWebGroupInviteLinkModalLoadable.react');
+    const manager = (grab('WAWebModalManager') || {}).ModalManager;
+    const Modal = loadable && loadable.WAWebGroupInviteLinkModalLoadable;
+
+    if (!React || typeof React.createElement !== 'function' ||
+        typeof Modal !== 'function' || !manager || typeof manager.open !== 'function' ||
+        !document.querySelector('#pane-side')) {
+      if (waitedFor < LINK_WAIT_MS) {
+        setTimeout(() => openInvite(code, waitedFor + LINK_POLL_MS, retried), LINK_POLL_MS);
+        return;
+      }
+      /* Handed back to the app, which still has the invite and can load
+         WhatsApp's own /accept page for it. Costs a reload, which is why it is
+         last -- and it is also the honest answer for a client sitting on the QR
+         screen, where no chat list is ever going to appear. */
+      log('WhatsApp\'s modules never answered for the invite; asking for its own page');
+      send('invite-unresolved', { code: code });
+      return;
+    }
+
+    try {
+      /* `source` is what the live page passes for an invite followed from
+         outside, read off the open dialog rather than invented: it is WhatsApp's
+         own logging, and a value it does not know is not worth guessing at. */
+      manager.open(React.createElement(Modal, { groupCode: code, source: 'invite_link' }),
+                   { transition: 'modal-flow' });
+      log('put up the join dialog for a group invite');
+    } catch (err) {
+      log('cannot show the invite dialog: ' + err.message);
+      send('invite-unresolved', { code: code });
+      return;
+    }
+
+    /* Asked for once more if it did not arrive, and once only: a dialog the
+       owner has already closed must not come back, and a second and a third
+       attempt would be exactly that. The check is late enough for the chunk to
+       have been fetched and drawn, and early enough that nobody has read it yet.
+       Twice with nothing to show for it is the app's page after all -- the owner
+       followed this link to join a group, and a reload they did not want beats
+       the silence this whole issue was about. */
+    setTimeout(() => {
+      if (document.querySelector('[role="dialog"]')) return;
+      if (retried) {
+        log('the join dialog did not arrive twice over; asking for WhatsApp\'s own page');
+        send('invite-unresolved', { code: code });
+        return;
+      }
+      log('the join dialog did not arrive; asking once more');
+      openInvite(code, waitedFor, true);
+    }, INVITE_SETTLE_MS);
+  };
+
+  on('open-invite', invite => {
+    const code = invite && invite.code;
+    if (!code) return;
+    openInvite(String(code), 0, false);
   });
 
   /* ------------------------------------------------------- Escape and panels */

@@ -761,6 +761,10 @@ const createWindow = () => {
       win.webContents.send('wa:open-link', { phone: pendingChat.phone, wantsText: !!pendingChat.text });
       pendingChat = null;
     }
+    if (pendingInvite) {
+      win.webContents.send('wa:open-invite', { code: pendingInvite });
+      pendingInvite = '';
+    }
     await applyStyle();
     win.webContents.setZoomFactor(Number(config.get('view.zoom')) || 1);
     win.webContents.send('wa:config', {
@@ -818,6 +822,19 @@ const createWindow = () => {
   win.webContents.on('did-create-window', adoptPopup);
 
   win.webContents.on('will-navigate', (event, url) => {
+    /* A link this file knows how to act on is acted on, even when isWhatsApp
+       would have waved it through: chat.whatsapp.com ends in whatsapp.com and is
+       still the invite page rather than the client, and letting the window
+       navigate to it would put a page with a "Download" button and no address
+       bar where the chat list was, with no way back.
+     *
+     * The client's own pages are asked about first and never answered for. Not
+     * because one would arrive here -- loadURL does not raise will-navigate --
+     * but because `/accept?code=` is a link this file recognises AND the URL
+     * openGroupInvite loads, and a route from one to the other is a loop waiting
+     * for the day some navigation does come through. */
+    const link = isOwnPage(url) ? null : links.from(url);
+    if (link) { event.preventDefault(); openLink(link, 'a link in the page'); return; }
     if (isWhatsApp(url)) return;
     event.preventDefault();
     openExternally(url);
@@ -854,13 +871,14 @@ const isOwnPage = url => {
 
 /*
  * A link this client is not showing, handed to whatever does show it -- with one
- * exception. A wa.me or api.whatsapp.com link is a chat, and sending the owner
- * out to a browser so that the browser can hand the chat straight back is a
- * round trip nobody asked for. Those are opened here. See src/links.js.
+ * exception. A wa.me link is a chat and a chat.whatsapp.com link is a group
+ * invite, and sending the owner out to a browser so that the browser can hand
+ * either straight back is a round trip nobody asked for. Those are opened here.
+ * See src/links.js.
  */
 const openExternally = url => {
-  const chat = links.from(url);
-  if (chat) { openLinkedChat(chat, 'a link in the page'); return; }
+  const link = links.from(url);
+  if (link) { openLink(link, 'a link in the page'); return; }
   if (/^https?:|^mailto:|^tel:/i.test(url)) shell.openExternal(url).catch(() => {});
 };
 
@@ -870,6 +888,7 @@ const openExternally = url => {
    is a channel that can be made to type them. */
 let pendingChat = null;
 let pendingText = '';
+let pendingInvite = '';
 
 /*
  * A chat, opened by phone number rather than by clicking a row in the list --
@@ -893,6 +912,40 @@ const openLinkedChat = (chat, why) => {
   pendingText = chat.text || '';
   if (loadedAt) win.webContents.send('wa:open-link', { phone: chat.phone, wantsText: !!pendingText });
   else pendingChat = chat;
+};
+
+/*
+ * A group invite, put up where the client already is.
+ *
+ * The chunk that only /accept loads was the reason this used to be a reload, and
+ * the page fetches that chunk itself now: see openInvite in src/page/inject.js
+ * for what was measured. The dialog is WhatsApp's own, it comes up over the chat
+ * list in about a second, and nothing is joined until the button in it is
+ * pressed. The reload is still here, one message away, for the morning
+ * WhatsApp's module names change.
+ *
+ * The window is raised first for the same reason a linked chat raises it: a link
+ * followed from a browser is somebody asking for this client, not for a dialog
+ * behind a tray icon.
+ */
+const openGroupInvite = (code, why) => {
+  if (!code || !win || win.isDestroyed()) return;
+  console.log('opening a group invite (%s)', why);
+  showWindow();
+  /* An invite that started this client arrives before there is a page to tell;
+     did-finish-load hands it over, and the page waits from there for WhatsApp's
+     own modules. */
+  if (loadedAt) win.webContents.send('wa:open-invite', { code });
+  else pendingInvite = code;
+};
+
+/* Which of the two a link turned out to be. Everything that follows a link --
+   the command line, a second copy's argv, macOS's event, a click in the page --
+   comes through here so that the answer is decided in one place. */
+const openLink = (link, why) => {
+  if (!link) return;
+  if (link.invite) openGroupInvite(link.invite, why);
+  else openLinkedChat(link, why);
 };
 
 /* ----------------------------------------------------------------- popups */
@@ -1436,6 +1489,16 @@ const wireIpc = () => {
     win.loadURL('https://web.whatsapp.com/send?' + query).catch(() => {});
   });
 
+  /* The dialog the page could not draw, on the page WhatsApp draws it on. This
+     is the old behaviour entire, and it is reached only when the modal's module
+     names have stopped answering -- a reload, which is why it is last. */
+  ipcMain.on('wa:invite-unresolved', (event, invite) => {
+    const code = links.inviteOf(invite && invite.code);
+    if (!code || !win || win.isDestroyed()) return;
+    console.log('loading WhatsApp\'s own invite page for %s', code);
+    win.loadURL('https://web.whatsapp.com/accept?code=' + encodeURIComponent(code)).catch(() => {});
+  });
+
   /* The composer is up and empty, so the message the link carried can go in.
      Not with execCommand from the page: an evaluated script has no user gesture
      behind it and WhatsApp's editor takes the call and stays empty -- measured,
@@ -1928,8 +1991,18 @@ const chromeUserAgent = () => {
 app.on('second-instance', (event, argv) => {
   /* Where a whatsapp: link lands. xdg-open starts a second copy with the URL on
      its command line; the lock sends that copy home and its argv arrives here. */
-  const chat = links.inArgv(argv);
-  if (chat) { openLinkedChat(chat, 'a link from the desktop'); return; }
+  const link = links.inArgv(argv);
+  if (link) { openLink(link, 'a link from the desktop'); return; }
+  /* A whatsapp: URL this client cannot act on still raised the window and did
+     nothing else, which reads from the outside as the link having been eaten --
+     and for group invites it was exactly that, for a year. There is nowhere to
+     send one, because this client holds the scheme and the browser would hand it
+     straight back, so the verb goes in the log instead: the next report of a
+     link that went nowhere then says which one. */
+  for (const arg of argv) {
+    const verb = links.unhandled(arg);
+    if (verb) console.log('nothing here opens a whatsapp: "%s" link', verb);
+  }
   /* A --hidden launch that finds one already running exits without raising the
      window: that is the login autostart arriving on top of a client the user
      started themselves. */
@@ -1939,10 +2012,10 @@ app.on('second-instance', (event, argv) => {
 /* macOS delivers the same thing as an event rather than as argv. Nothing here
    runs there yet, and one line costs less than the next person finding out. */
 app.on('open-url', (event, url) => {
-  const chat = links.from(url);
-  if (!chat) return;
+  const link = links.from(url);
+  if (!link) return;
   event.preventDefault();
-  openLinkedChat(chat, 'a link from the desktop');
+  openLink(link, 'a link from the desktop');
 });
 
 app.on('window-all-closed', () => {
@@ -1999,7 +2072,7 @@ app.whenReady().then(() => {
   console.log('whatsapp: links -> %s',
               links.claim(app, APP_ID, { enabled: config.get('links.claim-scheme') !== false }));
   const launchedFor = links.inArgv(process.argv);
-  if (launchedFor) openLinkedChat(launchedFor, 'the link this client was started for');
+  if (launchedFor) openLink(launchedFor, 'the link this client was started for');
 
   tray = new TrayIcon({
     normal: iconFile(24, `status/${APP_ID}-tray.png`),

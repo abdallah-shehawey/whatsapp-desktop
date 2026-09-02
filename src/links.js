@@ -21,18 +21,31 @@
  * first through `second-instance`. Both paths end in `from()`.
  *
  * The shapes accepted are the ones the world actually produces. WhatsApp's own
- * pages emit the first three; the last is what a message body turns a wa.me
- * link into.
+ * pages emit them; wa.me is what a message body turns into.
  *
  *   whatsapp://send?phone=20…&text=hi     the scheme handler, from any browser
  *   https://api.whatsapp.com/send?phone=  the "Chat on WhatsApp with …" page
  *   https://wa.me/20…?text=hi             the short link people share
  *   https://web.whatsapp.com/send?phone=  WhatsApp Web's own
  *
- * A group invite (chat.whatsapp.com/<code>) is deliberately NOT one of them.
- * Opening a chat is a thing this client can do without asking anybody; joining
- * a group is a decision, and it belongs on the page that spells out which group
- * and offers a button. Those still go to the browser.
+ *   whatsapp://chat/?code=<code>          "Open app" on a group invite page
+ *   https://chat.whatsapp.com/<code>      the invite link people share
+ *   https://web.whatsapp.com/accept?code= "Continue to WhatsApp Web" on that page
+ *
+ * A group invite used to be left to the browser on the reasoning that joining a
+ * group is a decision and belongs on a page that spells out which group. That
+ * reasoning was right and the conclusion stopped being: the moment this client
+ * took the scheme, the browser's only way to act on "Open app" was to hand the
+ * link back here, and here it went nowhere -- second-instance found no chat in
+ * the argv and fell through to raising the window. So the invite arrived, the
+ * window jumped to the current workspace, and nothing opened. That is the report
+ * (issue: "it was impossible to join the group without WhatsApp Web").
+ *
+ * The dialog that spells out which group is one this client can show, and show
+ * without going anywhere: the page puts up WhatsApp's own join dialog over the
+ * chat list -- group photo, name, when it was created, who is already in it,
+ * Cancel and Join group -- with the URL untouched. Nothing is joined without the
+ * button being pressed. See openInvite in src/page/inject.js.
  */
 'use strict';
 
@@ -46,8 +59,19 @@ const digitsOf = value => {
   return digits.length >= 5 && digits.length <= 20 ? digits : '';
 };
 
+/* A group invite code: the base64url alphabet, and WhatsApp has issued 22
+   characters of it for years. The range is wider than 22 so that a length
+   WhatsApp changes does not send the owner back to a browser, and narrow enough
+   that a path which is not a code -- `/`, `/download`, a stray slug -- answers
+   empty and is left alone. */
+const inviteOf = value => {
+  const code = String(value || '').trim();
+  return /^[A-Za-z0-9_-]{6,64}$/.test(code) ? code : '';
+};
+
 /*
- * A URL, read as "which chat, and what was already typed into it".
+ * A URL, read as one of two things: which chat and what was already typed into
+ * it (`{ phone, text }`), or which group is being offered (`{ invite }`).
  *
  * Returns null for everything else, and that null is the whole safety of this
  * file: an unrecognised link is not this client's to interpret, and the caller
@@ -66,16 +90,40 @@ const from = url => {
   if (scheme === SCHEME) {
     /* The host is where the verb lands: `whatsapp://send?phone=` parses with
        "send" as the hostname, and `whatsapp:send?phone=` -- which some pages
-       emit -- puts it in the path instead. Only "send" is answered; the scheme
+       emit -- puts it in the path instead. Two verbs are answered; the scheme
        also carries calls, settings and business flows that this client has no
        way to perform. */
     const verb = (host || parsed.pathname.replace(/[/:]/g, '')).toLowerCase();
+    /* "chat" is the invite, and it is the measured name rather than a guessed
+       one: the group invite page emits `whatsapp://chat/?code=<code>`, read
+       straight out of what chat.whatsapp.com serves. */
+    if (verb === 'chat') {
+      const invite = inviteOf(params.get('code'));
+      return invite ? { invite } : null;
+    }
     if (verb && verb !== 'send') return null;
     const phone = digitsOf(params.get('phone'));
     return phone ? { phone, text } : null;
   }
 
   if (scheme !== 'http' && scheme !== 'https') return null;
+
+  if (host === 'chat.whatsapp.com') {
+    /* `/<code>`, and the older `/invite/<code>` that links shared years ago
+       still carry. The query on the end -- chat.whatsapp.com hangs `?s=cl&p=a`
+       and friends off a shared link -- is not part of it. */
+    const path = parsed.pathname.replace(/^\/(?:invite\/)?/, '').replace(/\/+$/, '');
+    const invite = inviteOf(path);
+    return invite ? { invite } : null;
+  }
+
+  if (host === 'web.whatsapp.com' && /^\/accept\/?$/.test(parsed.pathname)) {
+    /* Where "Continue to WhatsApp Web" points, which is also where this client
+       sends an invite of its own. Recognising it costs nothing and means a
+       client already showing the dialog is not asked to load it again. */
+    const invite = inviteOf(params.get('code'));
+    return invite ? { invite } : null;
+  }
 
   if (host === 'wa.me' || host === 'api.whatsapp.com' || host === 'web.whatsapp.com') {
     /* Decoded before the digits are picked out of it: a number written with
@@ -98,10 +146,23 @@ const from = url => {
 const inArgv = argv => {
   for (const arg of argv || []) {
     if (typeof arg !== 'string' || arg[0] === '-') continue;
-    const chat = from(arg);
-    if (chat) return chat;
+    const link = from(arg);
+    if (link) return link;
   }
   return null;
+};
+
+/* A whatsapp: URL that this file did not recognise, worth saying out loud
+   because there is nowhere to send it. Handing it to the browser is not a
+   fallback: this client holds the scheme, so the browser would hand it straight
+   back. What it can do is name the verb in the log, so the next report of a link
+   that went nowhere says which one on the first read. */
+const unhandled = url => {
+  if (!url || typeof url !== 'string') return '';
+  let parsed;
+  try { parsed = new URL(url); } catch (e) { return ''; }
+  if (parsed.protocol.replace(':', '').toLowerCase() !== SCHEME) return '';
+  return (parsed.hostname || parsed.pathname.replace(/[/:]/g, '')).toLowerCase() || SCHEME;
 };
 
 /*
@@ -131,4 +192,4 @@ const claim = (app, appId, { enabled = true } = {}) => {
   }
 };
 
-module.exports = { SCHEME, from, inArgv, claim, digitsOf };
+module.exports = { SCHEME, from, inArgv, unhandled, claim, digitsOf, inviteOf };

@@ -25,6 +25,11 @@ const { MARKS } = require('../src/wording.js');
 
 const SRC = process.env.WA_INJECT || path.join(__dirname, '..', 'src', 'page', 'inject.js');
 const US  = String.fromCharCode(31);      // the unit separator the page answers with
+/* How long the page gives an invite dialog to appear before asking again. Read
+   out of the page rather than written down twice, so a change there moves the
+   waits here with it. */
+const INVITE_SETTLE_MS = Number(
+  /INVITE_SETTLE_MS\s*=\s*(\d+)/.exec(fs.readFileSync(SRC, 'utf8'))[1]);
 
 /* ------------------------------------------------------------ the mock DOM */
 
@@ -195,6 +200,7 @@ const document = {
 
 const handlers = new Map();                 // channel -> what the page listens with
 
+let inviteFallbacks = [];                   // invites it gave up on and handed back
 let openReports = [];                       // what the page said was on screen
 let unreadReports = [];                     // and which chats it said were unread
 let countReports = [];                      // and how many messages, for the badge
@@ -207,6 +213,7 @@ const send = (channel, payload) => {
   else if (channel === 'open-chat') openReports.push(payload);
   else if (channel === 'unread-chats') unreadReports.push(payload);
   else if (channel === 'unread-count') countReports.push(payload);
+  else if (channel === 'invite-unresolved') inviteFallbacks.push(payload);
 };
 const on = (channel, fn) => handlers.set(channel, fn);
 const push = (channel, payload) => {
@@ -274,6 +281,11 @@ class MockEvent {
   constructor(type) { this.type = type; }
 }
 
+/* WhatsApp's own modules, as far as any check needs them to exist. Empty until
+   one fills it in: a page script asking for a name nobody has put here is a page
+   script asking for something it cannot have in production either. */
+const waModules = Object.create(null);
+
 const sandbox = {
   document, console,
   navigator: { userAgent: 'test' },
@@ -300,11 +312,18 @@ const sandbox = {
   require: name => {
     if (name === '../wording.js') return require('../src/wording.js');
     /* The store module is real, and it is asked for here for one reason: to be
-       given a page with no window.require on it, so it never resolves and the
-       watcher below stays in charge. That is the fallback this rig exists to
-       exercise -- what the client does on the day WhatsApp renames a module. */
+       given a registry that answers for none of the names it needs, so it never
+       resolves and the watcher below stays in charge. That is the fallback this
+       rig exists to exercise -- what the client does on the day WhatsApp renames
+       a module. */
     if (name === './store.js') return require('../src/page/store.js');
     if (name === './media.js') return require('../src/page/media.js');
+    /* Anything else is a name out of WhatsApp's own registry, which the page
+       reaches for through this same require -- contextIsolation is off, so
+       window.require IS Meta's. The rig answers for a name only once a check has
+       put something under it, and throws otherwise, which is what Meta's require
+       does with a module it does not know. */
+    if (Object.prototype.hasOwnProperty.call(waModules, name)) return waModules[name];
     throw new Error('the page script may not require ' + name);
   },
 };
@@ -896,6 +915,72 @@ const check = (label, got, want) => {
         dispatched.length ? dispatched[0].on.parentNode : null, twinB);
 
   twinA.remove(); twinB.remove();
+
+  /* ---------------------------------------------------------- group invites */
+
+  /*
+   * A group invite link, followed from a browser: WhatsApp's own join dialog,
+   * put up over the chat list rather than paid for with a page load.
+   *
+   * What this rig holds still is the part that was got wrong first. Asked while
+   * WhatsApp is still booting -- which is exactly when a link that STARTED the
+   * client arrives -- ModalManager takes the call and nothing appears; sampled
+   * every 200ms through a cold start, the dialog was never on the page for a
+   * single frame. So the page waits for the chat list, and these are the checks
+   * that it waits, that it asks again if the dialog still did not arrive, and
+   * that it does not ask twice over one that did.
+   */
+  waModules['react'] = { createElement: (type, props) => ({ type, props }) };
+  waModules['WAWebGroupInviteLinkModalLoadable.react'] = {
+    WAWebGroupInviteLinkModalLoadable: function GroupInviteLinkModal() {},
+  };
+
+  const asked = [];
+  let modalLands = true;
+  const dialog = el('div', { role: 'dialog' });
+  waModules['WAWebModalManager'] = {
+    ModalManager: {
+      open: (element, options) => {
+        asked.push({ element, options });
+        if (modalLands) root.append(dialog);
+      },
+    },
+  };
+
+  pane.remove();
+  push('open-invite', { code: 'IZ4FM0ZHJRN7hMFsxlQTcx' });
+  await sleep(600);
+  check('an invite waits while WhatsApp has not drawn a chat list yet', asked.length, 0);
+
+  root.append(pane);
+  await sleep(600);
+  check('and goes up as WhatsApp\'s own dialog once it has', asked.length, 1);
+  check('carrying the code the link came with',
+        asked.length ? asked[0].element.props.groupCode : null, 'IZ4FM0ZHJRN7hMFsxlQTcx');
+  check('and the source the live page passes for one',
+        asked.length ? asked[0].element.props.source : null, 'invite_link');
+
+  await sleep(INVITE_SETTLE_MS + 200);
+  check('a dialog that arrived is not asked for a second time', asked.length, 1);
+
+  /* And the same again with a ModalManager that swallows it, which is the cold
+     start this was written for. */
+  asked.length = 0;
+  modalLands = false;
+  dialog.remove();
+  push('open-invite', { code: 'IZ4FM0ZHJRN7hMFsxlQTcx' });
+  await sleep(600);
+  check('one that did not arrive is asked for once more', asked.length, 1);
+  await sleep(INVITE_SETTLE_MS + 200);
+  check('and it is', asked.length, 2);
+  await sleep(INVITE_SETTLE_MS + 200);
+  check('once more, and once only', asked.length, 2);
+  check('and the app is asked for WhatsApp\'s own page instead',
+        inviteFallbacks.length ? inviteFallbacks[0].code : null, 'IZ4FM0ZHJRN7hMFsxlQTcx');
+
+  push('open-invite', { code: '' });
+  await sleep(600);
+  check('a link with no code in it asks for nothing', asked.length, 2);
 
   console.log(failures ? '\n' + failures + ' failed' : '\nall checks pass');
   process.exit(failures ? 1 : 0);
