@@ -82,9 +82,11 @@ check('"replied to you" is a mark on the message, not the person who wrote it',
       readBody('Replied to you: ~Ahmed: جميل').sender, 'Ahmed');
 check('and the message is what they actually said',
       readBody('Replied to you: ~Ahmed: جميل').message, 'جميل');
-/* On a line of its own, above the sender, which is where the phone puts it. */
+/* On a line of its own, above the sender, which is where the phone puts it. The
+   break is not written here: bidi.stack joins the two, and it is the only thing
+   that knows which character a notification daemon will keep. */
 check('and the mark travels separately, to go on the line above',
-      readBody('Replied to you: ~Ahmed: جميل').mark, REPLY_MARK + '\n');
+      readBody('Replied to you: ~Ahmed: جميل').mark, REPLY_MARK);
 /* In words. It was an arrow, and a machine without the text form of U+21A9 in
    any of its fonts drew an empty box in the one place a banner explains why it
    is louder than the chat's own settings. */
@@ -92,7 +94,7 @@ check('and it is words, with nothing in it that a font can fail to draw',
       /^[\x20-\x7E]+$/.test(REPLY_MARK), true);
 
 check('a mention says so as well, keeping the sign WhatsApp uses for one',
-      readBody('Mentioned you: Ahmed: يا عبدالله').mark, MENTION_MARK + '\n');
+      readBody('Mentioned you: Ahmed: يا عبدالله').mark, MENTION_MARK);
 check('and it too leaves the sender where a sender belongs',
       readBody('Mentioned you: Ahmed: يا عبدالله').sender, 'Ahmed');
 

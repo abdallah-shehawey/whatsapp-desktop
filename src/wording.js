@@ -154,8 +154,14 @@ const pushName = name => String(name == null ? '' : name).replace(/^~\s*/, '').t
    U+21A9 the shell drew it as an empty box: a banner that said a message was
    aimed at you with a shape that means nothing. A word cannot fall back to
    nothing. The @ stays because it is ASCII and every font has it. */
-const MENTION_MARK = '@ You were mentioned';
-const REPLY_MARK = 'You got a reply';
+/* Each ends in a colon and each stands on a line of its own, which is what the
+   colon is there to promise: the thing it introduces is under it, not after it.
+   "ما تخلي دي في السطر الاول لواحده وبعدين نقطتين وبعدها الرساله في السطر اللي
+   بعده". The line under it is the sender and the message; joining the two is
+   bidi.stack's job, and it is the only thing that knows which character the
+   notification daemon will keep. */
+const MENTION_MARK = '@ You were mentioned:';
+const REPLY_MARK = 'You got a reply:';
 
 /* What WhatsApp puts in front of the sender when a message is aimed at the user
    in particular. It is not a name, and the split below read it as one: a banner
@@ -163,8 +169,8 @@ const REPLY_MARK = 'You got a reply';
    the place a sender belongs. Lifted off and turned back into what it is -- a
    mark on the message -- which is how the phone shows it too. */
 const AIMED_AT_US = [
-  { text: /^(?:replied to you|رد عليك)\s*[:\u061b\u003a]\s*/i, mark: REPLY_MARK + '\n' },
-  { text: /^(?:mentioned you|ذكرك)\s*[:\u061b\u003a]\s*/i,     mark: MENTION_MARK + '\n' },
+  { text: /^(?:replied to you|رد عليك)\s*[:\u061b\u003a]\s*/i, mark: REPLY_MARK },
+  { text: /^(?:mentioned you|ذكرك)\s*[:\u061b\u003a]\s*/i,     mark: MENTION_MARK },
 ];
 
 /* Whether the run in front of a colon can be somebody's name.

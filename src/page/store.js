@@ -43,6 +43,7 @@
 'use strict';
 
 const wording = require('../wording.js');
+const bidi = require('../bidi.js');
 
 /* How old a message may be and still be news. WhatsApp adds history to the
    collection as it syncs, with isNewMsg set on all of it, so the timestamp is
@@ -462,7 +463,15 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     users.sort((a, b) => b.user.length - a.user.length);
     for (const { user, name } of users) {
       if (!name || name === user) continue;
-      out = out.split('@' + user).join(atPrefix(name));
+      /* Isolated, because a mention is a thing and not a word. WhatsApp draws
+         one as its own element, so it contributes no direction to the line it
+         sits in -- an Arabic message that OPENS with a Latin @name is still an
+         Arabic message, and the bubble draws it right to left. Written flat into
+         the banner instead, that name was the first strong character in the
+         text and turned the whole message round. FSI..PDI says the same thing
+         to Pango that the element says to the browser, and directionOf skips it
+         for the same reason. */
+      out = out.split('@' + user).join(bidi.isolate(atPrefix(name)));
     }
     return out;
   };

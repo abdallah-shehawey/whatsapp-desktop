@@ -239,7 +239,7 @@ const install = (getWindow, getBanners, actions = {}) => {
          '\u0639\u0634\u0627\u0646 \u0646\u0634\u0648\u0641 \u0627\u0644\u0633\u0637\u0631 ' +
          '\u0627\u0644\u062A\u0627\u0646\u064A \u0628\u064A\u0628\u062F\u0623 \u0645\u0646 ' +
          '\u0641\u064A\u0646', ''],
-        ['\u062A\u0645\u0627\u0645 \u064A\u0627 \u0645\u0639\u0644\u0645', wording.REPLY_MARK + '\n'],
+        ['\u062A\u0645\u0627\u0645 \u064A\u0627 \u0645\u0639\u0644\u0645', wording.REPLY_MARK],
         /* Several lines, and not all of them the same way round. One mark at the
            head of a banner only ever settles its first line -- a newline ends a
            bidi paragraph -- so this is the one that catches a line reverting to
@@ -255,7 +255,7 @@ const install = (getWindow, getBanners, actions = {}) => {
           identity: 'debug' + Date.now() + (n++),
           key: '__debug__',
           title: bidi.paragraph('WhatsApp \u2014 test'),
-          body: mark + bidi.line('Ahmed', message),
+          body: bidi.stack(bidi.paragraph(mark), bidi.line('Ahmed', message)),
         });
       }
       console.log('debug: raised %d banners, one per kind', n);
