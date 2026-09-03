@@ -86,6 +86,26 @@ const ARABIC_CLIP = `
  *         span   "last line, no newline"    Those pieces are display:block --
  *       span[aria-hidden] "6:03 PM"         except the last, which stays inline.
  *
+ * A PICTURE'S CAPTION is the same body in a different place, and that is why
+ * the rules below are not scoped to #main and not scoped to div.copyable-text
+ * either. Measured on the live client, in the conversation and in the viewer
+ * that opens when the picture is clicked:
+ *
+ *   div                                     -- plain, direction ltr
+ *     span.selectable-text.copyable-text     -- INLINE, isolate, pre-wrap
+ *       span "first line\n" ...              the same line spans as above
+ *
+ * The class that says "this is a message body" is on the SPAN here and there is
+ * no div.copyable-text immediately above it -- the bubble's is three divs up,
+ * and the media viewer is mounted outside #main altogether. So the selector
+ * that fixed a bubble reached neither of them, and an Arabic caption wrapped
+ * the wrong way round in both: "لما حد بعت صوره وبعدها كلام السطر التاني جه
+ * شمال مع انه بييجي يمين". Naming the span rather than its ancestors reaches
+ * every one of the three, and it was checked against what else carries those
+ * classes: 75 of them on a loaded page, 21 message bodies and 54 nested inside
+ * one -- a link, a mention, a bold run -- which the child combinator excludes,
+ * and the composer, which is a <p> under [contenteditable].
+ *
  * Three separate faults, and each needs a different half of the rules below.
  *
  * ONE. WhatsApp marks a line dir="rtl" when it runs the other way from the
@@ -138,10 +158,17 @@ const ARABIC_CLIP = `
  * origin, where a normal declaration loses to the page's own. Only an important
  * one at user origin outranks an author rule -- which `text-align: end` is.
  */
+/* A message body wherever it is drawn: a bubble, a picture's caption under it,
+   and the caption again in the viewer the picture opens into. WhatsApp puts
+   both classes on the one span and nests the links, mentions and bold runs
+   inside it under spans of their own, which the child combinator leaves alone.
+   The composer is a <p>, and [contenteditable] keeps this off it either way. */
+const BODY = 'div:not([contenteditable]) > span.selectable-text.copyable-text';
+
 const MESSAGE_BIDI = `
 /* The body of a message: a box of its own, aligned to the start of the
    direction WhatsApp worked out for it. */
-#main div.copyable-text:not([contenteditable]) > div > span.selectable-text {
+${BODY} {
   display: block !important;
   unicode-bidi: isolate !important;
   text-align: start !important;
@@ -149,9 +176,9 @@ const MESSAGE_BIDI = `
 /* Each line in it: its own direction, from its own first strong character, and
    the start margin of that direction. Arabic right, English left, whatever
    either of them happens to begin with. */
-#main div.copyable-text:not([contenteditable]) > div > span.selectable-text > span,
-#main div.copyable-text:not([contenteditable]) > div > span.selectable-text ul,
-#main div.copyable-text:not([contenteditable]) > div > span.selectable-text li {
+${BODY} > span,
+${BODY} ul,
+${BODY} li {
   unicode-bidi: plaintext !important;
   text-align: start !important;
 }
@@ -183,17 +210,17 @@ const MESSAGE_BIDI = `
  * answer exists. An ordered list is deliberately not included: its numbers are
  * real ::markers and it was measured NOT to overflow when its items run
  * right-to-left. */
-#main div.copyable-text:not([contenteditable]) > div > span.selectable-text ul:has(> li:dir(rtl)) {
+${BODY} ul:has(> li:dir(rtl)) {
   direction: rtl !important;
 }
-#main div.copyable-text:not([contenteditable]) > div > span.selectable-text li:dir(rtl) {
+${BODY} li:dir(rtl) {
   padding-left: 0 !important;
   padding-right: 12px !important;
 }
 /* And the gap between a bullet and its words, which WhatsApp writes as
    margin-right -- the far side of the bullet once the line reads the other
    way. The logical form is the same 4px in a left-to-right list. */
-#main div.copyable-text:not([contenteditable]) > div > span.selectable-text li::before {
+${BODY} li::before {
   margin-right: 0 !important;
   margin-inline-end: 4px !important;
 }

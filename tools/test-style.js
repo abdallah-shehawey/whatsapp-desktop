@@ -25,11 +25,16 @@ assert.match(shipped, /\[contenteditable="true"\][\s\S]*padding-bottom: 0\.35em 
    strong character. `isolate` on the body and `plaintext` on the lines, never
    the other way round -- plaintext on an inline box hides the only Arabic in it
    from the paragraph around it, and text-align: start then resolves to left. */
-const body = shipped.slice(shipped.indexOf('> div > span.selectable-text {'));
+const body = shipped.slice(shipped.indexOf('span.selectable-text.copyable-text {'));
 assert.match(body, /display: block !important/);
 assert.match(body, /unicode-bidi: isolate !important/);
 assert.doesNotMatch(body.slice(0, body.indexOf('}')), /plaintext/);
-const lines = shipped.slice(shipped.indexOf('> div > span.selectable-text > span'));
+/* And it is the SPAN that is named, with no #main and no div.copyable-text in
+   front of it. A picture's caption is the same body under three plain divs, and
+   its viewer is mounted outside #main -- the scoped selector this replaced
+   reached neither, so an Arabic caption wrapped flush left in both. */
+assert.doesNotMatch(body.slice(0, body.indexOf('{')), /#main|div\.copyable-text/);
+const lines = shipped.slice(shipped.indexOf('span.selectable-text.copyable-text > span'));
 assert.match(lines, /unicode-bidi: plaintext !important/);
 /* text-align: start, never `right` -- an English line inside an Arabic message
    belongs on the left, which is the whole point of doing this per line. */
