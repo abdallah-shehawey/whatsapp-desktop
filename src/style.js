@@ -275,10 +275,45 @@ ${BODY} li::before {
   unicode-bidi: plaintext !important;
   text-align: start !important;
 }
-/* A quoted reply and the chat list, where the preview is a span[title] inside a
-   block the page leaves left-to-right. */
-#pane-side div:has(> span[title][dir="rtl"]) {
-  text-align: right;
+/* The chat list, which is a left-to-right list and stays one.
+ *
+ * A conversation is the words themselves and they are laid out the way they
+ * read; the list beside it is furniture -- a column of rows with a picture at
+ * one end, a name at the top and a time at the other end -- and that column is
+ * drawn left-to-right whatever the names in it happen to be. Arabic names were
+ * hanging off the right margin while the English ones started at the left, so
+ * there was no column at all: "خلي مكان الاسماء في نفس مكان الانجليزي ... بس
+ * يكون مكتوب صح".
+ *
+ * MEASURED on the live list, 2026-09-03, because the shape is not what a first
+ * guess says it is:
+ *
+ *   span[title][dir="auto"]   the NAME. display: BLOCK, so it fills the row and
+ *                             places its own text; direction resolves per name,
+ *                             rtl for an Arabic one. WhatsApp aligns it to the
+ *                             START of that direction, which on an Arabic name
+ *                             is the RIGHT margin. There is no dir="rtl" anywhere
+ *                             in this pane -- a rule written for one matches
+ *                             nothing, which is what the rule this replaced did.
+ *   span[title] with NO dir   the PREVIEW. A flex box the page leaves ltr, with
+ *                             the message wrapped in explicit bidi controls, so
+ *                             it already starts at the left and needs nothing.
+ *
+ * Text extents, before -- Range.selectNodeContents on each name, against its own
+ * box: every Arabic name sat 0px off the RIGHT edge (28, 80, 180, 221, 244px of
+ * empty box to its left), every Latin one 0px off the left.
+ *
+ * So the box is left-aligned and NOTHING is said about direction: the span keeps
+ * the direction WhatsApp worked out, the words are still ordered right to left
+ * and still shaped, and a name too long for the row still fills it and is cut
+ * at its own end. Alignment is where the text sits in the box; direction is
+ * what the letters do. Only the first is being answered here.
+ *
+ * !important because this sheet is at user origin, where a normal declaration
+ * loses to the page's own -- and the alignment being corrected here is the
+ * page's own. */
+#pane-side span[title][dir] {
+  text-align: left !important;
 }`;
 
 /*
@@ -380,97 +415,6 @@ const DRAWER_MOTION = `
 #app [data-testid="drawer-right"] {
   animation-duration: 1ms !important;
   animation-delay: 0s !important;
-}`;
-
-/*
- * The size of the text in a conversation, on its own.
- *
- * WhatsApp Web draws a message at 0.888rem -- 14.2px against the 16px root this
- * client sets -- in a line box of 19px, and the composer at 15px in a box of
- * 1.47em. `view.font-size` already scales all of that, and everything else with
- * it: the chat list, the headers, the menus. This is the other knob, the one the
- * phone has: bigger words in the conversation and a chat list left where it was.
- *
- * In rem rather than px, so it still follows `view.font-size`, and as one
- * absolute value rather than a multiplier on the way down: these classes NEST --
- * 45 of the 72 in a live conversation sit inside another -- and an `em` factor
- * on each of them would compound to a different size per level of nesting.
- *
- * The line box has to be reset with the size or the taller text is drawn into
- * the 19px box WhatsApp pinned it to. It is set on the same elements that carry
- * the size, which is what the Arabic clip below could not do -- there the size
- * stays as it is, and raising the line box alone shears the line.
- *
- * The composer gets the size and NOT the line box: its own is set in em, so it
- * follows on its own, and a line box pinned there is what made every keystroke
- * scroll the caret back into view.
- *
- * A community thread counts as a conversation here. Its panel is outside #main,
- * so it was left at WhatsApp's own 14.2px while the chat behind it was drawn at
- * the asked-for size -- measured with view.chat-font-size at 110: 15.6px in the
- * conversation, 15.0px in the reply box beneath it, 14.2px in the replies. It is
- * the same words in the same conversation, so it follows the same knob. The
- * panel is found by the rows it holds rather than by its own marker, which is
- * the thoroughly generic `confirm-popup`.
- *
- * Nothing at all is emitted at 100%, so the default page is the page WhatsApp
- * drew.
- */
-const MESSAGE_TEXT_REM = 0.888;   // WhatsApp's own: 14.2px against a 16px root
-
-const THREAD = '[data-testid="popup-contents"]:has([data-testid="comment-row"])';
-
-const CHAT_TEXT_SELECTORS = `
-#main [data-testid="conversation-panel-messages"] .copyable-text,
-#main [data-testid="conversation-panel-messages"] .selectable-text,
-#main [data-tab="conversation-panel-messages"] .copyable-text,
-#main [data-tab="conversation-panel-messages"] .selectable-text,
-[data-testid="comment-row"] .selectable-text`;
-
-const COMPOSER_SELECTORS = `
-#main [contenteditable="true"],
-#main [contenteditable="true"] p,
-${THREAD} [contenteditable="true"],
-${THREAD} [contenteditable="true"] p`;
-
-const scaled = value => {
-  const factor = Number(value) / 100;
-  return Number.isFinite(factor) && Math.abs(factor - 1) >= 0.005 ? factor : 0;
-};
-
-const chatText = scale => {
-  const factor = scaled(scale);
-  if (!factor) return '';
-  const size = `calc(${MESSAGE_TEXT_REM}rem * ${factor.toFixed(2)})`;
-  return `${CHAT_TEXT_SELECTORS} {
-  font-size: ${size} !important;
-  line-height: 1.35 !important;
-}
-${COMPOSER_SELECTORS} {
-  font-size: ${size} !important;
-}`;
-};
-
-/* Putting a size back is not the same as never having set one.
- *
- * A user stylesheet cannot be taken out of the page again. Measured on the live
- * client: insertCSS at user origin returns a key, removeInsertedCSS resolves for
- * that key without complaint, and the rules are STILL applied afterwards --
- * checked by computed style, twice, with the conversation reopened in between.
- * So every sheet this client has ever inserted is still in the cascade, and the
- * newest one only wins because it is the newest.
- *
- * Which is why "back to 100%" cannot be expressed by leaving the rule out: the
- * sheet that said 110% is still there and still says it. It has to be overruled
- * by name, and `revert` is what says "whatever WhatsApp itself asked for" --
- * per element, so a quoted reply and a caption keep the sizes of their own that
- * one flat value would have flattened.
- *
- * Emitted only when the last sheet did set a size, so a client that has never
- * been asked for one carries no rule at all. */
-const chatTextRevert = () => `${CHAT_TEXT_SELECTORS},${COMPOSER_SELECTORS} {
-  font-size: revert !important;
-  line-height: revert !important;
 }`;
 
 /*
@@ -610,13 +554,19 @@ html {
   return rules.join('\n') + belt;
 };
 
-/* `before` is what the last sheet was built from, and it is not bookkeeping for
-   its own sake: see chatTextRevert -- a sheet that is in the page is in it for
-   good, so anything that was switched on has to be switched off by name. */
-const build = ({ fontSize, chatScale }, before) => {
-  /* ARABIC_CLIP, MESSAGE_BIDI and ICON_FIT are unconditional, so nothing here
-     has to be written back out to undo them -- which is the whole reason
-     `before` exists for the rules that are not. */
+/*
+ * Every rule in this sheet is unconditional now, so nothing has to be written
+ * back out to undo it -- which is what the second argument used to be for.
+ *
+ * It is kept, and it is not dead weight: a sheet inserted at user origin cannot
+ * be taken out of the page again (measured -- insertCSS returns a key,
+ * removeInsertedCSS resolves for it, and the rules are still applied), so the
+ * day a rule here becomes a switch again, "off" has to be a rule that
+ * contradicts it by name and this is where the last sheet's options arrive.
+ * That was the whole shape of the conversation-text size that lived here until
+ * 2026-09-03, when it came out of the settings for good.
+ */
+const build = ({ fontSize }, before) => {
   const rules = [CONVERSATION_SCROLL, DRAWER_MOTION, ARABIC_CLIP, MESSAGE_BIDI, ICON_FIT];
 
   /* There is no font rule here any more, and that is the point. Forcing the
@@ -634,10 +584,6 @@ const build = ({ fontSize, chatScale }, before) => {
      in the one place this client could least afford it. */
 
   if (fontSize) rules.push(`html { font-size: ${fontSize}px !important; }`);
-
-  const chat = chatText(chatScale);
-  if (chat) rules.push(chat);
-  else if (before && scaled(before.chatScale)) rules.push(chatTextRevert());
 
   return rules.join('\n');
 };

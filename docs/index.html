@@ -163,8 +163,9 @@
         <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg></div>
         <h3>Dark, light, or whatever the desktop is</h3>
         <p>One Settings window — <kbd>Ctrl</kbd>+<kbd>,</kbd> or the tray menu — with the
-        theme, the text size, start-at-login, what closing the window does, and which
-        sounds you want. No text editor anywhere.</p>
+        theme, the zoom, start-at-login, what closing the window does, and which sounds
+        you want; the fonts have a window of their own beside it. No text editor
+        anywhere.</p>
       </article>
 
       <article class="card feat">
@@ -179,7 +180,7 @@
 
     <div class="showcase">
       <figure>
-        <img src="assets/settings.png" alt="The whatsapp-desktop Settings window: theme, startup and tray, notification sounds, zoom and chat font size." width="520" height="950" loading="lazy" decoding="async">
+        <img src="assets/settings.png" alt="The whatsapp-desktop Settings window: theme, startup and tray, notification sounds, and zoom." width="520" height="950" loading="lazy" decoding="async">
       </figure>
       <div class="showcase-copy">
         <h3>Everything is a switch</h3>
@@ -214,9 +215,9 @@
           <dd>Scales the whole interface, pictures and spacing and all — the same as
           <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd>.</dd>
 
-          <dt>Chat Font Size</dt>
-          <dd>The words in a conversation only: bigger messages, and a chat list that
-          stays the size it is.</dd>
+          <dt>Fonts</dt>
+          <dd>A window of its own, on the tray's <em>Fonts…</em>: a family, a size and a
+          weight for Latin and for Arabic, each on its own, with a preview of both.</dd>
 
         </dl>
         <p class="note">All of it lands in
@@ -538,9 +539,8 @@ sudo pacman -U ./whatsapp-desktop-*.pkg.tar.zst  <span class="c"># Arch</span></
           <tbody>
             <tr><td><code>[view] font</code></td><td>GNOME's</td><td>family for everything the client draws</td></tr>
             <tr><td><code>[view] font-size</code></td><td><code>16</code></td><td>size of the whole interface, in px</td></tr>
-            <tr><td><code>[view] chat-font-size</code></td><td><code>100</code></td><td>size of the messages only, as a %</td></tr>
             <tr><td><code>[fonts] latin-inherit</code>, <code>arabic-inherit</code></td><td><code>true</code></td><td>each script follows the system font until you say otherwise</td></tr>
-            <tr><td><code>[fonts] latin-family</code>, <code>arabic-family</code></td><td>the system's own</td><td>a font per script, chosen in Settings</td></tr>
+            <tr><td><code>[fonts] latin-family</code>, <code>arabic-family</code></td><td>the system's own</td><td>a font per script, chosen in the Fonts window</td></tr>
             <tr><td><code>[fonts] latin-size</code>, <code>arabic-size</code></td><td><code>100</code></td><td>each script's size, as a % of its own</td></tr>
             <tr><td><code>[fonts] latin-bold</code>, <code>arabic-bold</code>, and the italics</td><td><code>false</code></td><td>the family's own bold or italic face</td></tr>
             <tr><td><code>[view] zoom</code></td><td><code>1.0</code></td><td>also set with <kbd>Ctrl</kbd>+<kbd>+</kbd>/<kbd>-</kbd></td></tr>

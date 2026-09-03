@@ -22,7 +22,6 @@ ipcMain.handle('settings:get', () => ({
   outgoingSound: false,
   zoom: 1.0,
   fontSize: 16,
-  chatFontSize: 100,
   font: desktop.interfaceFont(),
   fonts: {
     desktop: desktop.interfaceFont(),
@@ -37,12 +36,19 @@ ipcMain.handle('settings:set-autostart', () => true);
 ipcMain.handle('settings:set', () => true);
 ipcMain.on('settings:close', () => {});
 
-app.whenReady().then(() => {
+/* Both of the client's own windows, at the sizes the client itself opens them
+   at -- see openSettings and openFonts in src/main.js. The fonts left the
+   settings window on 2026-09-03, so a single picture is no longer the whole of
+   what this client can be told. */
+const WINDOWS = [
+  { name: 'settings', file: 'settings.html', width: 560, height: 660 },
+  { name: 'fonts', file: 'fonts.html', width: 560, height: 720 },
+];
+
+const shoot = ({ name, file, width, height }, ssDir) => new Promise(resolve => {
   const win = new BrowserWindow({
-    /* The size the client itself opens this window at (see openSettings), so
-       the picture on the landing page is the window, not a rendering of it. */
-    width: 560,
-    height: 660,
+    width,
+    height,
     /* Frameless, like the window the client opens: capturePage takes the web
        contents, and a frame here would only shrink them. */
     frame: false,
@@ -58,21 +64,34 @@ app.whenReady().then(() => {
     }
   });
 
-  const ssDir = path.join(__dirname, '../screenshots');
-  if (!fs.existsSync(ssDir)) fs.mkdirSync(ssDir, { recursive: true });
+  win.loadFile(path.join(__dirname, '../src', file));
 
-  win.loadFile(path.join(__dirname, '../src/settings.html'));
-
-  win.webContents.on('did-finish-load', async () => {
+  win.webContents.on('did-finish-load', () => {
     setTimeout(async () => {
       try {
         const image = await win.webContents.capturePage();
-        fs.writeFileSync(path.join(ssDir, 'settings.png'), image.toPNG());
-        console.log('CAPTURED_OK');
+        fs.writeFileSync(path.join(ssDir, name + '.png'), image.toPNG());
+        console.log('CAPTURED_OK %s', name);
       } catch (e) {
         console.error('Capture error:', e);
       }
-      app.exit(0);
+      win.destroy();
+      resolve();
     }, 1000);
   });
+});
+
+/* Two windows, one after the other -- and Electron quits by itself the moment
+   the last one closes, which is exactly the gap between them. Held open here so
+   the second picture is taken at all. */
+app.on('window-all-closed', () => {});
+
+app.whenReady().then(async () => {
+  const ssDir = path.join(__dirname, '../screenshots');
+  if (!fs.existsSync(ssDir)) fs.mkdirSync(ssDir, { recursive: true });
+
+  /* One at a time: two windows up together would be two pictures of whichever
+     of them the compositor decided to paint. */
+  for (const window of WINDOWS) await shoot(window, ssDir);
+  app.exit(0);
 });

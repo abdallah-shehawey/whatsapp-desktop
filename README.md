@@ -1,6 +1,23 @@
-# whatsapp-desktop
+<p align="center">
+  <img src="docs/assets/icon-256.png" alt="" width="96" height="96">
+</p>
 
-WhatsApp for Linux: the web client in a desktop window of its own, on Chromium.
+<h1 align="center">whatsapp-desktop</h1>
+
+<p align="center">
+  WhatsApp for Linux — the web client in a <b>desktop window of its own</b>, on Chromium.<br>
+  Lives in the tray, notifies like a native application, and reads Arabic the way Arabic reads.
+</p>
+
+<p align="center">
+  <a href="https://abdallah-shehawey.github.io/whatsapp-desktop/"><img alt="website" src="https://img.shields.io/badge/site-abdallah--shehawey.github.io%2Fwhatsapp--desktop-38bdf8"></a>
+  <a href="https://abdallah-shehawey.github.io/shinux-repo/"><img alt="packages" src="https://img.shields.io/badge/packages-rpm%20%7C%20deb%20%7C%20arch-f59e0b"></a>
+  <img alt="built on" src="https://img.shields.io/badge/built%20on-Electron%2040-22c55e">
+  <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0-64748b">
+</p>
+
+---
+
 It loads `web.whatsapp.com`, so it is the same client WhatsApp serves to a
 browser — no reverse-engineered protocol, and nothing that puts an account at
 risk.
@@ -23,13 +40,12 @@ the latest release.
   first at login.
 - **A font for English and a font for Arabic** — family, size, bold and italic
   for each, chosen from what is installed, each with its own "use the system
-  font" switch. It costs nothing per element: the two scripts are two
-  `@font-face` faces of one family, split by `unicode-range`, so there is no
-  rule matching every element on a scrolling page.
+  font" switch, in a window of their own on the tray's *Fonts…*. It costs
+  nothing per element: the two scripts are two `@font-face` faces of one
+  family, split by `unicode-range`, so there is no rule matching every element
+  on a scrolling page.
 - **Draws everything in the desktop's font**, applied live when you change it,
-  and the conversation's own text size is a switch of its own: bigger or
-  smaller messages with the chat list left where it was. A community thread
-  counts as a conversation here, replies and reply box both.
+  down to the client's own windows.
 - **One notification per message**, with the sender, the text and the sender's
   picture, a click that opens that conversation, and a withdrawal the moment you
   open the chat or read it on your phone. Each message is its own entry rather
@@ -47,12 +63,19 @@ the latest release.
   “6 replies” is built nothing like a bubble and had to be taught separately.
   Descenders get the room WhatsApp's line boxes do not leave them, and the
   timestamp is kept off the last line of the text instead of landing on top of
-  it. None of this is a switch: it is how the client draws a conversation.
+  it. The chat list is the exception, on purpose: it is a column of rows rather
+  than words to be read, so an Arabic name sits exactly where an English one
+  does and only the letters inside it run the other way. None of this is a
+  switch: it is how the client draws a conversation.
 - **Banners come down on the client's own clock.** GNOME shows one at a time,
   queues three behind it and drops the rest, so each banner is closed after
   twelve seconds and refiled silently in the notification centre.
 - **Voice and video calls work out of the box.** Full WebRTC support for microphone and camera with automatic device permissions and Linux-specific rendering fixes.
-- **Built-in Settings & Theme Switcher.** Switch between System Default, Dark Mode, and Light Mode, toggle Autostart at login, and configure tray behavior from the dedicated Settings window (`Ctrl+,`) or directly from the tray menu.
+- **Two windows of switches, and no text editor.** Settings (`Ctrl+,`, or the
+  tray) has the theme — system, dark or light — start-at-login, what closing
+  the window does, which sounds you want and the zoom; *Fonts…* has the two
+  scripts. Everything lands the moment you set it. The tray menu itself is four
+  items and stays that way.
 - **Says when a new version is out.** *About WhatsApp* in the tray menu has the
   version running, a check against the latest release and a link to the site;
   the client also looks once a day by itself, and the tray item names the
@@ -65,7 +88,8 @@ the latest release.
   remembered. `Esc` closes the emoji panel whether or not you picked one.
 
 <p align="center">
-  <img src="screenshots/settings.png" alt="WhatsApp Desktop Settings" width="420" />
+  <img src="screenshots/settings.png" alt="The Settings window: theme, startup and tray, notifications, zoom" width="380" />
+  <img src="screenshots/fonts.png" alt="The Fonts window: a family, a size and a weight for Latin and for Arabic" width="380" />
 </p>
 
 ## Install
@@ -116,7 +140,6 @@ make test       # replays a chat list past the watcher, no browser needed
 |---|---|---|
 | `[view] font` | the GNOME interface font | family for everything the client draws |
 | `[view] font-size` | `16` | root font size in pixels — WhatsApp sizes in rem |
-| `[view] chat-font-size` | `100` | the conversation's text, as a percentage of WhatsApp's own |
 | `[view] zoom` | `1.0` | also set with `Ctrl` `+`/`-` |
 | `[view] force-font` | `true` | draw the page in one family |
 | `[fonts] latin-inherit` | `true` | Latin follows the desktop font; off to choose one |
@@ -149,13 +172,14 @@ State lives in `~/.local/share/whatsapp-desktop`.
 | `src/page/inject.js` | the chat-list watcher and the notification shim, in WhatsApp's own world |
 | `src/notify.js` | the banner policy |
 | `src/style.js` | the user stylesheet — the font, and the room Arabic needs |
+| `src/settings.html`, `src/fonts.html` | the two windows of switches, and `src/window.css`, which is the look of both |
 | `src/about.html` | the About window, and the update check it shows |
 | `src/update.js` | asks GitHub for the latest release, and compares |
 | `src/fonts.js`, `src/tray.js`, `src/config.js`, `src/desktop.js`, `src/sound.js`, `src/debug.js` | |
 | `tools/make-icons.py` | regenerates `data/icons` — `make icons`, never hand-edit the PNGs |
 | `tools/make-og.py` | redraws the site's link-preview card — `make og` |
 | `docs/` | the landing page, served by GitHub Pages from `main` |
-| `tools/test-inject.js`, `tools/test-style.js` | `make test` |
+| `tools/test-inject.js`, `tools/test-style.js`, `tools/test-settings.js` | `make test` |
 
 ## Notifications, when they do not appear
 
@@ -177,10 +201,11 @@ WHATSAPP_DEBUG_EVAL=/tmp/eval.js whatsapp-desktop
 
 Whatever lands in that file is evaluated in the live page. Some words are
 commands to the app instead: `#snapshot`, `#hide`, `#show`, `#state`, `#gpu`,
-`#tone`, `#about`, and `#scroll <selector>` — sixty real wheel events with the
-page's long tasks sampled around them. Give `#scroll` the selector; left to pick
-a scroller itself it can measure one element while the wheel turns over another.
-`#snapshot about` photographs the About window rather than the page, and
+`#tone`, `#about`, `#settings`, `#fonts`, and `#scroll <selector>` — sixty real
+wheel events with the page's long tasks sampled around them. Give `#scroll` the
+selector; left to pick a scroller itself it can measure one element while the
+wheel turns over another. `#snapshot about`, `#snapshot settings` and
+`#snapshot fonts` photograph the client's own windows rather than the page, and
 `#update 1.0.0` asks GitHub as though this were an older release, which is the
 only way to see what a client with a version waiting for it looks like —
 `#update off` puts the real one back.

@@ -54,9 +54,9 @@ const build = () => {
     onToggle: () => ran.push('toggle'),
     onQuit: () => ran.push('quit'),
     onSettings: () => ran.push('settings'),
+    onFonts: () => ran.push('fonts'),
     onAbout: () => ran.push('about'),
     getUpdate: () => update.found,
-    getTheme: () => 'system',
     getInFront: () => window.inFront,
   });
   /* The item is told where the window is as the window moves, exactly as
@@ -169,6 +169,17 @@ const build = () => {
   check('About opens the about window', t.ran.join(), 'about');
 }
 
+/* The two windows this menu opens, each on its own item and each opening the
+   window it names -- Fonts is not Settings scrolled somewhere. */
+{
+  const t = build();
+  t.tray.handle(ID.SETTINGS, 'clicked');
+  t.tray.handle(ID.FONTS, 'clicked');
+  check('Settings and Fonts open a window each', t.ran.join(), 'settings,fonts');
+  check('and Fonts is on the menu, under Settings',
+        t.labelOf(ID.FONTS), 'Fonts…');
+}
+
 /*
  * The one thing this menu announces. Nothing here pops up and the check happens
  * on its own once a day, so an item that never mentioned what it found would
@@ -214,9 +225,21 @@ const build = () => {
 
   /* The items added in 1.6.7 were given numbers after the ones that were
      already out, and the ones already out did not move. A host is entitled to
-     remember any of them. */
+     remember any of them.
+
+     12 is Fonts, added later still and dropped into the menu under Settings --
+     which is what a new item is allowed to do. Where an item SITS is the order
+     of this list; what it IS, is its number, and every number here is where it
+     was: Quit is 9 and About is 11 whatever gets added above them.
+
+     4, 5, 6 and 7 were Theme and its three modes, and they are not here because
+     the item is gone -- the same switch is in the settings window. Gone, not
+     renumbered: nothing else has taken those four ids, which is the whole rule
+     this test is here to keep. */
   check('every item still has the number it was given',
-        before, '0,1,2,3,4,5,6,7,10,11,8,9');
+        before, '0,1,2,3,12,10,11,8,9');
+  check('and a retired number is not handed to something else',
+        [4, 5, 6, 7].map(id => t.tray.itemProps(id, []).length).join(), '0,0,0,0');
 
   /* And the wording of one of them moving is no more a layout change than the
      toggle's is. */

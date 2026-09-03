@@ -107,12 +107,12 @@ const waitForHost = onHost => {
 
 class ElectronTray {
   constructor({ normal, attention, onToggle, onShow, onHide, onQuit, onSettings,
-                onSetTheme, getTheme, onAbout, getUpdate, title = 'WhatsApp' }) {
+                onFonts, onAbout, getUpdate, title = 'WhatsApp' }) {
     this.icons = {
       normal: nativeImage.createFromPath(normal),
       attention: nativeImage.createFromPath(attention || normal),
     };
-    this.handlers = { onToggle, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme,
+    this.handlers = { onToggle, onShow, onHide, onQuit, onSettings, onFonts,
                       onAbout, getUpdate };
     this.title = title;
     this.unread = false;
@@ -183,7 +183,6 @@ class ElectronTray {
    */
   renderMenu() {
     if (!this.tray) return;
-    const currentTheme = this.handlers.getTheme ? this.handlers.getTheme() : 'system';
 
     this.tray.setContextMenu(Menu.buildFromTemplate([
       {
@@ -198,27 +197,12 @@ class ElectronTray {
         click: () => this.handlers.onSettings && this.handlers.onSettings(),
       },
       {
-        label: 'Theme',
-        submenu: [
-          {
-            label: 'System Default',
-            type: 'radio',
-            checked: currentTheme === 'system',
-            click: () => this.handlers.onSetTheme && this.handlers.onSetTheme('system'),
-          },
-          {
-            label: 'Dark Mode',
-            type: 'radio',
-            checked: currentTheme === 'dark',
-            click: () => this.handlers.onSetTheme && this.handlers.onSetTheme('dark'),
-          },
-          {
-            label: 'Light Mode',
-            type: 'radio',
-            checked: currentTheme === 'light',
-            click: () => this.handlers.onSetTheme && this.handlers.onSetTheme('light'),
-          },
-        ],
+        /* A window of their own, which is what the item says. The theme used to
+           be the item under this one -- three radio buttons that are already in
+           the settings window, and the owner had them taken back out: a menu
+           earns its length, and this is not the only way to that switch. */
+        label: 'Fonts…',
+        click: () => this.handlers.onFonts && this.handlers.onFonts(),
       },
       { type: 'separator' },
       {
@@ -331,25 +315,16 @@ class TrayIcon {
     if (this.impl) this.impl.setAttention(unread);
   }
 
-  /* A setting changed under the menu -- the theme radio, which both of them draw
-     from the same getter. */
-  render() {
-    if (!this.impl) return;
-    if (this.impl.render) this.impl.render();
-    else if (this.impl.pushProperties) {
-      this.impl.pushProperties([ID.THEME_SYSTEM, ID.THEME_DARK, ID.THEME_LIGHT]);
-    }
-  }
-
   /*
    * A check came back, and one item's wording follows it.
    *
-   * Told apart from render() on purpose. The item in tray-sni.js is updated in
-   * place, which is what that file exists to make possible; Electron's tray
-   * could only be told by building the whole menu again, and a rebuild renumbers
-   * every id -- the dead-click bug written up over renderMenu. A word that waits
-   * for the next build is a far smaller thing than a Quit that does nothing, so
-   * on that path this deliberately does not redraw.
+   * The only thing out here that redraws an item, and it redraws exactly one.
+   * The item in tray-sni.js is updated in place, which is what that file exists
+   * to make possible; Electron's tray could only be told by building the whole
+   * menu again, and a rebuild renumbers every id -- the dead-click bug written
+   * up over renderMenu. A word that waits for the next build is a far smaller
+   * thing than a Quit that does nothing, so on that path this deliberately does
+   * not redraw.
    */
   refreshUpdate() {
     if (this.impl && this.impl.pushProperties) this.impl.pushProperties([ID.ABOUT]);

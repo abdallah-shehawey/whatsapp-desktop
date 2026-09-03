@@ -70,44 +70,33 @@ assert.doesNotMatch(shipped, /animation: none/);
    because it is never unmounted. The slide is inject.js's, on animationstart. */
 assert.doesNotMatch(shipped, /@keyframes/);
 
-/* The conversation's own text size. 100 per cent is the page WhatsApp drew, so
-   it emits nothing at all -- which is what keeps the default sheet as cheap as
-   it was measured to be. */
-assert.strictEqual(style.build({ fontSize: 16, chatScale: 100 }), shipped);
-assert.strictEqual(style.build({ fontSize: 16, chatScale: 'nonsense' }), shipped);
+/* The chat list is a left-to-right list and stays one: an Arabic name sits
+   where an English name sits, and only the words inside it read right to left.
 
-const bigger = style.build({ fontSize: 16, chatScale: 130 });
-assert.match(bigger, /font-size: calc\(0\.888rem \* 1\.30\) !important/);
-/* In rem, so it still follows view.font-size, and never in em: these classes
-   nest, and a multiplier would compound one level to the next. */
-assert.doesNotMatch(bigger, /\dem \*/);
-/* The line box moves with the size, or the taller text is drawn into the 19px
-   box WhatsApp pinned it to -- and the composer keeps its own, which is set in
-   em and follows on its own. */
-assert.match(bigger, /line-height: 1\.35 !important/);
-const composer = bigger.slice(bigger.indexOf('#main [contenteditable="true"]'));
-assert.doesNotMatch(composer, /line-height/);
-/* The chat list is not the conversation: what a size ADDS to the sheet reaches
-   nothing in #pane-side. */
-assert.ok(bigger.startsWith(shipped));
-assert.doesNotMatch(bigger.slice(shipped.length), /pane-side/);
-/* A community thread is a conversation, and its replies and its reply box move
-   with the same knob. Left out, they stayed at WhatsApp's own 14.2px inside a
-   client drawing every other message at the asked-for size. */
-const added = bigger.slice(shipped.length);
-assert.match(added, /\[data-testid="comment-row"\] \.selectable-text/);
-assert.match(added, /popup-contents"\]:has\(\[data-testid="comment-row"\]\) \[contenteditable="true"\]/);
+   The name is the span that carries a dir attribute -- measured on the live
+   list, every one of them says dir="auto" and NOT dir="rtl", so a rule written
+   for the latter matches nothing at all. That is what the rule this replaced
+   did, and it is why the names went on hanging off the right margin. */
+const list = shipped.slice(shipped.indexOf('#pane-side span[title][dir]'));
+assert.match(list, /text-align: left !important/);
+assert.doesNotMatch(list.slice(0, list.indexOf('}')), /text-align: right/);
+assert.doesNotMatch(shipped, /#pane-side[^{]*dir="rtl"/);
+/* And the rule says nothing about direction. Alignment is where the text sits
+   in its box; `direction` or `unicode-bidi` on a name would be this client
+   deciding which way a name reads, which is WhatsApp's answer to give. */
+assert.doesNotMatch(list.slice(0, list.indexOf('}')), /direction:|unicode-bidi:/);
 
-/* Back to 100 per cent after a bigger size. A user stylesheet cannot be taken
-   out of the page again -- measured -- so "no rule" leaves the old sheet saying
-   110%, and the way back has to be written down. */
-const backToNormal = style.build({ fontSize: 16, chatScale: 100 },
-                                 { fontSize: 16, chatScale: 110 });
-assert.match(backToNormal, /font-size: revert !important/);
-assert.match(backToNormal, /line-height: revert !important/);
-/* And nothing of the kind for a client that was never asked for a size. */
-assert.strictEqual(style.build({ fontSize: 16, chatScale: 100 },
-                               { fontSize: 16, chatScale: 100 }), shipped);
+/* There is no size knob for the conversation's own text any more. It was
+   `view.chat-font-size`, it was a percentage that belonged to neither script
+   beside the two per-script sizes in the Fonts window, and it came out of the
+   client on 2026-09-03. What must not come back is a sheet that quietly
+   re-sizes messages. */
+assert.doesNotMatch(shipped, /0\.888rem/);
+assert.doesNotMatch(shipped, /font-size: calc/);
+/* An option the sheet no longer knows is not an option: an old config file
+   still carrying the key changes nothing. */
+assert.strictEqual(style.build({ fontSize: 16, chatScale: 130 }), shipped);
+assert.strictEqual(style.build({ fontSize: 16 }, { fontSize: 16, chatScale: 110 }), shipped);
 
 /* Nothing reverts the Arabic rules any more, because nothing turns them off.
    A sheet that is in the page is in it for good -- see style.js -- so a `revert`

@@ -52,10 +52,12 @@ const ID = {
   TOGGLE: 1,
   SEP_1: 2,
   SETTINGS: 3,
-  THEME: 4,
-  THEME_SYSTEM: 5,
-  THEME_DARK: 6,
-  THEME_LIGHT: 7,
+  /* 4, 5, 6 and 7 were Theme and its three modes, taken out of this menu on
+     2026-09-03: the same three buttons are in the settings window, and two ways
+     to one switch is one too many. The numbers are not reused and not filled in
+     -- a host is entitled to hand back an id it read months ago, and the worst
+     answer to a stale click is a different item. Nothing is exported at 4..7,
+     so such a click now falls through activate() and does nothing at all. */
   SEP_2: 8,
   QUIT: 9,
   /* Added 2026-09-03, after QUIT, because a number here belongs to whichever
@@ -64,12 +66,16 @@ const ID = {
      in `children`, and that is free to change. */
   SEP_3: 10,
   ABOUT: 11,
+  /* Added 2026-09-03 as well, and 12 for the same reason 10 and 11 were 10 and
+     11: the next number, never a gap somebody would be tempted to fill -- 4 to
+     7 fell vacant the same day and stay vacant. It sits under Settings in the
+     menu, which is a matter of `children` and costs nothing. */
+  FONTS: 12,
 };
 
 /* Variant helpers: src/dbus.js takes a variant as [signature, value]. */
 const vs = value => ['s', String(value)];
 const vb = value => ['b', !!value];
-const vi = value => ['i', value | 0];
 
 /*
  * An icon as the protocol wants it: width, height, and ARGB32 in network byte
@@ -93,7 +99,7 @@ const pixmap = image => {
 
 class SniTray {
   constructor({ normal, attention, onToggle, onShow, onHide, onQuit, onSettings,
-                onSetTheme, getTheme, getInFront, onAbout, getUpdate,
+                onFonts, getInFront, onAbout, getUpdate,
                 title = 'WhatsApp', appId = 'whatsapp-desktop' }) {
     this.icons = {
       normal: nativeImage.createFromPath(normal),
@@ -103,7 +109,7 @@ class SniTray {
       normal: pixmap(this.icons.normal),
       attention: pixmap(this.icons.attention),
     };
-    this.handlers = { onToggle, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme,
+    this.handlers = { onToggle, onShow, onHide, onQuit, onSettings, onFonts,
                       onAbout, getUpdate };
     this.title = title;
     this.appId = appId;
@@ -216,10 +222,6 @@ class SniTray {
     return this.inFront ? 'Minimize to Tray' : 'Open WhatsApp';
   }
 
-  theme() {
-    return (this.handlers.getTheme && this.handlers.getTheme()) || 'system';
-  }
-
   /*
    * The other word that moves, and the menu's only announcement.
    *
@@ -238,19 +240,13 @@ class SniTray {
      request means all of them, which is what the spec says and what gnome-shell
      relies on. */
   itemProps(id, wanted) {
-    const theme = this.theme();
     const all = {
       [ID.TOGGLE]: [['label', vs(this.toggleLabel())], ['enabled', vb(true)], ['visible', vb(true)]],
       [ID.SEP_1]: [['type', vs('separator')], ['visible', vb(true)]],
       [ID.SETTINGS]: [['label', vs('Settings…')], ['enabled', vb(true)], ['visible', vb(true)]],
-      [ID.THEME]: [['label', vs('Theme')], ['enabled', vb(true)], ['visible', vb(true)],
-                   ['children-display', vs('submenu')]],
-      [ID.THEME_SYSTEM]: [['label', vs('System Default')], ['enabled', vb(true)], ['visible', vb(true)],
-                          ['toggle-type', vs('radio')], ['toggle-state', vi(theme === 'system' ? 1 : 0)]],
-      [ID.THEME_DARK]: [['label', vs('Dark Mode')], ['enabled', vb(true)], ['visible', vb(true)],
-                        ['toggle-type', vs('radio')], ['toggle-state', vi(theme === 'dark' ? 1 : 0)]],
-      [ID.THEME_LIGHT]: [['label', vs('Light Mode')], ['enabled', vb(true)], ['visible', vb(true)],
-                         ['toggle-type', vs('radio')], ['toggle-state', vi(theme === 'light' ? 1 : 0)]],
+      /* The way in that the owner asked for: a window of their own, opened on
+         the fonts rather than on a window that has them somewhere in it. */
+      [ID.FONTS]: [['label', vs('Fonts…')], ['enabled', vb(true)], ['visible', vb(true)]],
       [ID.SEP_3]: [['type', vs('separator')], ['visible', vb(true)]],
       [ID.ABOUT]: [['label', vs(this.aboutLabel())], ['enabled', vb(true)], ['visible', vb(true)]],
       [ID.SEP_2]: [['type', vs('separator')], ['visible', vb(true)]],
@@ -264,9 +260,8 @@ class SniTray {
   /* The tree, as a host reads it: (id, properties, children-as-variants). */
   layout(id, depth, wanted) {
     const children = {
-      [ID.ROOT]: [ID.TOGGLE, ID.SEP_1, ID.SETTINGS, ID.THEME, ID.SEP_3,
+      [ID.ROOT]: [ID.TOGGLE, ID.SEP_1, ID.SETTINGS, ID.FONTS, ID.SEP_3,
                   ID.ABOUT, ID.SEP_2, ID.QUIT],
-      [ID.THEME]: [ID.THEME_SYSTEM, ID.THEME_DARK, ID.THEME_LIGHT],
     }[id] || [];
 
     const kids = depth === 0 ? [] : children.map(child =>
@@ -384,10 +379,8 @@ class SniTray {
     const h = this.handlers;
     if (id === ID.TOGGLE) this.toggle();
     else if (id === ID.SETTINGS) h.onSettings && h.onSettings();
+    else if (id === ID.FONTS) h.onFonts && h.onFonts();
     else if (id === ID.QUIT) h.onQuit && h.onQuit();
-    else if (id === ID.THEME_SYSTEM) this.setTheme('system');
-    else if (id === ID.THEME_DARK) this.setTheme('dark');
-    else if (id === ID.THEME_LIGHT) this.setTheme('light');
     else if (id === ID.ABOUT) h.onAbout && h.onAbout();
   }
 
@@ -406,11 +399,6 @@ class SniTray {
     if (this.inFront && h.onHide) h.onHide();
     else if (!this.inFront && h.onShow) h.onShow();
     else if (h.onToggle) h.onToggle();
-  }
-
-  setTheme(which) {
-    if (this.handlers.onSetTheme) this.handlers.onSetTheme(which);
-    this.pushProperties([ID.THEME_SYSTEM, ID.THEME_DARK, ID.THEME_LIGHT]);
   }
 
   /* --------------------------------------------------- telling the host */

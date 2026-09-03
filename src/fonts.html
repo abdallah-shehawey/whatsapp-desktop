@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Fonts</title>
+  <link rel="stylesheet" href="window.css">
+</head>
+<body>
+
+  <!--
+    A window of its own, and not a section of the settings any more.
+
+    The fonts were the bottom half of a window that scrolls: a script, a family,
+    a size, a weight and a preview, twice over, under everything else the client
+    can be told. The owner asked for the tray's "Fonts…" to open the fonts
+    rather than the settings scrolled to them -- so the section moved out whole,
+    with the same controls, the same wiring and the same restart bar. What is
+    left in Settings is what fits on one screen.
+  -->
+  <div class="header">
+    <div class="header-title">
+      <svg viewBox="0 0 24 24">
+        <path d="M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z"/>
+      </svg>
+      <span>WhatsApp Fonts</span>
+    </div>
+    <button class="close-btn" id="closeBtn" title="Close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+
+  <div class="container">
+
+    <!-- Fonts, one script at a time -->
+    <div class="section" id="fontsSection">
+      <div class="section-title">Fonts</div>
+      <div class="card">
+
+        <div class="group-title">Latin &amp; English</div>
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Use the System Font</div>
+            <div class="row-desc">Draw Latin in the desktop's own font. Turn it off to choose one</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="latinInherit" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="lockable locked" id="latinControls">
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Font</div>
+              <div class="row-desc">The family for Latin letters, digits and punctuation</div>
+            </div>
+            <select class="picker" id="latinFamily"></select>
+          </div>
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Size</div>
+              <div class="row-desc">As a percentage of the size this font is drawn at</div>
+            </div>
+            <div class="stepper">
+              <button class="stepper-btn" id="latinSizeOut">-</button>
+              <span class="stepper-val" id="latinSizeVal">100%</span>
+              <button class="stepper-btn" id="latinSizeIn">+</button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Style</div>
+              <div class="row-desc" id="latinFaceDesc">Draw Latin words in this font's bold or italic face</div>
+            </div>
+            <div class="face-btns">
+              <button class="face-btn" id="latinBold" title="Bold">B</button>
+              <button class="face-btn italic" id="latinItalic" title="Italic">I</button>
+            </div>
+          </div>
+          <!-- Inside the lockable block, so the preview goes dim with the rest
+               of the group the moment that script is handed back to the
+               desktop font: what is greyed is what is not in play. -->
+          <div class="preview">
+            <div class="preview-label">Preview</div>
+            <div class="preview-line" id="previewLatin">This is the font your WhatsApp will be drawn in</div>
+          </div>
+        </div>
+
+        <div class="group-title">Arabic</div>
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Use the System Font</div>
+            <div class="row-desc">Draw Arabic in whatever the system draws it in. Turn it off to choose one</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="arabicInherit" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="lockable locked" id="arabicControls">
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Font</div>
+              <div class="row-desc">The family for Arabic letters, even in the middle of an English line</div>
+            </div>
+            <select class="picker" id="arabicFamily"></select>
+          </div>
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Size</div>
+              <div class="row-desc">Arabic on its own — bigger or smaller than the Latin beside it</div>
+            </div>
+            <div class="stepper">
+              <button class="stepper-btn" id="arabicSizeOut">-</button>
+              <span class="stepper-val" id="arabicSizeVal">100%</span>
+              <button class="stepper-btn" id="arabicSizeIn">+</button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Style</div>
+              <div class="row-desc" id="arabicFaceDesc">Draw Arabic words in this font's bold or italic face</div>
+            </div>
+            <div class="face-btns">
+              <button class="face-btn" id="arabicBold" title="Bold">B</button>
+              <button class="face-btn italic" id="arabicItalic" title="Italic">I</button>
+            </div>
+          </div>
+          <div class="preview">
+            <div class="preview-label">Preview</div>
+            <div class="preview-line rtl" id="previewArabic">ده مثال للخط اللي هيظهر بيه الواتس عندك</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="restart-bar" id="restartBar" hidden>
+        <span>The page has changed already. A restart applies it to the rest of the client.</span>
+        <button id="restartBtn">Restart now</button>
+      </div>
+    </div>
+
+    <!-- Said out loud rather than left as an empty window. A client that
+         answers without a font catalogue is one older than this window, which
+         is what a reloaded window in a client that has not been restarted
+         is. -->
+    <div class="footer-note" id="noCatalogue" hidden>
+      This client cannot list the fonts installed. Restart WhatsApp and open this window again.
+    </div>
+
+    <div class="footer-note">
+      Changes apply immediately and save to ~/.config/whatsapp-desktop/
+    </div>
+
+  </div>
+
+  <script>
+    /* A font per script, and a switch per script to say whether the desktop's
+       own is being followed. Nothing in here decides anything: it is all drawn
+       from what the client answers `settings:get` with -- the families
+       installed on this machine and which of them have a bold and an italic
+       face -- because the renderer cannot see a font catalogue and should not
+       be guessing at one. */
+    const SIZE_MIN = 70;
+    const SIZE_MAX = 150;
+    const SIZE_STEP = 5;
+
+    const SCRIPTS = ['latin', 'arabic'];
+
+    const fontsSection = document.getElementById('fontsSection');
+    const noCatalogue = document.getElementById('noCatalogue');
+    const closeBtn = document.getElementById('closeBtn');
+
+    const fontEls = {
+      restartBar: document.getElementById('restartBar'),
+      restartBtn: document.getElementById('restartBtn'),
+      preview: {
+        latin: document.getElementById('previewLatin'),
+        arabic: document.getElementById('previewArabic'),
+      },
+      latin: {
+        inherit: document.getElementById('latinInherit'),
+        controls: document.getElementById('latinControls'),
+        family: document.getElementById('latinFamily'),
+        sizeIn: document.getElementById('latinSizeIn'),
+        sizeOut: document.getElementById('latinSizeOut'),
+        sizeVal: document.getElementById('latinSizeVal'),
+        bold: document.getElementById('latinBold'),
+        italic: document.getElementById('latinItalic'),
+        desc: document.getElementById('latinFaceDesc'),
+      },
+      arabic: {
+        inherit: document.getElementById('arabicInherit'),
+        controls: document.getElementById('arabicControls'),
+        family: document.getElementById('arabicFamily'),
+        sizeIn: document.getElementById('arabicSizeIn'),
+        sizeOut: document.getElementById('arabicSizeOut'),
+        sizeVal: document.getElementById('arabicSizeVal'),
+        bold: document.getElementById('arabicBold'),
+        italic: document.getElementById('arabicItalic'),
+        desc: document.getElementById('arabicFaceDesc'),
+      },
+    };
+
+    const FACE_DESC = {
+      latin: "Draw Latin words in this font's bold or italic face",
+      arabic: "Draw Arabic words in this font's bold or italic face",
+    };
+
+    /* What the client last said, whole. Every redraw of this window is drawn
+       from all of it rather than from the one control that moved: a family
+       decides whether the bold button can be pressed at all, and the switch at
+       the head of the group decides whether any of them can. */
+    let fontData = null;
+
+    const familyFallback = script =>
+      (script === 'latin' ? fontData.desktop : fontData.systemArabic) || '';
+
+    const familyOf = script => fontData[script].family || familyFallback(script);
+
+    /* Which faces the chosen family actually has. A family the catalogue has
+       never heard of -- one that was uninstalled, or a machine with no fc-list
+       -- is given the benefit of the doubt: an offered switch that turns out to
+       do nothing is a smaller sin than one that is greyed out for no reason. */
+    const faceInfo = script => {
+      const list = (fontData.available && fontData.available[script]) || [];
+      return list.find(font => font.name === familyOf(script)) || null;
+    };
+
+    function fillPicker(script) {
+      const el = fontEls[script].family;
+      const list = (fontData.available && fontData.available[script]) || [];
+      const chosen = fontData[script].family || '';
+
+      el.textContent = '';
+      const fallback = document.createElement('option');
+      fallback.value = '';
+      fallback.textContent = familyFallback(script)
+        ? 'System (' + familyFallback(script) + ')' : 'System default';
+      el.appendChild(fallback);
+
+      let listed = false;
+      for (const font of list) {
+        const option = document.createElement('option');
+        option.value = font.name;
+        option.textContent = font.name;
+        if (font.name === chosen) listed = true;
+        el.appendChild(option);
+      }
+      /* A family that was chosen once and is not installed any more. Kept on
+         the list and named as missing, because a select that quietly reads back
+         as something else is how a setting changes itself. */
+      if (chosen && !listed) {
+        const option = document.createElement('option');
+        option.value = chosen;
+        option.textContent = chosen + ' (not installed)';
+        el.appendChild(option);
+      }
+      el.value = chosen;
+    }
+
+    /* Each line of the preview in its own script, drawn with the very
+       properties the page will be drawn with -- and left in the window's own
+       font while that script is still following the desktop. */
+    function drawPreview() {
+      for (const script of SCRIPTS) {
+        const el = fontEls.preview[script];
+        const want = fontData[script];
+        const info = faceInfo(script);
+        const live = !want.inherit;
+        el.style.fontFamily = live && familyOf(script)
+          ? '"' + familyOf(script).replace(/"/g, '') + '", system-ui, sans-serif' : '';
+        el.style.fontSize = Math.round(15 * (live ? want.size : 100) / 100) + 'px';
+        el.style.fontWeight = live && want.bold && (!info || info.bold) ? '700' : '400';
+        el.style.fontStyle = live && want.italic && (!info || info.italic) ? 'italic' : 'normal';
+      }
+    }
+
+    function drawFontUI() {
+      if (!fontData) return;
+
+      for (const script of SCRIPTS) {
+        const els = fontEls[script];
+        const want = fontData[script];
+        const locked = !!want.inherit;
+        const info = faceInfo(script);
+        const canBold = !info || info.bold;
+        const canItalic = !info || info.italic;
+
+        els.inherit.checked = locked;
+        els.controls.classList.toggle('locked', locked);
+
+        els.family.value = want.family || '';
+        els.family.disabled = locked;
+        /* The chosen font, shown in itself: the list of names is the one place
+           the choice can be seen before it is made. */
+        els.family.style.fontFamily = familyOf(script)
+          ? '"' + familyOf(script).replace(/"/g, '') + '", system-ui, sans-serif' : '';
+
+        els.sizeVal.textContent = Math.round(want.size) + '%';
+        els.sizeIn.disabled = locked;
+        els.sizeOut.disabled = locked;
+
+        els.bold.disabled = locked || !canBold;
+        els.italic.disabled = locked || !canItalic;
+        els.bold.classList.toggle('active', !!want.bold && canBold);
+        els.italic.classList.toggle('active', !!want.italic && canItalic);
+
+        /* Why a button is greyed, said in the row rather than in a tooltip
+           nobody hovers: the face does not exist in that file, and no client
+           can invent one. */
+        const missing = locked ? []
+          : [!canBold && 'bold', !canItalic && 'italic'].filter(Boolean);
+        els.desc.textContent = missing.length
+          ? familyOf(script) + ' has no ' + missing.join(' and no ') + ' face'
+          : FACE_DESC[script];
+      }
+
+      drawPreview();
+    }
+
+    /* Saved the moment it is pressed, like every switch in the settings window
+       -- and the client answers whether what it just wrote needs a restart to
+       be finished. Almost nothing does: the faces are a stylesheet and a
+       stylesheet goes straight into the open page. */
+    const saveFont = async (key, value) => {
+      if (!window.api) return;
+      const answer = await window.api.setSetting(key, value);
+      if (answer && answer.restart) fontEls.restartBar.hidden = false;
+    };
+
+    for (const script of SCRIPTS) {
+      const els = fontEls[script];
+
+      els.inherit.addEventListener('change', async () => {
+        if (!fontData) return;
+        fontData[script].inherit = els.inherit.checked;
+        drawFontUI();
+        await saveFont('fonts.' + script + '-inherit', fontData[script].inherit);
+      });
+
+      els.family.addEventListener('change', async () => {
+        if (!fontData) return;
+        fontData[script].family = els.family.value;
+        drawFontUI();
+        await saveFont('fonts.' + script + '-family', fontData[script].family);
+      });
+
+      const step = async delta => {
+        if (!fontData) return;
+        const next = Math.min(SIZE_MAX, Math.max(SIZE_MIN, fontData[script].size + delta));
+        /* Held at either end: a press that changes nothing rewrites no config
+           file and redraws no page. */
+        if (next === fontData[script].size) return;
+        fontData[script].size = next;
+        drawFontUI();
+        await saveFont('fonts.' + script + '-size', next);
+      };
+      els.sizeIn.addEventListener('click', () => step(SIZE_STEP));
+      els.sizeOut.addEventListener('click', () => step(-SIZE_STEP));
+
+      for (const which of ['bold', 'italic']) {
+        els[which].addEventListener('click', async () => {
+          if (!fontData || els[which].disabled) return;
+          fontData[script][which] = !fontData[script][which];
+          drawFontUI();
+          await saveFont('fonts.' + script + '-' + which, fontData[script][which]);
+        });
+      }
+    }
+
+    fontEls.restartBtn.addEventListener('click', () => {
+      if (window.api && window.api.restart) window.api.restart();
+    });
+
+    /* This window is drawn in the desktop's theme and the desktop's font, the
+       same way the settings window is -- it is the same furniture. */
+    function applyThemeToUI(theme) {
+      document.documentElement.setAttribute('data-theme', theme || 'system');
+    }
+
+    async function loadFonts() {
+      if (!window.api) return;
+      try {
+        const data = await window.api.getSettings();
+        if (!data) return;
+
+        applyThemeToUI(data.theme);
+        if (data.font) {
+          document.documentElement.style.setProperty(
+            '--font-family', '"' + String(data.font).replace(/"/g, '') + '", system-ui, sans-serif');
+        }
+
+        if (data.fonts) {
+          fontData = data.fonts;
+          SCRIPTS.forEach(fillPicker);
+          drawFontUI();
+        } else {
+          fontsSection.hidden = true;
+          noCatalogue.hidden = false;
+        }
+      } catch (e) {
+        console.error('Failed to load fonts:', e);
+      }
+    }
+
+    closeBtn.addEventListener('click', () => {
+      if (window.api) window.api.close();
+    });
+
+    if (window.api && window.api.onSettingsChanged) {
+      window.api.onSettingsChanged(data => {
+        if (data && data.theme !== undefined) applyThemeToUI(data.theme);
+      });
+    }
+
+    loadFonts();
+  </script>
+</body>
+</html>

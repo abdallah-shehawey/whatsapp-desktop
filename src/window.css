@@ -1,0 +1,524 @@
+/*
+ * The look of the client's own windows -- Settings and Fonts.
+ *
+ * One file, linked by both, because they are one window's worth of design split
+ * in two: the same cards, the same rows, the same switches. It was lifted out of
+ * settings.html the day the fonts moved into a window of their own, so that a
+ * colour or a corner radius is still changed in one place.
+ *
+ * about.html is deliberately NOT on this sheet: it is a different shape (a
+ * version, a check, a link) and it has never shared these rules.
+ */
+:root {
+  --bg-primary: #111b21;
+  --bg-secondary: #202c33;
+  --bg-card: #182229;
+  --bg-card-hover: #222e35;
+  --accent: #00a884;
+  --accent-hover: #06cf9c;
+  --accent-dim: rgba(0, 168, 132, 0.15);
+  --text-primary: #e9edef;
+  --text-secondary: #8696a0;
+  --text-muted: #667781;
+  --border-color: #2a3942;
+  --switch-bg: #374248;
+  /* The desktop's own font, named outright by the main process on load.
+     Until then the generic, which fontconfig resolves to the same family --
+     a stack that names Roboto or Helvetica would be taken literally when
+     either is installed, and this window would come out in a font the page
+     beside it is not drawn in. */
+  --font-family: system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"], :root[data-theme="light"] {
+    --bg-primary: #f0f2f5;
+    --bg-secondary: #ffffff;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f5f6f6;
+    --accent: #00a884;
+    --accent-hover: #029072;
+    --accent-dim: rgba(0, 168, 132, 0.12);
+    --text-primary: #111b21;
+    --text-secondary: #667781;
+    --text-muted: #8696a0;
+    --border-color: #e9edef;
+    --switch-bg: #d1d7db;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg-primary: #111b21;
+  --bg-secondary: #202c33;
+  --bg-card: #182229;
+  --bg-card-hover: #222e35;
+  --accent: #00a884;
+  --accent-hover: #06cf9c;
+  --accent-dim: rgba(0, 168, 132, 0.15);
+  --text-primary: #e9edef;
+  --text-secondary: #8696a0;
+  --text-muted: #667781;
+  --border-color: #2a3942;
+  --switch-bg: #374248;
+}
+
+:root[data-theme="light"] {
+  --bg-primary: #f0f2f5;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f5f6f6;
+  --accent: #00a884;
+  --accent-hover: #029072;
+  --accent-dim: rgba(0, 168, 132, 0.12);
+  --text-primary: #111b21;
+  --text-secondary: #667781;
+  --text-muted: #8696a0;
+  --border-color: #e9edef;
+  --switch-bg: #d1d7db;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1.5;
+  overflow-x: hidden;
+  overflow-y: auto;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Custom Header / Drag Bar */
+.header {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.header-title svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--accent);
+}
+
+.close-btn {
+  -webkit-app-region: no-drag;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.container {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.section-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+
+/* Theme Segmented Control */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px;
+}
+
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 6px;
+  background-color: var(--bg-secondary);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 14.5px;
+}
+
+.theme-option svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.theme-option:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.theme-option.active {
+  border-color: var(--accent);
+  background-color: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Setting Row */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.15s ease;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row:hover {
+  background-color: var(--bg-card-hover);
+}
+
+.row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 12px;
+}
+
+.row-title {
+  font-size: 15.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.row-desc {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+/* Switch Toggle */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--switch-bg);
+  transition: .22s ease;
+  border-radius: 22px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .22s ease;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+input:checked + .slider {
+  background-color: var(--accent);
+}
+
+input:checked + .slider:before {
+  transform: translateX(18px);
+}
+
+/* Stepper / Zoom controls */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.stepper-btn {
+  width: 27px;
+  height: 27px;
+  border: none;
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.stepper-btn:hover {
+  background-color: var(--accent);
+  color: white;
+}
+
+.stepper-val {
+  min-width: 46px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* The two scripts, each under a heading of its own inside the one card.
+   A heading is not a row: it has no control on the right and nothing to
+   hover, so it is drawn as a label across the card rather than as a row
+   whose right-hand half happens to be empty. */
+.group-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 10px 14px 2px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+/* Everything the "use the system font" switch governs. Greyed AND
+   disabled: the grey says it is not in play, and the disabled attribute on
+   the controls themselves is what keeps a Tab key from reaching a switch
+   the client is going to ignore. */
+.lockable.locked {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Font pickers. `appearance: none` because the platform's own select is
+   drawn in the platform's colours, which in a window themed like WhatsApp
+   is the one control that looks like it belongs to another program. */
+.picker {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--bg-secondary);
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%238696a0'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  padding: 6px 28px 6px 10px;
+  max-width: 200px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.picker:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Bold and italic, as the two buttons every text box in the world draws
+   them. A switch each would be two more rows for what is one decision. */
+.face-btns {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.face-btn {
+  width: 30px;
+  height: 28px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.face-btn.italic {
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 600;
+}
+
+.face-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.face-btn.active {
+  background-color: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* A face the font has not got. Nothing here synthesises one, so the button
+   says so instead of pretending -- see src/fonts.js. */
+.face-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* What the choice actually looks like, in both scripts, drawn with the very
+   properties the page will be drawn with. */
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px 12px;
+}
+
+.preview-label {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* Wrapped rather than clipped: at 150 per cent the sentence is wider than
+   the card, and half a sentence in the right font is worth more than a
+   whole one with an ellipsis where the descenders were. */
+.preview-line {
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.preview-line.rtl {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Shown only when the client says a restart would finish the job, which is
+   when the fontconfig document changed and not when a stylesheet did. */
+.restart-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background-color: var(--accent-dim);
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+
+.restart-bar[hidden] {
+  display: none;
+}
+
+.restart-bar button {
+  -webkit-app-region: no-drag;
+  background-color: var(--accent);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.restart-bar button:hover {
+  background-color: var(--accent-hover);
+}
+
+.footer-note {
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  padding-bottom: 8px;
+}

@@ -245,6 +245,8 @@ if (!app.requestSingleInstanceLock()) {
 
 let win = null;
 let settingsWin = null;
+/* The fonts have a window of their own -- see openFonts. */
+let fontsWin = null;
 let aboutWin = null;
 let tray = null;
 let banners = null;
@@ -585,9 +587,13 @@ const setTheme = theme => {
   if (win && !win.isDestroyed()) {
     win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#0b141a' : '#ffffff');
   }
-  if (tray) tray.render();
   if (settingsWin && !settingsWin.isDestroyed()) {
     settingsWin.webContents.send('settings:changed', { theme });
+  }
+  /* The Fonts window is drawn in the same colours and hears the same message --
+     it is the settings window's other half, in a frame of its own. */
+  if (fontsWin && !fontsWin.isDestroyed()) {
+    fontsWin.webContents.send('settings:changed', { theme });
   }
   if (aboutWin && !aboutWin.isDestroyed()) {
     aboutWin.webContents.send('about:changed', { theme });
@@ -596,7 +602,6 @@ const setTheme = theme => {
 
 const setAutostart = enable => {
   autostart.setEnabled(enable);
-  if (tray) tray.render();
   if (settingsWin && !settingsWin.isDestroyed()) {
     settingsWin.webContents.send('settings:changed', { autostart: enable });
   }
@@ -611,7 +616,7 @@ const changeSetting = (key, value) => {
   if (key === 'view.zoom' && win && !win.isDestroyed()) {
     win.webContents.setZoomFactor(Number(value) || 1.0);
   }
-  if (key === 'view.font-size' || key === 'view.chat-font-size') applyStyle();
+  if (key === 'view.font-size') applyStyle();
 
   /*
    * A font change, and the only honest answer to "does this need a restart".
@@ -693,6 +698,65 @@ const openSettings = () => {
   });
 
   return settingsWin;
+};
+
+/*
+ * The fonts, in a window of their own.
+ *
+ * They were the bottom half of the settings, and the tray's Fonts item opened
+ * that window scrolled to them -- which is a window opened at something rather
+ * than a window for it. The owner asked for the second: "Fonts…" opens the
+ * fonts. So the section moved out whole, into a window that is the same
+ * furniture (src/window.css, src/settings-preload.js, the same `settings:get`
+ * answer) with nothing else in it.
+ *
+ * Taller than the settings window because there is more in it -- two scripts,
+ * five controls and a preview each -- and still not as tall as a screen.
+ */
+const openFonts = () => {
+  if (fontsWin && !fontsWin.isDestroyed()) {
+    fontsWin.show();
+    fontsWin.focus();
+    return fontsWin;
+  }
+
+  const isDark = nativeTheme.shouldUseDarkColors;
+  const panel = clampToScreen(560, 720);
+  const settingsFont = uiFont();
+  fontsWin = new BrowserWindow({
+    width: panel.width,
+    height: panel.height,
+    center: true,
+    resizable: false,
+    frame: false,
+    title: 'WhatsApp Fonts',
+    icon: appIcon,
+    autoHideMenuBar: true,
+    backgroundColor: isDark ? '#111b21' : '#f0f2f5',
+    webPreferences: {
+      preload: path.join(__dirname, 'settings-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      defaultFontFamily: {
+        standard: settingsFont, sansSerif: settingsFont, serif: settingsFont,
+      },
+    },
+  });
+
+  Menu.setApplicationMenu(null);
+  fontsWin.loadFile(path.join(__dirname, 'fonts.html'));
+
+  fontsWin.once('ready-to-show', () => {
+    fontsWin.show();
+    fontsWin.focus();
+  });
+
+  fontsWin.on('closed', () => {
+    fontsWin = null;
+  });
+
+  return fontsWin;
 };
 
 /* ------------------------------------------------------ about, and updates */
@@ -824,7 +888,6 @@ const openAbout = ({ checkNow = false } = {}) => {
 const styleSheet = () => {
   const wanted = {
     fontSize: config.get('view.font-size'),
-    chatScale: config.get('view.chat-font-size'),
   };
   /* What the last sheet said, so this one can contradict it. A sheet inserted at
      user origin cannot be removed again -- see style.js -- so a switch turned
@@ -1646,7 +1709,6 @@ const wireIpc = () => {
       outgoingSound: !!config.get('notifications.outgoing-sound'),
       zoom: Number(config.get('view.zoom')) || 1.0,
       fontSize: Number(config.get('view.font-size')) || 16,
-      chatFontSize: Number(config.get('view.chat-font-size')) || 100,
       /* The family the client draws the page in, so this window can be drawn in
          it too rather than in whatever Chromium picks for a plain page. */
       font: uiFont(),
@@ -1690,10 +1752,12 @@ const wireIpc = () => {
 
   ipcMain.handle('settings:set', (_, key, value) => changeSetting(key, value));
 
-  ipcMain.on('settings:close', () => {
-    if (settingsWin && !settingsWin.isDestroyed()) {
-      settingsWin.close();
-    }
+  /* Whichever window asked, rather than the settings window by name: the same
+     preload is behind both of them, and a Fonts window that closed the settings
+     instead would be the funniest bug in this file. */
+  ipcMain.on('settings:close', event => {
+    const asked = BrowserWindow.fromWebContents(event.sender);
+    if (asked && !asked.isDestroyed()) asked.close();
   });
 
   /* The one thing a font change can ask for that a stylesheet cannot do -- see
@@ -2425,13 +2489,14 @@ app.whenReady().then(() => {
        wrong word because an event went missing. */
     getInFront: windowInFront,
     onQuit: quit,
-    onSettings: openSettings,
+    onSettings: () => openSettings(),
+    /* The tray's own way to the fonts -- a window of their own, which is what
+       the item says and what the owner asked for. */
+    onFonts: () => openFonts(),
     onAbout: () => openAbout(),
     /* Read as the menu is drawn, so the item names a release the daily check
        found without anything having to push it there. */
     getUpdate: () => lastUpdate,
-    onSetTheme: setTheme,
-    getTheme: () => config.get('view.theme') || 'system',
     title: TITLE,
     appId: APP_ID,
   });
@@ -2458,7 +2523,8 @@ app.whenReady().then(() => {
 
   debug.install(() => win, () => banners,
                 { show: showWindow, toggle: toggleWindow, onScreen: windowOnScreen,
-                  inFront: windowInFront, settings: openSettings, set: changeSetting,
+                  inFront: windowInFront, settings: openSettings, fonts: openFonts,
+                  set: changeSetting,
                   about: openAbout, checkUpdate: checkForUpdates,
                   pretendVersion: version => { pretendVersion = version; },
                   lastUpdate: () => lastUpdate });

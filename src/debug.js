@@ -500,7 +500,7 @@ const install = (getWindow, getBanners, actions = {}) => {
        are about what it does to a page that is already open. Goes through the
        very handler the window's own IPC call lands in.
 
-         #set view.chat-font-size 130
+         #set fonts.arabic-size 115
          #set view.font-size 18
     */
     if (source.startsWith('#set ')) {
@@ -524,6 +524,18 @@ const install = (getWindow, getBanners, actions = {}) => {
       const panel = actions.settings();
       await new Promise(resolve => setTimeout(resolve, 600));
       console.log('debug: settings %s', panel && !panel.isDestroyed()
+        ? JSON.stringify(panel.getBounds()) : 'did not open');
+      return;
+    }
+
+    /* The Fonts window, which is a window of its own now rather than the foot
+       of the settings -- and reachable only from a tray item, so a rig has no
+       other way in. */
+    if (source === '#fonts') {
+      if (!actions.fonts) { console.log('debug: no fonts window to open'); return; }
+      const panel = actions.fonts();
+      await new Promise(resolve => setTimeout(resolve, 600));
+      console.log('debug: fonts %s', panel && !panel.isDestroyed()
         ? JSON.stringify(panel.getBounds()) : 'did not open');
       return;
     }
@@ -603,14 +615,16 @@ const install = (getWindow, getBanners, actions = {}) => {
       return;
     }
 
-    /* `#snapshot about` and `#snapshot settings` photograph the two windows this
-       client draws itself rather than the page, opening one that is not already
-       up. They are the windows with no other way to be looked at: a tray item
-       opens the first, a keystroke with a modifier the second, and the desktop
-       will not hand a picture of either to anything outside this process. */
+    /* `#snapshot about`, `#snapshot settings` and `#snapshot fonts` photograph
+       the windows this client draws itself rather than the page, opening one
+       that is not already up. They are the windows with no other way to be
+       looked at: a tray item opens two of them, a keystroke with a modifier the
+       third, and the desktop will not hand a picture of any of them to anything
+       outside this process. */
     if (source === '#snapshot' || source.startsWith('#snapshot ')) {
       const which = source.slice('#snapshot'.length).trim();
-      const open = { about: actions.about, settings: actions.settings }[which];
+      const open = { about: actions.about, settings: actions.settings,
+                     fonts: actions.fonts }[which];
       if (which && !open) { console.log('debug: nothing here draws a %s window', which); return; }
       const target = open ? open() : win;
       if (!target || target.isDestroyed()) {
