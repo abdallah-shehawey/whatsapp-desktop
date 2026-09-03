@@ -137,6 +137,8 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     const meMod      = grab('WAWebUserPrefsMeUser');
     const getterMod  = grab('WAWebMsgGetters');
     const callMod    = grab('WAWebCallLogMsgData.flow');
+    const storyMod   = grab('WAWebStatusNotificationUtils');
+    const storyNav   = grab('WAWebStatusNavigateTo');
 
     return {
       chats, msgs,
@@ -151,6 +153,12 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
          asked for by name. Each one is its own name -- Missed is "Missed" -- and
          the fallbacks below say so, but the enum is read first. */
       outcomes: callMod && callMod.CallOutcome,
+      /* Opening a story, which is the click on a story mention -- see openStory.
+         WhatsApp's own notification for one is built in WAWebStatusNotification
+         and its onClick is this exact call, so this is the handler the phone
+         and the web client already share rather than a route invented here. */
+      stories: storyMod,
+      storyNav,
     };
   };
 
@@ -771,6 +779,11 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
       mark: status ? wording.STATUS_MENTION_MARK : (mark || ''),
       text: status ? '' : textOf(msg),
       mention: !!aimed,
+      /* Where the click on this banner goes. Everything else here opens the
+         conversation it came from; a story was never sent to a conversation --
+         it was posted, and the chat it landed in is `status@broadcast`, which
+         opens nothing worth looking at. See openStory. */
+      story: status,
       muted: isMuted(chat),
       avatar: '',
       why,
@@ -1175,6 +1188,49 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     return false;
   };
 
+  /*
+   * And opening a STORY, which is the other half of that and not a conversation
+   * at all.
+   *
+   * A story mention arrives in `status@broadcast` along with everybody else's
+   * updates, so the chat a banner for one would open is the wrong place twice
+   * over: it is not where the story is shown, and it is not even a conversation
+   * the user has. What the phone opens is the story itself, on the frame the
+   * user was named in.
+   *
+   * WhatsApp has that handler already and it is asked for it rather than
+   * reimplemented: `WAWebStatusNotification.getBannerOptions` -- the banner the
+   * web client raises for a story mention when this client is not intercepting
+   * it -- sets its onClick to exactly this call. So the story opens the way it
+   * opens when WhatsApp opens it: the poster's Status model is found, the quoted
+   * flow is put up over the media modal, and a story that has since expired gets
+   * WhatsApp's own "Status update not found" rather than a dead click.
+   *
+   * It takes a message KEY and not a model, because the click comes back from
+   * the app long after the banner was made and a model cannot cross that. The
+   * key round-trips: `MsgCollection.get(keyOf(msg.id))` is the same object the
+   * banner was built from, measured on a real mention.
+   *
+   * Answers what it managed to do: 'story' for the frame itself, 'list' for the
+   * updates panel when the message is no longer in the collection -- a client
+   * restarted since the banner, most often -- and '' for neither.
+   */
+  const openStory = msgKey => {
+    if (!S) return '';
+    let msg = null;
+    try { msg = msgKey && S.msgs.get(msgKey); } catch (e) {}
+    if (msg && S.stories && typeof S.stories.openStatusViewer === 'function') {
+      try { S.stories.openStatusViewer(msg); return 'story'; } catch (e) {}
+    }
+    /* The story is gone from the collection but the user still asked to see it.
+       The updates panel is where it would be if it is still there at all, and
+       it is a great deal closer to the answer than the conversation. */
+    if (S.storyNav && typeof S.storyNav.navigateToStatus === 'function') {
+      try { S.storyNav.navigateToStatus(); return 'list'; } catch (e) {}
+    }
+    return '';
+  };
+
   /* Which chat is open right now, asked rather than remembered -- the app wants
      this again whenever the window comes back, and nothing about the chat itself
      changes to say so. */
@@ -1248,6 +1304,7 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
   return {
     get ready() { return !!S; },
     open,
+    openStory,
     activeChat,
     unreadNow,
     setFocus: value => {

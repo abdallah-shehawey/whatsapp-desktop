@@ -16,7 +16,8 @@
  * "why does scrolling lag when the browser does not" -- and "#scroll" measures a
  * real one, sixty wheel events with the page's frame intervals sampled around
  * them. "#tone" plays the notification sound the client uses for its own
- * banners.
+ * banners. "#story <message key>" opens a story the way a clicked banner for a
+ * mention in one does, which is the one path with no pointer to drive it.
  *
  * Devtools are a Ctrl+Shift+I away here, which is what the GTK client could not
  * offer -- WebKitGTK's remote inspector never answered on its port. This stays
@@ -404,6 +405,17 @@ const install = (getWindow, getBanners, actions = {}) => {
     if (source.startsWith('#open ')) {
       win.webContents.send('wa:open-chat-request', { name: source.slice(6).trim() });
       console.log('debug: asked the page to open a conversation');
+      return;
+    }
+
+    /* And a story, by the key of the message that named the user in one --
+       exactly what a clicked banner for a story mention sends. The banner
+       itself cannot be clicked from here: it belongs to the notification
+       server, and the click comes back over DBus from a pointer. */
+    if (source.startsWith('#story ')) {
+      win.webContents.send('wa:store-open',
+                           { chat: 'status@broadcast', story: true, msg: source.slice(7).trim() });
+      console.log('debug: asked the page to open a story');
       return;
     }
 

@@ -1695,9 +1695,14 @@ const wireIpc = () => {
       icon: note.avatar,
       onClick: () => {
         showWindow();
+        /* The message travels with the click, and a story travels with a flag
+           saying so: a story mention landed in `status@broadcast` along with
+           everybody else's updates, and opening that chat is not what the user
+           asked for by clicking it. The page opens the story itself. */
         if (win && !win.isDestroyed())
           win.webContents.send('wa:store-open', { chat: note.chat, name: note.title,
-                                                  preview: note.text });
+                                                  preview: note.text, msg: note.msg,
+                                                  story: !!note.story });
       },
     });
     if (!banner) return;

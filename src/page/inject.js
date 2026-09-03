@@ -2466,6 +2466,19 @@ const start = ({ send, on }) => {
      needs no row on the page and cannot pick the wrong one of two chats sharing
      a name. Pressing a row is what happens when that is not available. */
   on('store-open', request => {
+    /* A story first, because it is not in a conversation and the chat it
+       nominally arrived in -- `status@broadcast` -- would open a screen with
+       nothing on it. See openStory in store.js. */
+    if (request && request.story && waStore) {
+      const opened = waStore.openStory(request.msg);
+      if (opened === 'story') { log('opened the story the mention was posted on'); return; }
+      if (opened === 'list') {
+        log('the story is no longer in the collection; opened the updates panel instead');
+        return;
+      }
+      log('could not open the story; falling back to the chat it arrived in');
+    }
+
     const chatId = request && request.chat;
     if (chatId && waStore && waStore.open(chatId)) {
       setTimeout(() => { if (waStore) send('store-active', { chat: waStore.activeChat() }); }, 300);
