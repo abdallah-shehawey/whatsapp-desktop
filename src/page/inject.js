@@ -2138,6 +2138,22 @@ const start = ({ send, on }) => {
     restoring.set(el, back);
   };
 
+  /* How near the duration still counts as the end. Chromium's own end lands
+     exactly on it, so this is only for a decode that leaves the position a hair
+     short -- and a note stopped by hand inside the last frame of it is one
+     whose card can wait for the end that is arriving anyway. */
+  const END_SLACK = 0.05;
+
+  /* At the end of the resource, whether or not the ended event has gone out
+     yet. The element's own answer first, because it is the one that is right
+     before the event is. */
+  const atEnd = el => {
+    if (el.ended === true) return true;
+    const at = el.currentTime, length = el.duration;
+    return typeof length === 'number' && isFinite(length) && length > 0 &&
+           typeof at === 'number' && length - at <= END_SLACK;
+  };
+
   /* Watched on the element itself, once, at its first play. WhatsApp's voice
      notes are detached -- measured: isConnected false, and getRootNode answers
      the element -- so there is no path from one to window and a capture
@@ -2147,13 +2163,19 @@ const start = ({ send, on }) => {
   const watchPlayback = el => {
     if (el.__waWatched) return;
     el.__waWatched = true;
-    el.addEventListener('play', () => { el.__waEnded = false; });
     /* The end of a note is Chromium's own business: it drops that player by
-       itself and the card goes with it. WhatsApp pauses the element afterwards
-       to rewind it, and recycling there would be a reload for nothing. */
-    el.addEventListener('ended', () => { el.__waEnded = true; });
+       itself and the card goes with it. And THE END ARRIVES AS A PAUSE --
+       measured here, not reasoned about: playing a blob out fires
+       `pause(ended=true, t=0.400/0.400)` and only then `ended`. So a flag set
+       by an ended listener is set after the pause handler has already run, and
+       every note that played out was being recycled: WhatsApp rewinds a
+       finished note when it hears `ended`, and the restore's seek put it
+       straight back at the end, behind WhatsApp's back. An element parked
+       there will not play again -- measured too: play() resolved, currentTime
+       stayed 0.400, paused stayed true -- which is the note that needed its
+       bar dragged back by hand before it would start over. */
     el.addEventListener('pause', () => {
-      if (el.__waEnded || !hideControlsWhenPaused) return;
+      if (!hideControlsWhenPaused || atEnd(el)) return;
       if (conversationAudio(el)) recycle(el);
     });
   };

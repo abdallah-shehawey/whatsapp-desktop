@@ -241,13 +241,26 @@ class HTMLMediaElement {
     this.src = src || '';
     this.currentTime = 0;
     this.paused = true;
+    this.ended = false;
     /* How many times the load algorithm was run, which is what the media
        controls are taken down by: one load with no src, one with it back. */
     this.loads = 0;
     this.handlers = {};
   }
-  play() { played.push('audio'); this.paused = false; return Promise.resolve(); }
+  play() { played.push('audio'); this.paused = false; this.ended = false; return Promise.resolve(); }
   pause() { this.paused = true; this.fire('pause'); }
+  /* Playing out to the end, in the order Chromium really does it -- measured
+     in Electron: the position is on the duration and `ended` already answers
+     true when the PAUSE goes out, and the ended event comes after it. This test
+     used to fire them the other way round, and that is exactly why a note that
+     played out was being recycled on the live client and not here. */
+  playOut() {
+    this.currentTime = this.duration;
+    this.ended = true;
+    this.paused = true;
+    this.fire('pause');
+    this.fire('ended');
+  }
   closest(sel) { return this.where === sel ? {} : null; }
   getAttribute(name) { return name === 'src' ? (this.src || null) : null; }
   setAttribute(name, value) { if (name === 'src') this.src = value; }
@@ -833,13 +846,24 @@ const check = (label, got, want) => {
   check('and lands once the src is back', played.join(), 'audio');
 
   /* The end of a note is Chromium's own business -- it drops that player by
-     itself. WhatsApp pauses the element afterwards to rewind it, and recycling
-     there would be a reload for nothing. */
+     itself. Recycling there is worse than a reload for nothing: WhatsApp
+     rewinds a finished note, the restore's seek would put it back at the end,
+     and a note parked at its end does not play again. */
   const finished = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/finished');
+  finished.duration = 8.4;
   finished.play();
-  finished.fire('ended');
-  finished.pause();
+  finished.playOut();
   check('a note that played out is left alone', finished.loads, 0);
+  check('and it still has the src WhatsApp will rewind',
+        finished.src, 'blob:https://web.whatsapp.com/finished');
+
+  /* The same moment, arriving a hair short of the duration. */
+  const nearly = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/nearly');
+  nearly.duration = 8.4;
+  nearly.play();
+  nearly.currentTime = 8.38;
+  nearly.pause();
+  check('and so is one stopped inside the last of it', nearly.loads, 0);
 
   /* Everything that is not a recording somebody chose to listen to. */
   const tone = new sandbox.HTMLMediaElement('', 'https://static.whatsapp.net/l-ut9G1w4eu.ogg');
