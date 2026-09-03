@@ -30,7 +30,7 @@
 'use strict';
 
 const { Tray, Menu, nativeImage } = require('electron');
-const { SniTray } = require('./tray-sni');
+const { SniTray, ID } = require('./tray-sni');
 const { execFile, spawn } = require('child_process');
 
 const WATCHER = 'org.kde.StatusNotifierWatcher';
@@ -107,12 +107,13 @@ const waitForHost = onHost => {
 
 class ElectronTray {
   constructor({ normal, attention, onToggle, onShow, onHide, onQuit, onSettings,
-                onSetTheme, getTheme, title = 'WhatsApp' }) {
+                onSetTheme, getTheme, onAbout, getUpdate, title = 'WhatsApp' }) {
     this.icons = {
       normal: nativeImage.createFromPath(normal),
       attention: nativeImage.createFromPath(attention || normal),
     };
-    this.handlers = { onToggle, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme };
+    this.handlers = { onToggle, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme,
+                      onAbout, getUpdate };
     this.title = title;
     this.unread = false;
     /* Where the window was when this was last told. The word above it cannot
@@ -220,8 +221,26 @@ class ElectronTray {
         ],
       },
       { type: 'separator' },
+      {
+        /* Whatever the last check found is written in as the menu is built.
+           This tray cannot change one label without building the whole menu
+           again -- see renderMenu -- so the wording lands on the next build
+           rather than the moment an answer arrives. The item in tray-sni.js,
+           which is the one nearly everybody gets, updates in place. */
+        label: this.aboutLabel(),
+        click: () => this.handlers.onAbout && this.handlers.onAbout(),
+      },
+      { type: 'separator' },
       { label: 'Quit', accelerator: 'Ctrl+Q', click: () => this.handlers.onQuit && this.handlers.onQuit() },
     ]));
+  }
+
+  /* The About item, which names a release when the daily check has found one --
+     the menu's only announcement, and the way into the window that can do
+     something about it. */
+  aboutLabel() {
+    const found = this.handlers.getUpdate && this.handlers.getUpdate();
+    return found && found.newer ? `About WhatsApp — ${found.latest} is out` : 'About WhatsApp';
   }
 
   /* The icon and its tooltip, which are not the menu -- and are kept apart from
@@ -317,7 +336,23 @@ class TrayIcon {
   render() {
     if (!this.impl) return;
     if (this.impl.render) this.impl.render();
-    else if (this.impl.pushProperties) this.impl.pushProperties([5, 6, 7]);
+    else if (this.impl.pushProperties) {
+      this.impl.pushProperties([ID.THEME_SYSTEM, ID.THEME_DARK, ID.THEME_LIGHT]);
+    }
+  }
+
+  /*
+   * A check came back, and one item's wording follows it.
+   *
+   * Told apart from render() on purpose. The item in tray-sni.js is updated in
+   * place, which is what that file exists to make possible; Electron's tray
+   * could only be told by building the whole menu again, and a rebuild renumbers
+   * every id -- the dead-click bug written up over renderMenu. A word that waits
+   * for the next build is a far smaller thing than a Quit that does nothing, so
+   * on that path this deliberately does not redraw.
+   */
+  refreshUpdate() {
+    if (this.impl && this.impl.pushProperties) this.impl.pushProperties([ID.ABOUT]);
   }
 
   destroy() {

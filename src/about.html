@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About WhatsApp</title>
+  <style>
+    /* The same palette the settings window is drawn from, so the two windows of
+       this client look like they belong to one another. */
+    :root {
+      --bg-primary: #111b21;
+      --bg-secondary: #202c33;
+      --bg-card: #182229;
+      --bg-card-hover: #222e35;
+      --accent: #00a884;
+      --accent-hover: #06cf9c;
+      --accent-dim: rgba(0, 168, 132, 0.15);
+      --text-primary: #e9edef;
+      --text-secondary: #8696a0;
+      --text-muted: #667781;
+      --border-color: #2a3942;
+      --font-family: system-ui, sans-serif;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root[data-theme="system"], :root[data-theme="light"] {
+        --bg-primary: #f0f2f5;
+        --bg-secondary: #ffffff;
+        --bg-card: #ffffff;
+        --bg-card-hover: #f5f6f6;
+        --accent: #00a884;
+        --accent-hover: #029072;
+        --accent-dim: rgba(0, 168, 132, 0.12);
+        --text-primary: #111b21;
+        --text-secondary: #667781;
+        --text-muted: #8696a0;
+        --border-color: #e9edef;
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --bg-primary: #111b21;
+      --bg-secondary: #202c33;
+      --bg-card: #182229;
+      --bg-card-hover: #222e35;
+      --accent: #00a884;
+      --accent-hover: #06cf9c;
+      --accent-dim: rgba(0, 168, 132, 0.15);
+      --text-primary: #e9edef;
+      --text-secondary: #8696a0;
+      --text-muted: #667781;
+      --border-color: #2a3942;
+    }
+
+    :root[data-theme="light"] {
+      --bg-primary: #f0f2f5;
+      --bg-secondary: #ffffff;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f5f6f6;
+      --accent: #00a884;
+      --accent-hover: #029072;
+      --accent-dim: rgba(0, 168, 132, 0.12);
+      --text-primary: #111b21;
+      --text-secondary: #667781;
+      --text-muted: #8696a0;
+      --border-color: #e9edef;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      font-family: var(--font-family);
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 16px;
+      line-height: 1.5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    .header {
+      -webkit-app-region: drag;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background-color: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 17.5px;
+      font-weight: 600;
+    }
+
+    .header-title svg {
+      width: 20px;
+      height: 20px;
+      fill: var(--accent);
+    }
+
+    .close-btn {
+      -webkit-app-region: no-drag;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .close-btn:hover {
+      background-color: var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .container {
+      padding: 18px 16px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    /* Nothing in this column is allowed to be squeezed. A flex child shrinks
+       before its parent scrolls, and what that looked like was a card with the
+       bottom line of its own text cut off. */
+    .container > * { flex-shrink: 0; }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+
+    /* The launcher's own icon, at the size the launcher draws it. */
+    .app-icon {
+      width: 72px;
+      height: 72px;
+      -webkit-user-drag: none;
+    }
+
+    .app-name {
+      font-size: 21px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .app-line {
+      font-size: 13.5px;
+      color: var(--text-secondary);
+      text-align: center;
+      max-width: 300px;
+      line-height: 1.4;
+    }
+
+    .version {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--accent);
+      background-color: var(--accent-dim);
+      border-radius: 999px;
+      padding: 3px 12px;
+      /* The one thing on this window somebody may want to paste into a bug
+         report, so it is the one thing that can be selected. */
+      user-select: text;
+    }
+
+    .card {
+      width: 100%;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .update {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+    }
+
+    .update-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .update-title {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .update-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.35;
+    }
+
+    .update-desc.warn { color: #f0a04b; }
+
+    .btn {
+      flex-shrink: 0;
+      background-color: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 8px 14px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s ease, opacity 0.15s ease;
+    }
+
+    .btn:hover { background-color: var(--accent-hover); }
+    .btn:disabled { opacity: 0.55; cursor: default; }
+
+    .btn.quiet {
+      background-color: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+    }
+
+    .btn.quiet:hover { background-color: var(--bg-card-hover); }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      padding: 11px 14px;
+      border: none;
+      border-bottom: 1px solid var(--border-color);
+      background: transparent;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 15px;
+      text-align: left;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+
+    .row:last-child { border-bottom: none; }
+    .row:hover { background-color: var(--bg-card-hover); }
+
+    .row-info { display: flex; flex-direction: column; gap: 2px; }
+    .row-title { font-weight: 500; }
+    .row-desc { font-size: 13px; color: var(--text-secondary); }
+
+    .row svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      stroke: var(--text-secondary);
+      fill: none;
+      stroke-width: 2;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      padding-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-title">
+      <svg viewBox="0 0 24 24">
+        <path d="M12.004 2c-5.523 0-10 4.477-10 10 0 1.766.458 3.424 1.259 4.871L2 22l5.304-1.233A9.957 9.957 0 0 0 12.004 22c5.523 0 10-4.477 10-10s-4.477-10-10-10zm0 18.2a8.163 8.163 0 0 1-4.168-1.139l-.299-.178-3.093.719.734-2.996-.195-.312A8.156 8.156 0 0 1 3.804 12c0-4.521 3.682-8.2 8.2-8.2 4.522 0 8.2 3.679 8.2 8.2 0 4.521-3.678 8.2-8.2 8.2z"/>
+      </svg>
+      <span>About</span>
+    </div>
+    <button class="close-btn" id="closeBtn" title="Close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+
+  <div class="container">
+
+    <img class="app-icon" id="appIcon" alt="">
+    <div class="app-name" id="appName">WhatsApp</div>
+    <div class="version" id="version">Version …</div>
+    <div class="app-line" id="tagline">WhatsApp for Linux — the web client in a desktop window of its own.</div>
+
+    <!-- Updates -->
+    <div class="card">
+      <div class="update">
+        <div class="update-text">
+          <div class="update-title" id="updateTitle">Updates</div>
+          <div class="update-desc" id="updateDesc">Check whether a newer version has been released.</div>
+        </div>
+        <button class="btn" id="updateBtn">Check</button>
+      </div>
+    </div>
+
+    <!-- Links -->
+    <div class="card">
+      <button class="row" data-open="site">
+        <div class="row-info">
+          <div class="row-title">Website</div>
+          <div class="row-desc">Downloads and install instructions</div>
+        </div>
+        <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
+      <button class="row" data-open="source">
+        <div class="row-info">
+          <div class="row-title">Source code</div>
+          <div class="row-desc">GPL-3.0 on GitHub</div>
+        </div>
+        <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
+    </div>
+
+    <div class="footer-note" id="footer"></div>
+
+  </div>
+
+  <script>
+    const el = id => document.getElementById(id);
+    const versionText = el('version');
+    const updateTitle = el('updateTitle');
+    const updateDesc = el('updateDesc');
+    const updateBtn = el('updateBtn');
+
+    // What the update button does when it is pressed: run a check, or open the
+    // page that says how to install what the check found.
+    let goesToSite = false;
+
+    const applyTheme = theme => document.documentElement.setAttribute('data-theme', theme || 'system');
+
+    const say = (title, desc, warn) => {
+      updateTitle.textContent = title;
+      updateDesc.textContent = desc;
+      updateDesc.classList.toggle('warn', !!warn);
+    };
+
+    // One shape for every answer the main process can give, so a result pushed
+    // in by the check that runs on its own is drawn exactly like one the button
+    // asked for.
+    const render = result => {
+      if (!result) return;
+      if (result.checking) {
+        say('Updates', 'Checking…');
+        updateBtn.disabled = true;
+        updateBtn.textContent = 'Check';
+        return;
+      }
+      updateBtn.disabled = false;
+      if (result.error) {
+        goesToSite = false;
+        say('Updates', result.error, true);
+        updateBtn.textContent = 'Retry';
+        return;
+      }
+      if (result.newer) {
+        goesToSite = true;
+        say('Version ' + result.latest + ' is available',
+            'The site has the install command for your distribution.');
+        updateBtn.textContent = 'Get it';
+        return;
+      }
+      goesToSite = false;
+      say('Up to date', 'Version ' + (result.current || '') + ' is the latest release.');
+      updateBtn.textContent = 'Check';
+    };
+
+    const check = async () => {
+      render({ checking: true });
+      const result = await window.api.checkUpdate();
+      render(result);
+    };
+
+    updateBtn.addEventListener('click', () => {
+      if (goesToSite) { window.api.open('update'); return; }
+      check();
+    });
+
+    document.querySelectorAll('[data-open]').forEach(row => {
+      row.addEventListener('click', () => window.api.open(row.dataset.open));
+    });
+
+    el('closeBtn').addEventListener('click', () => window.api.close());
+
+    // Escape closes this window, the way every dialog on the desktop does.
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') window.api.close();
+    });
+
+    const load = async () => {
+      const about = await window.api.getAbout();
+      if (!about) return;
+      applyTheme(about.theme);
+      if (about.font) {
+        document.documentElement.style.setProperty(
+          '--font-family', '"' + String(about.font).replace(/"/g, '') + '", system-ui, sans-serif');
+      }
+      el('appIcon').src = about.icon;
+      el('appName').textContent = about.name;
+      versionText.textContent = 'Version ' + about.version;
+      el('footer').textContent =
+        about.license + ' · ' + about.author + '\nElectron ' + about.electron +
+        ' · Chromium ' + about.chromium + ' · Node ' + about.node;
+      el('footer').style.whiteSpace = 'pre-line';
+      // What the last check found, if one has already run in the background.
+      if (about.update) render(about.update);
+      // Opened from "Check for Updates" in the tray: the window is the answer,
+      // so it starts looking the moment it is on screen.
+      if (about.checkNow) check();
+    };
+
+    window.api.onAboutChanged(data => {
+      if (!data) return;
+      if (data.theme !== undefined) applyTheme(data.theme);
+      if (data.update !== undefined) render(data.update);
+      if (data.checkNow) check();
+    });
+
+    load();
+  </script>
+</body>
+</html>

@@ -55,6 +55,11 @@ const DEFAULTS = {
      browser tab -- what "Open app" on api.whatsapp.com hands over. Turn it off
      to leave the scheme with whatever already holds it; see src/links.js. */
   'links.claim-scheme': true,
+  /* Ask GitHub once a day whether a newer version has been released, and put it
+     on the tray's own menu item if one has. Nothing is downloaded and nothing is
+     installed -- the package manager does that -- and nothing pops up. Turn it
+     off and nothing asks by itself; About's own Check button still does. */
+  'updates.check': true,
 };
 
 /* A deliberately small INI reader: sections, key = value, # and ; comments.

@@ -5,7 +5,8 @@
  *
  * Whatever lands in that file is evaluated in the page and the result logged.
  * Some words are commands to the app rather than to the page. "#snapshot"
- * writes a PNG of the window. "#hide", "#show", "#minimize" and "#unfocus" put
+ * writes a PNG of the window, and "#snapshot about" or "#snapshot settings" one
+ * of the windows this client draws itself. "#hide", "#show", "#minimize" and "#unfocus" put
  * the window in each of the states the tray has to tell apart, and "#focus"
  * asks for it back the plain way -- between them they drive the tray without a
  * tray to click, which matters because the states differ and only one of them
@@ -527,6 +528,40 @@ const install = (getWindow, getBanners, actions = {}) => {
       return;
     }
 
+    /* The About window, for the same reason as #settings: a rig cannot click a
+       tray item. `#about check` opens it the way "Check for Updates" does, which
+       is the one that starts asking the moment it is on screen. */
+    if (source === '#about' || source.startsWith('#about ')) {
+      if (!actions.about) { console.log('debug: no about window to open'); return; }
+      const checkNow = source.slice('#about'.length).trim() === 'check';
+      const panel = actions.about({ checkNow });
+      await new Promise(resolve => setTimeout(resolve, checkNow ? 2500 : 600));
+      console.log('debug: about %s', panel && !panel.isDestroyed()
+        ? JSON.stringify(panel.getBounds()) : 'did not open');
+      if (actions.lastUpdate) console.log('debug: update %s', JSON.stringify(actions.lastUpdate()));
+      return;
+    }
+
+    /* Ask GitHub now, and print what came back. `#update 1.0.0` says which
+       version to ask about first -- the half of this that only happens when a
+       release is out cannot otherwise be looked at on a machine that is already
+       running the newest one. */
+    if (source === '#update' || source.startsWith('#update ')) {
+      if (!actions.checkUpdate) { console.log('debug: nothing here checks for updates'); return; }
+      const pretend = source.slice('#update'.length).trim();
+      if (pretend && actions.pretendVersion) {
+        /* `#update off` puts the real one back, so a rig that has been looking
+           at the update wording does not leave the tray claiming a release the
+           machine already has. */
+        const asked = /^(off|reset|real)$/.test(pretend) ? null : pretend;
+        actions.pretendVersion(asked);
+        console.log('debug: asking as though this were %s', asked || 'itself');
+      }
+      const found = await new Promise(resolve => actions.checkUpdate(resolve));
+      console.log('debug: update %s', JSON.stringify(found));
+      return;
+    }
+
     if (source === '#hide') { win.hide(); console.log('debug: hidden'); return; }
     /* Through the app's own path, not a copy of it: what is being checked here
        is whether that path actually brings the window to the user. */
@@ -568,11 +603,27 @@ const install = (getWindow, getBanners, actions = {}) => {
       return;
     }
 
-    if (source === '#snapshot') {
+    /* `#snapshot about` and `#snapshot settings` photograph the two windows this
+       client draws itself rather than the page, opening one that is not already
+       up. They are the windows with no other way to be looked at: a tray item
+       opens the first, a keystroke with a modifier the second, and the desktop
+       will not hand a picture of either to anything outside this process. */
+    if (source === '#snapshot' || source.startsWith('#snapshot ')) {
+      const which = source.slice('#snapshot'.length).trim();
+      const open = { about: actions.about, settings: actions.settings }[which];
+      if (which && !open) { console.log('debug: nothing here draws a %s window', which); return; }
+      const target = open ? open() : win;
+      if (!target || target.isDestroyed()) {
+        console.log('debug: no %s window to photograph', which || 'main');
+        return;
+      }
+      /* Long enough for one that was opened by this command to have painted. */
+      if (open) await new Promise(resolve => setTimeout(resolve, 700));
+      const file = which ? SNAPSHOT.replace(/\.png$/, `-${which}.png`) : SNAPSHOT;
       try {
-        const image = await win.webContents.capturePage();
-        fs.writeFileSync(SNAPSHOT, image.toPNG());
-        console.log('debug: wrote %s', SNAPSHOT);
+        const image = await target.webContents.capturePage();
+        fs.writeFileSync(file, image.toPNG());
+        console.log('debug: wrote %s', file);
       } catch (e) {
         console.warn('debug: could not take a snapshot: %s', e.message);
       }

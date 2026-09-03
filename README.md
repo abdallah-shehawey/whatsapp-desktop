@@ -48,6 +48,11 @@ the latest release.
   twelve seconds and refiled silently in the notification centre.
 - **Voice and video calls work out of the box.** Full WebRTC support for microphone and camera with automatic device permissions and Linux-specific rendering fixes.
 - **Built-in Settings & Theme Switcher.** Switch between System Default, Dark Mode, and Light Mode, toggle Autostart at login, and configure tray behavior from the dedicated Settings window (`Ctrl+,`) or directly from the tray menu.
+- **Says when a new version is out.** *About WhatsApp* in the tray menu has the
+  version running, a check against the latest release and a link to the site;
+  the client also looks once a day by itself, and the tray item names the
+  version when there is one to name. It never installs anything — your package
+  manager does that, and the site has the command for your distribution.
 - **Screen sharing in a call**, over PipeWire on Wayland, offering windows as
   well as whole screens.
 - Dark or light follows the desktop, links open in your browser, every download
@@ -118,6 +123,7 @@ make test       # replays a chat list past the watcher, no browser needed
 | `[notifications] whatsapp-sound` | `false` | let WhatsApp play its own tone for a message arriving, instead of the desktop tone this client plays either way |
 | `[notifications] banner-seconds` | `12` | before a banner is refiled silently |
 | `[media] ask-where-to-save` | `true` | every download asks; off, they land in `~/Downloads` |
+| `[updates] check` | `true` | the daily look for a newer release; off, nothing asks by itself and *Check* in About still does |
 
 State lives in `~/.local/share/whatsapp-desktop`.
 
@@ -130,6 +136,8 @@ State lives in `~/.local/share/whatsapp-desktop`.
 | `src/page/inject.js` | the chat-list watcher and the notification shim, in WhatsApp's own world |
 | `src/notify.js` | the banner policy |
 | `src/style.js` | the user stylesheet — the font, and the room Arabic needs |
+| `src/about.html` | the About window, and the update check it shows |
+| `src/update.js` | asks GitHub for the latest release, and compares |
 | `src/fonts.js`, `src/tray.js`, `src/config.js`, `src/desktop.js`, `src/sound.js`, `src/debug.js` | |
 | `tools/make-icons.py` | regenerates `data/icons` — `make icons`, never hand-edit the PNGs |
 | `tools/make-og.py` | redraws the site's link-preview card — `make og` |
@@ -156,9 +164,13 @@ WHATSAPP_DEBUG_EVAL=/tmp/eval.js whatsapp-desktop
 
 Whatever lands in that file is evaluated in the live page. Some words are
 commands to the app instead: `#snapshot`, `#hide`, `#show`, `#state`, `#gpu`,
-`#tone`, and `#scroll <selector>` — sixty real wheel events with the page's long
-tasks sampled around them. Give `#scroll` the selector; left to pick a scroller
-itself it can measure one element while the wheel turns over another.
+`#tone`, `#about`, and `#scroll <selector>` — sixty real wheel events with the
+page's long tasks sampled around them. Give `#scroll` the selector; left to pick
+a scroller itself it can measure one element while the wheel turns over another.
+`#snapshot about` photographs the About window rather than the page, and
+`#update 1.0.0` asks GitHub as though this were an older release, which is the
+only way to see what a client with a version waiting for it looks like —
+`#update off` puts the real one back.
 
 Unset by default — it is a way into a live WhatsApp session, not a feature.
 

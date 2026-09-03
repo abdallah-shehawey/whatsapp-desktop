@@ -45,6 +45,8 @@ const check = (label, got, want) => {
 const build = () => {
   const window = { inFront: false };
   const ran = [];
+  /* What the last update check found, which one item's wording is drawn from. */
+  const update = { found: null };
   const tray = new SniTray({
     normal: '/nonexistent.png',
     onShow: () => ran.push('show'),
@@ -52,6 +54,8 @@ const build = () => {
     onToggle: () => ran.push('toggle'),
     onQuit: () => ran.push('quit'),
     onSettings: () => ran.push('settings'),
+    onAbout: () => ran.push('about'),
+    getUpdate: () => update.found,
     getTheme: () => 'system',
     getInFront: () => window.inFront,
   });
@@ -63,7 +67,8 @@ const build = () => {
   const closeMenu = () => tray.handle(ID.ROOT, 'closed');
   const click = () => tray.handle(ID.TOGGLE, 'clicked');
   const label = () => tray.itemProps(ID.TOGGLE, ['label'])[0][1][1];
-  return { window, ran, tray, openMenu, closeMenu, click, label };
+  const labelOf = id => tray.itemProps(id, ['label'])[0][1][1];
+  return { window, ran, tray, update, openMenu, closeMenu, click, label, labelOf };
 };
 
 /* --------------------------------------------------------- the two states */
@@ -151,6 +156,42 @@ const build = () => {
   check('and that click opens it rather than hiding it again', t.ran.join(), 'show');
 }
 
+/* -------------------------------------------------- about, and the update */
+
+/*
+ * One item added after the menu had already been in front of people, and
+ * everything it leads to -- the version, the site, the check -- is in the window
+ * behind it rather than out here. It runs one handler and nothing else.
+ */
+{
+  const t = build();
+  t.tray.handle(ID.ABOUT, 'clicked');
+  check('About opens the about window', t.ran.join(), 'about');
+}
+
+/*
+ * The one thing this menu announces. Nothing here pops up and the check happens
+ * on its own once a day, so an item that never mentioned what it found would
+ * leave a release sitting behind a window nobody had a reason to open.
+ */
+{
+  const t = build();
+  check('with nothing checked yet the item is just a way in',
+        t.labelOf(ID.ABOUT), 'About WhatsApp');
+
+  t.update.found = { current: '1.6.6', latest: '1.6.6', newer: false };
+  check('a version that is the latest is not announced',
+        t.labelOf(ID.ABOUT), 'About WhatsApp');
+
+  t.update.found = { current: '1.6.6', error: 'no connection to the internet' };
+  check('and neither is a check that could not be made',
+        t.labelOf(ID.ABOUT), 'About WhatsApp');
+
+  t.update.found = { current: '1.6.6', latest: '1.6.7', newer: true };
+  check('a release that is out is named on the item',
+        t.labelOf(ID.ABOUT), 'About WhatsApp — 1.6.7 is out');
+}
+
 /* ------------------------------------------------------------ the numbers */
 
 /*
@@ -170,6 +211,17 @@ const build = () => {
   t.window.moveTo(false);
   check('the menu keeps its numbers when its word changes', ids(), before);
   check('and the item a host clicks is the one that was drawn', before.split(',')[1], '1');
+
+  /* The items added in 1.6.7 were given numbers after the ones that were
+     already out, and the ones already out did not move. A host is entitled to
+     remember any of them. */
+  check('every item still has the number it was given',
+        before, '0,1,2,3,4,5,6,7,10,11,8,9');
+
+  /* And the wording of one of them moving is no more a layout change than the
+     toggle's is. */
+  t.update.found = { current: '1.6.6', latest: '1.6.7', newer: true };
+  check('a release being found renumbers nothing', ids(), before);
 }
 
 console.log(failures ? `\n${failures} failed` : '\ntray checks pass');

@@ -27,6 +27,9 @@ const sound = require('./sound.js');
 const fonts = require('./fonts.js');
 const autostart = require('./autostart.js');
 const links = require('./links.js');
+const updates = require('./update.js');
+/* Version, licence and author, read from the one file that already says them. */
+const manifest = require('../package.json');
 
 const APP_ID = 'io.github.shehawey.whatsapp-desktop';
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
@@ -40,6 +43,17 @@ const STARTUP_GRACE_MS = 30000;
    title counts unread CHATS and fires on its own clock, so without this the two
    paths announce one message twice. */
 const TITLE_FALLBACK_MS = 2000;
+
+/* When the client first asks whether it is out of date, and how often after
+   that. A day is more than often enough for something that only ever changes a
+   word in a menu, and the first one waits for the client to have finished
+   starting. */
+const UPDATE_FIRST_MS = 45 * 1000;
+const UPDATE_EVERY_MS = 24 * 60 * 60 * 1000;
+/* How long an answer stands before the About window asks again. Long enough
+   that opening the window twice does not spend two requests, short enough that
+   what it shows was true this session. */
+const UPDATE_FRESH_MS = 10 * 60 * 1000;
 /* How long a notification is safe from being withdrawn as "already read". The
    unread pill is drawn a beat after the row moves, so a banner raised in that
    gap would otherwise be taken down by the very next report. */
@@ -183,6 +197,7 @@ if (!app.requestSingleInstanceLock()) {
 
 let win = null;
 let settingsWin = null;
+let aboutWin = null;
 let tray = null;
 let banners = null;
 let quitting = false;
@@ -526,6 +541,9 @@ const setTheme = theme => {
   if (settingsWin && !settingsWin.isDestroyed()) {
     settingsWin.webContents.send('settings:changed', { theme });
   }
+  if (aboutWin && !aboutWin.isDestroyed()) {
+    aboutWin.webContents.send('about:changed', { theme });
+  }
 };
 
 const setAutostart = enable => {
@@ -608,6 +626,129 @@ const openSettings = () => {
   });
 
   return settingsWin;
+};
+
+/* ------------------------------------------------------ about, and updates */
+
+/*
+ * What the last check found, or the reason it could not be made. Kept for the
+ * life of the process rather than written down: it is a fact about a web page,
+ * and one that a fresh start is welcome to ask again.
+ */
+let lastUpdate = null;
+/* When that answer came back, so the About window can decide whether it is
+   worth asking again as it opens. */
+let lastUpdateAt = 0;
+let checking = false;
+const waitingOnCheck = [];
+
+/* Which version is being asked about. The debug rig can put a lower one here so
+   that the half of this which only happens when a release is out -- the wording
+   in the tray, the button that goes to the site -- can be looked at on a machine
+   that is already up to date. */
+let pretendVersion = null;
+const currentVersion = () => pretendVersion || app.getVersion();
+
+/*
+ * One check at a time, whoever asked for it. The menu, the About window and the
+ * one that runs by itself all come through here, and a second caller arriving
+ * mid-flight waits for the answer already on its way instead of spending another
+ * request against an hourly limit of sixty.
+ */
+const checkForUpdates = done => {
+  if (done) waitingOnCheck.push(done);
+  if (checking) return;
+  checking = true;
+
+  updates.check(currentVersion(), (err, found) => {
+    checking = false;
+    lastUpdate = err ? { current: currentVersion(), error: err.message } : found;
+    lastUpdateAt = Date.now();
+    console.log('update: %s', err ? `could not ask (${err.message})`
+      : found.newer ? `${found.latest} is out, and this is ${found.current}`
+      : `${found.current} is the latest release`);
+
+    /* The tray item says what was found, and the About window redraws if it is
+       open -- neither of them asked, and both of them show it. */
+    if (tray) tray.refreshUpdate();
+    if (aboutWin && !aboutWin.isDestroyed()) {
+      aboutWin.webContents.send('about:changed', { update: lastUpdate });
+    }
+
+    for (const waiting of waitingOnCheck.splice(0)) waiting(lastUpdate);
+  });
+};
+
+/* Where each of the About window's links goes, decided here rather than in the
+   page: what crosses the bridge is a name, so nothing the page could be talked
+   into saying puts an address of its own in front of the browser. */
+const SITES = {
+  site: updates.SITE,
+  /* The section that spells the upgrade out per distribution -- which is the
+     honest answer for a client installed from a package repository. */
+  update: `${updates.SITE}#update`,
+  source: `https://github.com/${updates.REPO}`,
+};
+
+const openSite = where => {
+  const url = SITES[where] || SITES.site;
+  console.log('opening %s', url);
+  shell.openExternal(url).catch(e => console.warn('could not open %s: %s', url, e.message));
+};
+
+/* Set when the About window is opened by the tray's "Check for Updates", and
+   read once by the page as it loads: the window opened to answer a question, so
+   it starts asking it without being pressed. */
+let aboutShouldCheck = false;
+
+/* Answers with the window, like openSettings, so the debug rig has something to
+   measure. */
+const openAbout = ({ checkNow = false } = {}) => {
+  if (aboutWin && !aboutWin.isDestroyed()) {
+    aboutWin.show();
+    aboutWin.focus();
+    if (checkNow) aboutWin.webContents.send('about:changed', { checkNow: true });
+    return aboutWin;
+  }
+
+  aboutShouldCheck = checkNow;
+  const isDark = nativeTheme.shouldUseDarkColors;
+  const panel = clampToScreen(430, 610);
+  const aboutFont = config.get('view.font') || desktop.interfaceFont();
+  aboutWin = new BrowserWindow({
+    width: panel.width,
+    height: panel.height,
+    center: true,
+    resizable: false,
+    frame: false,
+    title: 'About WhatsApp',
+    icon: appIcon,
+    autoHideMenuBar: true,
+    backgroundColor: isDark ? '#111b21' : '#f0f2f5',
+    webPreferences: {
+      preload: path.join(__dirname, 'about-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      defaultFontFamily: {
+        standard: aboutFont, sansSerif: aboutFont, serif: aboutFont,
+      },
+    },
+  });
+
+  Menu.setApplicationMenu(null);
+  aboutWin.loadFile(path.join(__dirname, 'about.html'));
+
+  aboutWin.once('ready-to-show', () => {
+    aboutWin.show();
+    aboutWin.focus();
+  });
+
+  aboutWin.on('closed', () => {
+    aboutWin = null;
+  });
+
+  return aboutWin;
 };
 
 /* What the page is drawn with. Lifted out of applyStyle because a call moved
@@ -1460,6 +1601,44 @@ const wireIpc = () => {
     }
   });
 
+  /* What the About window draws itself from. The versions underneath are worth
+     having here rather than only in a log: they are the first thing anybody
+     asks for in a bug report, and they are the one thing on that window that can
+     be selected and copied. */
+  ipcMain.handle('about:get', () => {
+    /* Opening this window is the moment somebody wants to know, so it asks --
+       unless it was told minutes ago, in which case the answer it already has is
+       the same answer and appears without a wait. */
+    const checkNow = aboutShouldCheck || Date.now() - lastUpdateAt > UPDATE_FRESH_MS;
+    aboutShouldCheck = false;
+    return {
+      name: TITLE,
+      version: currentVersion(),
+      /* The launcher's own icon, read from data/ next to this file -- the same
+         file the desktop draws, rather than a copy drawn for this window. */
+      icon: `../data/icons/128/apps/${APP_ID}.png`,
+      license: manifest.license,
+      author: String(manifest.author || '').replace(/\s*<[^>]*>/, ''),
+      electron: process.versions.electron,
+      chromium: process.versions.chrome,
+      node: process.versions.node,
+      theme: config.get('view.theme') || 'system',
+      font: config.get('view.font') || desktop.interfaceFont(),
+      update: lastUpdate,
+      checkNow,
+    };
+  });
+
+  ipcMain.handle('about:check-update', () => new Promise(resolve => checkForUpdates(resolve)));
+
+  ipcMain.on('about:open', (_, where) => openSite(where));
+
+  ipcMain.on('about:close', () => {
+    if (aboutWin && !aboutWin.isDestroyed()) {
+      aboutWin.close();
+    }
+  });
+
   /* The font stack the page actually asks for. fontconfig is read once per
      process, so a family learned here takes effect on the next start -- which
      is the price of not having to guess what WhatsApp will name its font next. */
@@ -2140,6 +2319,10 @@ app.whenReady().then(() => {
     getInFront: windowInFront,
     onQuit: quit,
     onSettings: openSettings,
+    onAbout: () => openAbout(),
+    /* Read as the menu is drawn, so the item names a release the daily check
+       found without anything having to push it there. */
+    getUpdate: () => lastUpdate,
     onSetTheme: setTheme,
     getTheme: () => config.get('view.theme') || 'system',
     title: TITLE,
@@ -2149,9 +2332,29 @@ app.whenReady().then(() => {
      where the window is have already been and gone. */
   tray.setInFront(windowInFront());
 
+  /*
+   * One quiet look for a newer version, and then one a day.
+   *
+   * Nothing is downloaded and nothing pops up: all this can do is put a version
+   * on the tray's own item, where somebody who opens the menu will see it. A
+   * client installed from a repository whose metadata has not been refreshed
+   * otherwise has no way to know a release went out at all. Turn it off with
+   * `check = false` under `[updates]` in the config file.
+   *
+   * Late, rather than at startup: the first seconds belong to the window and to
+   * WhatsApp's own connection, and this question can wait for them.
+   */
+  if (config.get('updates.check') !== false) {
+    setTimeout(() => checkForUpdates(), UPDATE_FIRST_MS);
+    setInterval(() => checkForUpdates(), UPDATE_EVERY_MS);
+  }
+
   debug.install(() => win, () => banners,
                 { show: showWindow, toggle: toggleWindow, onScreen: windowOnScreen,
-                  inFront: windowInFront, settings: openSettings, set: changeSetting });
+                  inFront: windowInFront, settings: openSettings, set: changeSetting,
+                  about: openAbout, checkUpdate: checkForUpdates,
+                  pretendVersion: version => { pretendVersion = version; },
+                  lastUpdate: () => lastUpdate });
 
   /* Follow the desktop live: a theme switched from light to dark, or a font
      changed in Settings, should not need the client restarted. */

@@ -58,6 +58,12 @@ const ID = {
   THEME_LIGHT: 7,
   SEP_2: 8,
   QUIT: 9,
+  /* Added 2026-09-03, after QUIT, because a number here belongs to whichever
+     item was given it first -- a host may hand any of them back long after the
+     menu it read them from was drawn. Where they sit in the menu is the order
+     in `children`, and that is free to change. */
+  SEP_3: 10,
+  ABOUT: 11,
 };
 
 /* Variant helpers: src/dbus.js takes a variant as [signature, value]. */
@@ -87,7 +93,7 @@ const pixmap = image => {
 
 class SniTray {
   constructor({ normal, attention, onToggle, onShow, onHide, onQuit, onSettings,
-                onSetTheme, getTheme, getInFront,
+                onSetTheme, getTheme, getInFront, onAbout, getUpdate,
                 title = 'WhatsApp', appId = 'whatsapp-desktop' }) {
     this.icons = {
       normal: nativeImage.createFromPath(normal),
@@ -97,7 +103,8 @@ class SniTray {
       normal: pixmap(this.icons.normal),
       attention: pixmap(this.icons.attention),
     };
-    this.handlers = { onToggle, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme };
+    this.handlers = { onToggle, onShow, onHide, onQuit, onSettings, onSetTheme, getTheme,
+                      onAbout, getUpdate };
     this.title = title;
     this.appId = appId;
     this.unread = false;
@@ -213,6 +220,20 @@ class SniTray {
     return (this.handlers.getTheme && this.handlers.getTheme()) || 'system';
   }
 
+  /*
+   * The other word that moves, and the menu's only announcement.
+   *
+   * Checking for a version and going to the site are both inside the About
+   * window rather than out here -- the owner asked for the menu back, and a tray
+   * menu earns its length. What is left is that a release nobody has looked for
+   * would then be found by the daily check and never mentioned, so the one item
+   * that leads to it says so.
+   */
+  aboutLabel() {
+    const found = this.handlers.getUpdate && this.handlers.getUpdate();
+    return found && found.newer ? `About WhatsApp — ${found.latest} is out` : 'About WhatsApp';
+  }
+
   /* An item's properties, filtered to what the host asked for -- an empty
      request means all of them, which is what the spec says and what gnome-shell
      relies on. */
@@ -230,6 +251,8 @@ class SniTray {
                         ['toggle-type', vs('radio')], ['toggle-state', vi(theme === 'dark' ? 1 : 0)]],
       [ID.THEME_LIGHT]: [['label', vs('Light Mode')], ['enabled', vb(true)], ['visible', vb(true)],
                          ['toggle-type', vs('radio')], ['toggle-state', vi(theme === 'light' ? 1 : 0)]],
+      [ID.SEP_3]: [['type', vs('separator')], ['visible', vb(true)]],
+      [ID.ABOUT]: [['label', vs(this.aboutLabel())], ['enabled', vb(true)], ['visible', vb(true)]],
       [ID.SEP_2]: [['type', vs('separator')], ['visible', vb(true)]],
       [ID.QUIT]: [['label', vs('Quit')], ['enabled', vb(true)], ['visible', vb(true)]],
       [ID.ROOT]: [['children-display', vs('submenu')]],
@@ -241,7 +264,8 @@ class SniTray {
   /* The tree, as a host reads it: (id, properties, children-as-variants). */
   layout(id, depth, wanted) {
     const children = {
-      [ID.ROOT]: [ID.TOGGLE, ID.SEP_1, ID.SETTINGS, ID.THEME, ID.SEP_2, ID.QUIT],
+      [ID.ROOT]: [ID.TOGGLE, ID.SEP_1, ID.SETTINGS, ID.THEME, ID.SEP_3,
+                  ID.ABOUT, ID.SEP_2, ID.QUIT],
       [ID.THEME]: [ID.THEME_SYSTEM, ID.THEME_DARK, ID.THEME_LIGHT],
     }[id] || [];
 
@@ -364,6 +388,7 @@ class SniTray {
     else if (id === ID.THEME_SYSTEM) this.setTheme('system');
     else if (id === ID.THEME_DARK) this.setTheme('dark');
     else if (id === ID.THEME_LIGHT) this.setTheme('light');
+    else if (id === ID.ABOUT) h.onAbout && h.onAbout();
   }
 
   /*
