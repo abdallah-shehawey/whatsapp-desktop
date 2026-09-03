@@ -44,6 +44,7 @@
 
 const wording = require('../wording.js');
 const bidi = require('../bidi.js');
+const placeholder = require('./avatar.js');
 
 /* How old a message may be and still be news. WhatsApp adds history to the
    collection as it syncs, with isNewMsg set on all of it, so the timestamp is
@@ -107,6 +108,9 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
   const R = () => (typeof window !== 'undefined' && typeof window.require === 'function'
                    ? window.require : null);
   const grab = name => { const r = R(); if (!r) return null; try { return r(name); } catch (e) { return null; } };
+
+  /* The circle a chat with no photograph wears, drawn once per colour. */
+  const placeholders = placeholder.make({ grab });
 
   let S = null;                 // the resolved store, or null
   let liveAt = 0;               // when it came up
@@ -216,6 +220,15 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
       return server === 'g.us' || server === 'newsletter' || server === 'broadcast' ||
              chat.isGroup === true;
     } catch (e) { return false; }
+  };
+
+  /* The one place everybody's status updates land. It is a chat like any other
+     as far as the collections are concerned -- the server is `broadcast`, so
+     isGroup answers true for it and every status arrives with an author -- and
+     it is not a conversation at all: nobody sent it to the user, and the phone
+     raises no notification for one. */
+  const isStatus = chat => {
+    try { return widOf(chat && chat.id) === 'status@broadcast'; } catch (e) { return false; }
   };
 
   /* WhatsApp writes -1 for "until I turn it off" and a unix time in SECONDS for
@@ -373,10 +386,13 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
      list keeps a 1x1 transparent GIF in the <img> of a row whose picture has not
      loaded, and reading the face off the DOM read that. The store holds the URL
      whether or not anything has drawn it. */
-  const pictureFor = async chat => {
+  const pictureFor = async (chat, who) => {
+    /* `who` is for a face that is not the chat's own: a status is posted into
+       one chat by everybody, so the picture on that banner is the person's. */
+    const wid = who || (chat && chat.id);
     let url = '';
     try {
-      const thumb = S.pics && S.pics.get(chat.id);
+      const thumb = S.pics && S.pics.get(wid);
       if (thumb) url = thumb.img || thumb.imgFull || thumb.eurl || '';
     } catch (e) {}
     if (url) {
@@ -387,7 +403,22 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     }
     /* And what the chat list saw, for a chat whose thumbnail the store has not
        fetched yet. */
-    try { return (await faceFor(titleOf(chat))) || ''; } catch (e) { return ''; }
+    if (!who) {
+      try {
+        const seen = await faceFor(titleOf(chat));
+        if (seen) return seen;
+      } catch (e) {}
+    }
+    /* Nobody has a picture for this one, and that is not the same as having no
+       picture to show: WhatsApp draws a coloured circle with a group or a
+       person in it, a squircle with a megaphone for a community's announcement
+       channel, and so does this. See avatar.js -- the colour is the one the
+       chat list is drawing at this moment, asked of WhatsApp itself, and the
+       group type is the only place the difference between those faces is
+       written down. A face that is somebody's rather than the chat's has no
+       group type and needs none. */
+    const kind = who ? '' : (chat && chat.groupType);
+    try { return placeholders.faceFor(wid, kind) || ''; } catch (e) { return ''; }
   };
 
   /* ------------------------------------------------------- what a message is */
@@ -415,6 +446,43 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
           msg.quotedParticipant === undefined) return '';
     } catch (e) {}
     return '';
+  };
+
+  /*
+   * And the same question asked of a story, which WhatsApp answers differently.
+   *
+   * Measured on a real one, posted from a second telephone: `mentionedJidList`
+   * is EMPTY and the message carries a flag of its own, **`statusMentioned`**,
+   * which the server sets per recipient -- true on the story that named the
+   * user, false on the ordinary messages in that same person's chat. That is
+   * the whole reason a story mention rang nothing at first: the list this
+   * client reads was empty on purpose.
+   *
+   * A story can also name a GROUP rather than a person, and everybody in it is
+   * meant to hear about that -- the owner said so outright. The flag above
+   * ought to cover it, being the server's own answer, but it is not the only
+   * thing on the message: `groupMentions` carries the groups the story named,
+   * and a group the user is actually IN is one this client can recognise --
+   * having the chat is what being in it means. Anything else in that list is
+   * somebody else's group and is not this user's business.
+   *
+   * WhatsApp also writes a `protocol` message with subtype
+   * `status_mention_message` into the direct chat when this happens. It is not
+   * announced -- protocol is not in the table of things that are messages --
+   * and it must not be, or one mention would ring twice.
+   */
+  const storyAimedAtUs = msg => {
+    try { if (msg.statusMentioned === true) return true; } catch (e) {}
+    try {
+      for (const wid of (msg.mentionedJidList || [])) if (isMe(wid)) return true;
+    } catch (e) {}
+    try {
+      for (const named of (msg.groupMentions || [])) {
+        const wid = widOf(named && (named.groupJid || named.groupWid || named.jid || named));
+        if (wid && chatOf(wid)) return true;
+      }
+    } catch (e) {}
+    return false;
   };
 
   /* The words, if there are any, and never more of them than a banner can hold.
@@ -476,10 +544,29 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     return out;
   };
 
+  /* The bytes of a picture, wearing a message's clothes.
+   *
+   * `caption` is asked for first and `body` second, which is the other way
+   * round from how this started. Measured on the live account: a photo sent
+   * into a chat carries its words in `caption` and leaves `body` EMPTY, so
+   * either order answered the same thing there -- and a photo posted as a
+   * status carries its words in `caption` and its own JPEG THUMBNAIL, base64
+   * and all, in `body`. Reading the body first put twelve hundred characters of
+   * "/9j/4AAQSkZJRgABAQAAAQABAAD..." on a banner where the caption belonged.
+   *
+   * The magic numbers below are the same guard from the other side, for the
+   * kind of message that has bytes in its body and nothing in its caption: the
+   * first characters of a base64 JPEG, PNG, GIF and WebP. A message of words
+   * does not begin with any of them and go on for a hundred characters without
+   * a space. */
+  const MEDIA_BYTES = /^(\/9j\/|iVBORw0KGgo|R0lGOD|UklGR)/;
+  const isPicture = said => said.length > 120 && !/\s/.test(said) && MEDIA_BYTES.test(said);
+
   const textOf = msg => {
     let said = '';
-    try { said = msg.body || msg.caption || ''; } catch (e) {}
-    said = withNames(String(said == null ? '' : said), msg)
+    try { said = String(msg.caption || msg.body || ''); } catch (e) {}
+    if (isPicture(said)) said = '';
+    said = withNames(said, msg)
       .replace(/\s+/g, ' ').trim();
     return said.length > TEXT_MAX ? said.slice(0, TEXT_MAX) + '…' : said;
   };
@@ -632,7 +719,20 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     const chat = chatOf(msg.id.remote);
     if (!chat) return;
 
-    const aimed = aimedAtUs(msg);
+    /* A story is a different question and gets asked a different way. */
+    const status = isStatus(chat);
+    const aimed = status ? (storyAimedAtUs(msg) ? wording.MENTION_MARK : '')
+                         : aimedAtUs(msg);
+    /* Somebody put something on their status.
+     *
+     * Nobody sent it to the user: a status is posted once and lands in the same
+     * chat for everybody who follows it, which is why every one of them arrived
+     * here as an ordinary message in a chat called `status@broadcast` and rang.
+     * The phone announces none of them -- it announces the ones the user is
+     * MENTIONED in, which is a person addressing them by name and is the one
+     * thing on that screen that is theirs. So that is what gets through, and
+     * the rest goes by in silence. */
+    if (status && !aimed) return;
     if (!wanted(chat)) return;                       // WhatsApp's own switch is off
     if (isMuted(chat) && !aimed) return;             // muted, and not for the user
     /* "Only notify me if I am mentioned", asked of a group and of nothing else. */
@@ -646,27 +746,36 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     }
 
     remember(id);
-    const group = isGroup(chat);
+    /* A status is titled with the person who posted it and wears their face.
+       The chat it arrived in is called `status@broadcast` and has no picture,
+       which is the truth about where it landed and tells the user nothing. */
+    const author = msg.author || msg.from;
+    const group = !status && isGroup(chat);
     const payload = {
       msg: id,
       chat: chatId,
-      title: titleOf(chat),
-      sender: group ? nameOf(msg.author || msg.from, msg.notifyName) : '',
+      title: status ? nameOf(author, msg.notifyName) : titleOf(chat),
+      sender: group ? nameOf(author, msg.notifyName) : '',
       group,
       /* Two different things, and they used to be one string. The kind of
          message goes in front of its words -- "Photo look at this" -- and the
          mark for a message aimed at the user goes in front of the sender, at
          the head of the line, the way WhatsApp writes it itself. Glued
          together, the second read as part of the first. */
-      aimed,
-      mark: mark || '',
-      text: textOf(msg),
+      /* A story mention is one sentence and nothing else. What the story says
+         is left off it -- the owner asked for that outright -- so the sentence
+         goes where the KIND of a message goes, with nothing to introduce and
+         nothing after it. Said in front of the sender, the way `aimed` is said,
+         it would be a mark on a message that was never sent. */
+      aimed: status ? '' : aimed,
+      mark: status ? wording.STATUS_MENTION_MARK : (mark || ''),
+      text: status ? '' : textOf(msg),
       mention: !!aimed,
       muted: isMuted(chat),
       avatar: '',
       why,
     };
-    payload.avatar = await pictureFor(chat);
+    payload.avatar = await pictureFor(chat, status ? author : null);
     send('store-message', payload);
   };
 

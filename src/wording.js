@@ -171,6 +171,23 @@ const pushName = name => String(name == null ? '' : name).replace(/^~\s*/, '').t
 const MENTION_MARK = 'Mentioned you:';
 const REPLY_MARK = 'Replied to you:';
 
+/* And the same thing said on somebody's story, which is a different place and
+   has to say so. A status is the one thing announced here that was not sent to
+   the user at all -- see isStatus in store.js: they are all posted into one
+   chat, none of them is announced, and a mention is the exception because it is
+   a person addressing them by name. Titled with that person and marked with
+   MENTION_MARK alone it read exactly like a message they had been sent, which
+   it is not.
+
+   The words are the phone's own, asked for by the owner and quoted from it:
+   "mentioned you privately in their story". The banner is titled with the
+   person, so the line under it finishes their sentence -- and it is the WHOLE
+   line: what the story actually said is deliberately left off it, which the
+   owner asked for outright ("مش لازم تحط الكلام اللي مكتوب في ال story اكتب بس
+   الجمله اللي قلت عليها"). Hence no colon, unlike the two marks above: nothing
+   follows this one to introduce. */
+const STATUS_MENTION_MARK = 'Mentioned you privately in their story';
+
 /* What WhatsApp puts in front of the sender when a message is aimed at the user
    in particular. It is not a name, and the split below read it as one: a banner
    went out reading "Replied to you: ~Ahmed: ..." with the wrong half of that in
@@ -270,4 +287,5 @@ const MARKS = {
 };
 
 module.exports = { kindOf, pushName, readBody, mediaFromWords, STICKER, MISSED,
-                   RINGING, MARKS, MENTION_MARK, REPLY_MARK, TEXT, mono };
+                   RINGING, MARKS, MENTION_MARK, REPLY_MARK, STATUS_MENTION_MARK,
+                   TEXT, mono };
