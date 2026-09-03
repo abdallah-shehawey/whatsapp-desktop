@@ -44,6 +44,13 @@ const DEFAULTS = {
   /* Take the desktop's media card down when a voice note is paused, instead of
      leaving it there until the note has played out. */
   'media.hide-controls-when-paused': true,
+  /* Ask where every download goes, instead of dropping it in ~/Downloads and
+     saying nothing. Turn it off to have files land there again. */
+  'media.ask-where-to-save': true,
+  /* Where the last one went, so the chooser opens on the folder it was pointed
+     at last rather than at the same place every time. Written by the client;
+     there is nothing to gain by editing it by hand. */
+  'media.download-dir': '',
   /* Ask the desktop to open whatsapp: links with this client rather than in a
      browser tab -- what "Open app" on api.whatsapp.com hands over. Turn it off
      to leave the scheme with whatever already holds it; see src/links.js. */
@@ -168,6 +175,11 @@ class Config {
       '# note does. Turn it off to keep a paused note on the shell, where its',
       '# play button can start it again.',
       `hide-controls-when-paused = ${v['media.hide-controls-when-paused']}`,
+      '# Every download asks where to put it. Off, and they land in ~/Downloads',
+      '# the way a phone does it, with a number on the end of a name already taken.',
+      `ask-where-to-save = ${v['media.ask-where-to-save']}`,
+      '# The folder the last download was pointed at, so the chooser opens there.',
+      `download-dir = ${v['media.download-dir'] || ''}`,
       '',
     ].join('\n');
 

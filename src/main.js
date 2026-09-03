@@ -1861,12 +1861,59 @@ const wireIpc = () => {
   });
 };
 
-/* Downloads land in ~/Downloads without a dialog, the way a phone would do it.
-   A name already taken gets a number, rather than overwriting what is there. */
+/* Where the chooser opens: the folder the last download was pointed at, and
+   ~/Downloads until there has been one. Checked rather than trusted -- a folder
+   remembered from a removable disk that is not mounted this time would open the
+   dialog on nothing. */
+const downloadStart = () => {
+  const kept = String(config.get('media.download-dir') || '');
+  try { if (kept && fs.statSync(kept).isDirectory()) return kept; } catch (e) {}
+  return app.getPath('downloads');
+};
+
+const rememberDownloadDir = dir => {
+  if (!dir || dir === config.get('media.download-dir')) return;
+  config.set('media.download-dir', dir);
+  config.save();
+};
+
+/* A download asks where it should go, every time.
+ *
+ * This used to drop every file in ~/Downloads without a word, on the reasoning
+ * that a phone does the same. The owner asked for the chooser instead -- "لما
+ * اعمل download لحاجه ... يقولي اختار الفولدر اللي عايز تعمل download فيه
+ * وتيجي كل مره" -- and this is the half a phone gets wrong on a desktop: a
+ * file saved somewhere you chose is filed, and a file in ~/Downloads is one
+ * more thing to find later.
+ *
+ * The dialog is not raised here. Electron shows the desktop's own save dialog
+ * for any download whose save path is left unset, so the work is to NOT set one
+ * and to dress the dialog it puts up: the name WhatsApp sent, in the folder the
+ * last one went to. Cancelling it cancels the download, which is Chromium's
+ * behaviour and the right one -- there is nowhere to put the file.
+ *
+ * With the switch off it goes back to what it did: ~/Downloads, no dialog, and
+ * a number on the end of a name that is already taken rather than a file
+ * quietly written over. */
 const wireDownloads = ses => {
-  const downloads = app.getPath('downloads');
   ses.on('will-download', (event, item) => {
     const name = item.getFilename();
+
+    if (config.get('media.ask-where-to-save') !== false) {
+      item.setSaveDialogOptions({ defaultPath: path.join(downloadStart(), name) });
+      item.once('done', (e, state) => {
+        /* Cancelled is the dialog waved away, and it is a normal answer here
+           rather than a failure: nothing is saved, and the log says which of
+           the two happened so a missing file is not a mystery. */
+        if (state !== 'completed') { console.log('download %s: %s', state, name); return; }
+        const saved = item.getSavePath();
+        console.log('downloaded %s', saved);
+        rememberDownloadDir(path.dirname(saved));
+      });
+      return;
+    }
+
+    const downloads = app.getPath('downloads');
     const ext = path.extname(name);
     const stem = path.basename(name, ext);
     let target = path.join(downloads, name);

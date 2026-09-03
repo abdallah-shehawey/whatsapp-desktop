@@ -50,9 +50,9 @@ the latest release.
 - **Built-in Settings & Theme Switcher.** Switch between System Default, Dark Mode, and Light Mode, toggle Autostart at login, and configure tray behavior from the dedicated Settings window (`Ctrl+,`) or directly from the tray menu.
 - **Screen sharing in a call**, over PipeWire on Wayland, offering windows as
   well as whole screens.
-- Dark or light follows the desktop, links open in your browser, downloads land
-  in `~/Downloads`, `Ctrl` `+`/`-`/`0` zoom and the window size is remembered.
-  `Esc` closes the emoji panel whether or not you picked one.
+- Dark or light follows the desktop, links open in your browser, every download
+  asks where to put it, `Ctrl` `+`/`-`/`0` zoom and the window size is
+  remembered. `Esc` closes the emoji panel whether or not you picked one.
 
 <p align="center">
   <img src="screenshots/settings.png" alt="WhatsApp Desktop Settings" width="420" />
@@ -117,6 +117,7 @@ make test       # replays a chat list past the watcher, no browser needed
 | `[notifications] outgoing-sound` | `false` | WhatsApp's own tone for a message *you* send |
 | `[notifications] whatsapp-sound` | `false` | let WhatsApp play its own tone for a message arriving, instead of the desktop tone this client plays either way |
 | `[notifications] banner-seconds` | `12` | before a banner is refiled silently |
+| `[media] ask-where-to-save` | `true` | every download asks; off, they land in `~/Downloads` |
 
 State lives in `~/.local/share/whatsapp-desktop`.
 
