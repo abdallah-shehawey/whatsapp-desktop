@@ -118,13 +118,61 @@ const appIcon = iconFile(256, `apps/${APP_ID}.png`);
  * a relaunch loop is a worse bug than the wrong font. */
 const INHERITED_FONTCONFIG = process.env.FONTCONFIG_FILE;
 
-const configureFonts = () => {
-  if (!config.get('view.force-font')) return null;
-  const family = config.get('view.font') || desktop.interfaceFont();
-  return fonts.configure(family, app.getPath('userData'));
+/*
+ * What the owner asked for, per script, straight out of the config.
+ *
+ * `fonts.<script>-inherit` is the switch at the head of each of the two groups
+ * in Settings, and while one is on this answers for that script what the client
+ * has always answered: the desktop's own family, at its own size, in its own
+ * weight. The keys under it are read only once it has been turned off -- so a
+ * config with a family in it and the switch still on draws in the desktop font,
+ * and turning that switch off again brings the choice back without anything
+ * having to be picked a second time.
+ *
+ * They are two switches rather than one because they are two questions. An
+ * Arabic face of one's own is the common want here, and it has no business
+ * dragging a Latin choice along with it.
+ */
+const fontPrefs = () => {
+  const desktopFamily = config.get('view.font') || desktop.interfaceFont();
+  const script = name => (config.get(`fonts.${name}-inherit`) ? null : {
+    family: config.get(`fonts.${name}-family`) || '',
+    size: Number(config.get(`fonts.${name}-size`)) || 100,
+    bold: !!config.get(`fonts.${name}-bold`),
+    italic: !!config.get(`fonts.${name}-italic`),
+  });
+  const latin = script('latin');
+  const arabic = script('arabic');
+  return {
+    /* Both of them left alone, which is the state a client ships in and the
+       one the stylesheet has to come out of unchanged. */
+    inherit: !latin && !arabic,
+    latin: latin ? { ...latin, family: latin.family || desktopFamily } : { family: desktopFamily },
+    arabic,
+  };
 };
 
-const fontConfigFile = configureFonts();
+/* The same thing with the faces resolved -- which family, and which FILE of it,
+   for upright text and for italic. See src/fonts.js: "bold Arabic" is a
+   different file, not a declaration. */
+const chosenFonts = () => fonts.resolve(fontPrefs());
+
+/* The one family for the client's own windows, which are English and have no
+   second script to think about. */
+const uiFont = () => fontPrefs().latin.family;
+
+/* Off only when the desktop font is being inherited AND the page is not being
+   forced into it: a font chosen by hand is a font that was asked for, and it
+   would be an odd switch that then declined to apply it. */
+const forcingFont = () => !!config.get('view.force-font') ||
+  !config.get('fonts.latin-inherit') || !config.get('fonts.arabic-inherit');
+
+const configureFonts = () => {
+  if (!forcingFont()) return { file: null, changed: false };
+  return fonts.configure(chosenFonts(), app.getPath('userData'));
+};
+
+const fontConfigFile = configureFonts().file;
 if (fontConfigFile) {
   process.env.FONTCONFIG_FILE = fontConfigFile;
   if (INHERITED_FONTCONFIG !== fontConfigFile && !process.argv.includes('--font-retry')) {
@@ -564,7 +612,26 @@ const changeSetting = (key, value) => {
     win.webContents.setZoomFactor(Number(value) || 1.0);
   }
   if (key === 'view.font-size' || key === 'view.chat-font-size') applyStyle();
-  return true;
+
+  /*
+   * A font change, and the only honest answer to "does this need a restart".
+   *
+   * Almost all of it does not: the faces are a stylesheet, and a stylesheet
+   * goes into a page that is already open -- a family, a size, a weight all
+   * land on the conversation while it is being looked at. What cannot is the
+   * fontconfig document. Every process that draws text reads that file once, at
+   * startup, and it is what answers for the text the page names no family for
+   * at all and for the client's own windows. So the file is rewritten now, and
+   * whether it CHANGED is what the caller is told: changed, and there is a part
+   * of the screen a restart would finish; unchanged, and there is nothing left
+   * to do and nothing worth interrupting anybody for.
+   */
+  if (key.startsWith('fonts.') || key === 'view.font' || key === 'view.force-font') {
+    const written = configureFonts();
+    applyStyle();
+    return { ok: true, restart: !!written.changed };
+  }
+  return { ok: true, restart: false };
 };
 
 /* Answers with the window, so a caller that wants to look at it -- the debug
@@ -584,7 +651,7 @@ const openSettings = () => {
      size is what the owner asked for, and it is what the settings window of
      anything else on the desktop looks like. */
   const panel = clampToScreen(560, 660);
-  const settingsFont = config.get('view.font') || desktop.interfaceFont();
+  const settingsFont = uiFont();
   settingsWin = new BrowserWindow({
     width: panel.width,
     height: panel.height,
@@ -714,7 +781,7 @@ const openAbout = ({ checkNow = false } = {}) => {
   aboutShouldCheck = checkNow;
   const isDark = nativeTheme.shouldUseDarkColors;
   const panel = clampToScreen(430, 610);
-  const aboutFont = config.get('view.font') || desktop.interfaceFont();
+  const aboutFont = uiFont();
   aboutWin = new BrowserWindow({
     width: panel.width,
     height: panel.height,
@@ -755,7 +822,6 @@ const openAbout = ({ checkNow = false } = {}) => {
    into a window of its own is a second page of WhatsApp's, and it is this
    client's font it should be drawn in too. */
 const styleSheet = () => {
-  const family = config.get('view.font') || desktop.interfaceFont();
   const wanted = {
     fontSize: config.get('view.font-size'),
     chatScale: config.get('view.chat-font-size'),
@@ -767,13 +833,17 @@ const styleSheet = () => {
   drawnWith = wanted;
   return [
     sheet,
-    config.get('view.force-font') ? style.aliasSheet(pageFontStack, family) : '',
+    /* The faces themselves: one family name, the Latin font, and -- when the
+       two scripts have been chosen apart -- the Arabic one over the range that
+       is Arabic. No selector, so no per-element cost, which is the whole
+       reason the font lives in @font-face and not in a rule. */
+    forcingFont() ? style.fontFaces(pageFontStack, chosenFonts()) : '',
   ].filter(Boolean).join('\n');
 };
 
 const drawStyle = async () => {
   if (!win || win.isDestroyed()) return;
-  const family = config.get('view.font') || desktop.interfaceFont();
+  const family = uiFont();
   const css = styleSheet();
 
   /* Every sheet, not just the last one: a key that fails to come out is worth
@@ -809,7 +879,7 @@ const applyStyle = () => {
 
 const createWindow = () => {
   const { width, height } = clampToScreen(config.get('window.width'), config.get('window.height'));
-  const family = config.get('view.font') || desktop.interfaceFont();
+  const family = uiFont();
 
   win = new BrowserWindow({
     width,
@@ -1099,7 +1169,7 @@ const openLink = (link, why) => {
 const popups = new Set();
 
 const popupOptions = features => {
-  const family = config.get('view.font') || desktop.interfaceFont();
+  const family = uiFont();
   /* WhatsApp says how big it wants the window; a size of this client's choosing
      is only put on one that did not ask. */
   const sized = /(^|,)\s*(width|height)\s*=/i.test(features || '');
@@ -1579,7 +1649,32 @@ const wireIpc = () => {
       chatFontSize: Number(config.get('view.chat-font-size')) || 100,
       /* The family the client draws the page in, so this window can be drawn in
          it too rather than in whatever Chromium picks for a plain page. */
-      font: config.get('view.font') || desktop.interfaceFont(),
+      font: uiFont(),
+      /* Everything the font section of that window draws itself from: what was
+         chosen, what it falls back to when nothing was, and what is installed.
+         The lists come with a bold and an italic flag per family, because a
+         switch for a face the font has not got is a switch that does nothing --
+         and one round trip here is cheaper than one per family the owner
+         scrolls past. */
+      fonts: {
+        desktop: desktop.interfaceFont(),
+        systemArabic: fonts.defaultFor('ar'),
+        latin: {
+          inherit: !!config.get('fonts.latin-inherit'),
+          family: config.get('fonts.latin-family') || '',
+          size: Number(config.get('fonts.latin-size')) || 100,
+          bold: !!config.get('fonts.latin-bold'),
+          italic: !!config.get('fonts.latin-italic'),
+        },
+        arabic: {
+          inherit: !!config.get('fonts.arabic-inherit'),
+          family: config.get('fonts.arabic-family') || '',
+          size: Number(config.get('fonts.arabic-size')) || 100,
+          bold: !!config.get('fonts.arabic-bold'),
+          italic: !!config.get('fonts.arabic-italic'),
+        },
+        available: fonts.installed(),
+      },
     };
   });
 
@@ -1599,6 +1694,18 @@ const wireIpc = () => {
     if (settingsWin && !settingsWin.isDestroyed()) {
       settingsWin.close();
     }
+  });
+
+  /* The one thing a font change can ask for that a stylesheet cannot do -- see
+     changeSetting. Relaunched rather than merely restarted so the new process
+     inherits FONTCONFIG_FILE and reads the document that was just rewritten;
+     the file is the same path, so the retry guard at the top of this file sees
+     nothing to do and the client comes back once, not twice. */
+  ipcMain.on('settings:restart', () => {
+    console.log('restarting at the settings window\'s request');
+    quitting = true;
+    app.relaunch();
+    app.quit();
   });
 
   /* What the About window draws itself from. The versions underneath are worth
@@ -1623,7 +1730,7 @@ const wireIpc = () => {
       chromium: process.versions.chrome,
       node: process.versions.node,
       theme: config.get('view.theme') || 'system',
-      font: config.get('view.font') || desktop.interfaceFont(),
+      font: uiFont(),
       update: lastUpdate,
       checkNow,
     };
@@ -1643,7 +1750,7 @@ const wireIpc = () => {
      process, so a family learned here takes effect on the next start -- which
      is the price of not having to guess what WhatsApp will name its font next. */
   ipcMain.on('wa:font-stack', (event, stack) => {
-    if (!config.get('view.force-font') || typeof stack !== 'string') return;
+    if (!forcingFont() || typeof stack !== 'string') return;
     if (stack === pageFontStack) return;
     pageFontStack = stack;
     /* Applied straight away rather than on the next start: an @font-face alias

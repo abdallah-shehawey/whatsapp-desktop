@@ -539,6 +539,10 @@ sudo pacman -U ./whatsapp-desktop-*.pkg.tar.zst  <span class="c"># Arch</span></
             <tr><td><code>[view] font</code></td><td>GNOME's</td><td>family for everything the client draws</td></tr>
             <tr><td><code>[view] font-size</code></td><td><code>16</code></td><td>size of the whole interface, in px</td></tr>
             <tr><td><code>[view] chat-font-size</code></td><td><code>100</code></td><td>size of the messages only, as a %</td></tr>
+            <tr><td><code>[fonts] latin-inherit</code>, <code>arabic-inherit</code></td><td><code>true</code></td><td>each script follows the system font until you say otherwise</td></tr>
+            <tr><td><code>[fonts] latin-family</code>, <code>arabic-family</code></td><td>the system's own</td><td>a font per script, chosen in Settings</td></tr>
+            <tr><td><code>[fonts] latin-size</code>, <code>arabic-size</code></td><td><code>100</code></td><td>each script's size, as a % of its own</td></tr>
+            <tr><td><code>[fonts] latin-bold</code>, <code>arabic-bold</code>, and the italics</td><td><code>false</code></td><td>the family's own bold or italic face</td></tr>
             <tr><td><code>[view] zoom</code></td><td><code>1.0</code></td><td>also set with <kbd>Ctrl</kbd>+<kbd>+</kbd>/<kbd>-</kbd></td></tr>
             <tr><td><code>[view] force-font</code></td><td><code>true</code></td><td>draw the page in one family</td></tr>
             <tr><td><code>[window] width</code>, <code>height</code></td><td><code>1200×800</code></td><td>remembered on exit</td></tr>

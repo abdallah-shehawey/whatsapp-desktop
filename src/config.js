@@ -24,6 +24,27 @@ const DEFAULTS = {
   'view.chat-font-size': 100,
   'view.zoom': 1.0,
   'view.force-font': true,         // draw the page in one family, like a browser told to ignore page fonts
+  /* A font per script, and a switch per script to say whether the desktop's own
+     is being followed. Two switches and not one, because the two questions are
+     genuinely separate: an owner who wants a different Arabic face has no
+     reason to have to pick a Latin one as well, and one who has picked a Latin
+     one should not have to leave Arabic to it. While a script's switch is on,
+     the four keys under it are ignored -- so a choice made once is still there
+     to come back to, and there is nothing to type in again.
+
+     Nothing here can invent a face a font does not ship: `bold` on a family
+     with no bold face changes nothing, which is why the settings window offers
+     that switch only where there is one. */
+  'fonts.latin-inherit': true,
+  'fonts.latin-family': '',        // empty: the desktop font, as before
+  'fonts.latin-size': 100,         // per cent of the family's own size
+  'fonts.latin-bold': false,
+  'fonts.latin-italic': false,
+  'fonts.arabic-inherit': true,
+  'fonts.arabic-family': '',       // empty: whatever the system draws Arabic in
+  'fonts.arabic-size': 100,
+  'fonts.arabic-bold': false,
+  'fonts.arabic-italic': false,
   'window.width': 1200,
   'window.height': 800,
   'behaviour.close-to-tray': true,
@@ -132,6 +153,29 @@ class Config {
       `zoom = ${Number(v['view.zoom']).toFixed(2)}`,
       '# Draw the whole page in one family, the way a browser told to ignore page fonts does.',
       `force-font = ${v['view.force-font']}`,
+      '',
+      '[fonts]',
+      '# One switch per script. On: that script is drawn in the desktop font,',
+      '# exactly as this client always drew it, and the keys under it are',
+      "# ignored -- so a choice is still here to come back to. Off: it is drawn",
+      '# in what was chosen for it. The two are separate on purpose: an Arabic',
+      '# face of your own does not oblige you to pick a Latin one.',
+      `latin-inherit = ${v['fonts.latin-inherit']}`,
+      '# The family for Latin text. Empty follows the desktop font.',
+      `latin-family = ${v['fonts.latin-family']}`,
+      '# Its size, as a percentage of the size that family is drawn at.',
+      `latin-size = ${Math.round(Number(v['fonts.latin-size']) || 100)}`,
+      "# Draw Latin in the family's own bold or italic face. A family that ships",
+      '# neither cannot be made to have one: nothing is synthesised here.',
+      `latin-bold = ${v['fonts.latin-bold']}`,
+      `latin-italic = ${v['fonts.latin-italic']}`,
+      '# And the same for Arabic. Empty family: whatever the system already draws',
+      '# Arabic in, which is what a size on its own needs to hang on.',
+      `arabic-inherit = ${v['fonts.arabic-inherit']}`,
+      `arabic-family = ${v['fonts.arabic-family']}`,
+      `arabic-size = ${Math.round(Number(v['fonts.arabic-size']) || 100)}`,
+      `arabic-bold = ${v['fonts.arabic-bold']}`,
+      `arabic-italic = ${v['fonts.arabic-italic']}`,
       '',
       '[window]',
       `width = ${Math.round(v['window.width'])}`,

@@ -21,6 +21,11 @@ the latest release.
   login. GNOME has no tray of its own: the icon needs the AppIndicator
   extension, and the client waits for it rather than giving up when it starts
   first at login.
+- **A font for English and a font for Arabic** — family, size, bold and italic
+  for each, chosen from what is installed, each with its own "use the system
+  font" switch. It costs nothing per element: the two scripts are two
+  `@font-face` faces of one family, split by `unicode-range`, so there is no
+  rule matching every element on a scrolling page.
 - **Draws everything in the desktop's font**, applied live when you change it,
   and the conversation's own text size is a switch of its own: bigger or
   smaller messages with the chat list left where it was. A community thread
@@ -114,6 +119,14 @@ make test       # replays a chat list past the watcher, no browser needed
 | `[view] chat-font-size` | `100` | the conversation's text, as a percentage of WhatsApp's own |
 | `[view] zoom` | `1.0` | also set with `Ctrl` `+`/`-` |
 | `[view] force-font` | `true` | draw the page in one family |
+| `[fonts] latin-inherit` | `true` | Latin follows the desktop font; off to choose one |
+| `[fonts] latin-family` | the desktop font | family for Latin letters, digits and punctuation |
+| `[fonts] latin-size` | `100` | its size, as a percentage of the family's own |
+| `[fonts] latin-bold`, `latin-italic` | `false` | draw Latin in the family's bold or italic **face** — nothing is synthesised, so a family without one cannot be made to have it |
+| `[fonts] arabic-inherit` | `true` | the same switch for Arabic, separately |
+| `[fonts] arabic-family` | whatever the system draws Arabic in | family for Arabic, even in the middle of an English line |
+| `[fonts] arabic-size` | `100` | Arabic on its own, beside the Latin in the same line |
+| `[fonts] arabic-bold`, `arabic-italic` | `false` | as above |
 | `[window] width`, `height` | `1200x800` | remembered on exit |
 | `[behaviour] close-to-tray` | `true` | closing the window leaves the client running |
 | `[behaviour] minimize-to-tray` | `false` | minimise is not close |

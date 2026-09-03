@@ -509,32 +509,105 @@ const GENERIC = new Set([
    cover falls through to, and aliasing them draws blank boxes. */
 const KEEP = /emoji|symbol|arabic|hebrew|thai|devanagari|cjk|noto sans (?!$)/i;
 
-const aliasSheet = (stack, family) => {
-  if (!stack || !family) return '';
+/*
+ * Two scripts, one family name.
+ *
+ * "A font for English and a font for Arabic" cannot be a selector: there is no
+ * way in CSS to say "the Arabic words in this paragraph", and even if there
+ * were, a rule matching text rather than elements is exactly the per-element
+ * cost this file exists to avoid. What CAN say it is `unicode-range` -- a
+ * descriptor on the @font-face itself, resolved by the font engine per
+ * character, for nothing.
+ *
+ * So each family the page names is given two faces: one with no range, which
+ * covers everything, and one whose range is the Arabic blocks. Both match an
+ * Arabic character, both have the same weight and style, and CSS breaks that
+ * tie by declaration order -- the LAST rule wins. That is why the Arabic face
+ * is written second, and why moving it is a bug rather than a tidy-up.
+ *
+ * The same descriptor is what carries the rest of it. `size-adjust` scales the
+ * glyphs and the metrics of one face, so Arabic can be drawn a size up from
+ * the Latin beside it in the same line, and `src: local(<the family's bold
+ * face>)` is what "bold Arabic" means -- see src/fonts.js, where the face is
+ * chosen. A family with no bold face cannot be made bold and the settings
+ * window says so rather than offering a switch that does nothing.
+ */
+const ARABIC_RANGE = [
+  'U+060C-06FF',          /* Arabic, from the comma: the Latin punctuation
+                             before it is better left with the Latin font */
+  'U+0750-077F',          /* Arabic Supplement */
+  'U+0870-08FF',          /* Arabic Extended-A and -B */
+  'U+FB50-FDFF',          /* Presentation Forms-A */
+  'U+FE70-FEFF',          /* Presentation Forms-B */
+  'U+10E60-10E7E',        /* Rumi numerals */
+  'U+1EE00-1EEFF',        /* Arabic Mathematical Alphabetic Symbols */
+].join(', ');
 
-  const wanted = String(stack).split(',')
+/* The family the client names when it wants its own choice by name -- the two
+   scripts under one roof, for the one rule at the foot of this sheet that has
+   to name a family rather than redefine one the page already names. */
+const UI_FAMILY = 'WhatsApp Desktop';
+
+const local = names => names.map(name => `local("${String(name).replace(/"/g, '')}")`).join(', ');
+
+const face = (family, src, { italic, range, size }) => `@font-face {
+  font-family: "${family.replace(/"/g, '')}";
+  src: ${local(src)};
+  font-weight: 1 1000;
+  font-style: ${italic ? 'italic' : 'normal'};${range ? `\n  unicode-range: ${range};` : ''}${size ? `\n  size-adjust: ${size}%;` : ''}
+}`;
+
+/* One face per family covering the whole weight range: the chosen font is one
+   file, and Chromium synthesises what it has to from it, which is exactly what
+   the universal rule this replaced used to do. */
+const facesFor = (name, script, range) => [
+  face(name, script.normal, { italic: false, range, size: script.size }),
+  face(name, script.italic, { italic: true, range, size: script.size }),
+];
+
+const fontFaces = (stack, chosen) => {
+  if (!chosen || !chosen.latin) return '';
+
+  const wanted = String(stack || '').split(',')
     .map(name => name.trim().replace(/^["']|["']$/g, ''))
     .filter(name => name && !GENERIC.has(name.toLowerCase()) && !KEEP.test(name))
-    .filter(name => name.toLowerCase() !== family.toLowerCase());
+    .filter(name => name.toLowerCase() !== chosen.latin.family.toLowerCase());
 
-  const target = family.replace(/"/g, '');
-  const unique = [...new Set(wanted)];
+  const names = [...new Set(wanted)];
+  /* While the fonts are inherited from the desktop this is the sheet it has
+     always been: the page's own families, pointed at one file, and nothing
+     else. The name of our own is only needed by the rule below it. */
+  if (!chosen.inherit) names.push(UI_FAMILY);
+  if (!names.length) return '';
 
-  /* One face per family covering the whole weight range: the desktop font is
-     one file, and Chromium synthesises the bold and the oblique from it, which
-     is exactly what the universal rule this replaces used to do. */
-  return unique.map(name => `@font-face {
-  font-family: "${name.replace(/"/g, '')}";
-  src: local("${target}");
-  font-weight: 1 1000;
-  font-style: normal;
-}
-@font-face {
-  font-family: "${name.replace(/"/g, '')}";
-  src: local("${target}");
-  font-weight: 1 1000;
-  font-style: italic;
-}`).join('\n');
+  const rules = names.flatMap(name => [
+    ...facesFor(name, chosen.latin, ''),
+    /* Second, and that is the whole mechanism: same family, same weight, same
+       style, and a range that Arabic falls inside -- so for an Arabic
+       character the later rule wins, and for every other character it was
+       never a candidate. */
+    ...(chosen.arabic ? facesFor(name, chosen.arabic, ARABIC_RANGE) : []),
+  ]);
+
+  /* And the text the page names no family for at all.
+   *
+   * fontconfig answers that one -- it is what the `sans-serif` alias in
+   * src/fonts.js is for -- but fontconfig is read once, at startup, so a font
+   * chosen from Settings would not reach it until the next launch. This rule
+   * reaches it now, and it is deliberately NOT !important: a normal
+   * declaration at user origin loses to the page's own, so it applies exactly
+   * where WhatsApp has said nothing and nowhere else. One element, inherited,
+   * with no selector to match per row.
+   *
+   * The emoji families are named after it because a font chosen for words has
+   * no emoji in it, and the generic last because a script neither font covers
+   * has to land somewhere. */
+  const belt = chosen.inherit ? '' : `
+html {
+  font-family: "${UI_FAMILY}", "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+}`;
+
+  return rules.join('\n') + belt;
 };
 
 /* `before` is what the last sheet was built from, and it is not bookkeeping for
@@ -569,4 +642,4 @@ const build = ({ fontSize, chatScale }, before) => {
   return rules.join('\n');
 };
 
-module.exports = { build, stack, aliasSheet };
+module.exports = { build, stack, fontFaces };

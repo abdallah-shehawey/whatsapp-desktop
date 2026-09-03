@@ -4,6 +4,9 @@ const fs = require('fs');
 /* The same family the client would draw this window in, so the picture is the
    window as this machine draws it and not a rendering in Chromium's default. */
 const desktop = require('../src/desktop.js');
+/* The real catalogue, so the picture shows the font picker with this machine's
+   own families in it rather than an empty dropdown. */
+const fonts = require('../src/fonts.js');
 
 app.commandLine.appendSwitch('no-sandbox');
 app.commandLine.appendSwitch('disable-gpu');
@@ -21,6 +24,13 @@ ipcMain.handle('settings:get', () => ({
   fontSize: 16,
   chatFontSize: 100,
   font: desktop.interfaceFont(),
+  fonts: {
+    desktop: desktop.interfaceFont(),
+    systemArabic: fonts.defaultFor('ar'),
+    latin: { inherit: true, family: '', size: 100, bold: false, italic: false },
+    arabic: { inherit: true, family: '', size: 100, bold: false, italic: false },
+    available: fonts.installed(),
+  },
 }));
 ipcMain.handle('settings:set-theme', () => true);
 ipcMain.handle('settings:set-autostart', () => true);

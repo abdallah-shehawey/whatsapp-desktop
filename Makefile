@@ -130,6 +130,7 @@ test:
 	@node tools/test-bidi.js
 	@node tools/test-wording.js
 	@node tools/test-style.js
+	@node tools/test-fonts.js
 	@node tools/test-links.js
 	@node tools/test-tray.js
 	@node tools/test-update.js
