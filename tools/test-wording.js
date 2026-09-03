@@ -109,6 +109,21 @@ check('and it too leaves the sender where a sender belongs',
 check('the same in Arabic, which is what the client is mostly read in',
       readBody('رد عليك: ~Ahmed: تمام').sender, 'Ahmed');
 
+/* And none of that is said in a chat with one person in it. The mark picks a
+   message out of a room; there is no room here, and the only person who could
+   have replied is the one the banner is already titled with. The owner asked
+   for it off -- "انا بكلم واحد يعني مش اكتر من واحد" -- so a direct chat keeps
+   the words and loses the label. */
+check('a direct chat is told nothing about being replied to',
+      readBody('Replied to you: تمام', false).mark, '');
+check('and the words themselves survive it, without WhatsApp\'s prefix',
+      readBody('Replied to you: تمام', false).message, 'تمام');
+check('a mention in a direct chat goes the same way',
+      readBody('Mentioned you: يا عبدالله', false).mark, '');
+/* A group is the case the mark exists for, and it is untouched. */
+check('and a group still says which message was aimed at you',
+      readBody('Replied to you: ~Ahmed: جميل', true).mark, REPLY_MARK);
+
 /* A message that merely begins with those words is a message. The mark is only
    lifted when WhatsApp's own punctuation follows it. */
 check('a message that starts with the words but is not the mark is left alone',

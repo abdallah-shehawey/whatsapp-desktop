@@ -240,8 +240,17 @@ const readBody = (raw, group) => {
   }
 
   /* Told it is one person: there is no sender in the body and nothing to look
-     for. This is the half the heuristic below can only approximate. */
-  if (group === false) return { sender: '', message: rest, mark };
+     for. This is the half the heuristic below can only approximate.
+   *
+   * And the mark goes no further than here. In a group it answers a real
+   * question -- of the forty people in the room, this one was written at you --
+   * but a direct chat has two people in it and there is nobody else a message
+   * could have been meant for. "Replied to you:" in front of a reply from the
+   * only person who could have sent it is a line of the banner spent saying
+   * what the banner already says, and the owner asked for it gone: "انا بكلم
+   * واحد يعني مش اكتر من واحد". It still comes OFF the text above either way --
+   * it is WhatsApp's word about the message, not part of what anybody wrote. */
+  if (group === false) return { sender: '', message: rest, mark: '' };
 
   const split = /^([^:\n]{1,60}):\s*([\s\S]+)$/.exec(rest);
   if (!split) return { sender: '', message: rest, mark };

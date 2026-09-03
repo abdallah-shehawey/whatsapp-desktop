@@ -775,7 +775,15 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
          goes where the KIND of a message goes, with nothing to introduce and
          nothing after it. Said in front of the sender, the way `aimed` is said,
          it would be a mark on a message that was never sent. */
-      aimed: status ? '' : aimed,
+      /* And it is said in a GROUP and nowhere else. The mark's whole job is to
+         pick this message out of a room full of them; a direct chat is two
+         people, and a reply there could not have been aimed at anybody else.
+         The owner asked for it off:
+         "انا بكلم واحد يعني مش اكتر من واحد".
+         Only the WORDS go: `aimed` itself is what carries a message through a
+         muted chat, and that is read above this and must not move with the
+         wording. */
+      aimed: group ? aimed : '',
       mark: status ? wording.STATUS_MENTION_MARK : (mark || ''),
       text: status ? '' : textOf(msg),
       mention: !!aimed,
