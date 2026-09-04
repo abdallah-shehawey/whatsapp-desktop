@@ -2364,6 +2364,391 @@ const start = ({ send, on }) => {
 
   slideTheDrawer();
 
+  /* ------------------------------------------ the reply bar over the composer */
+
+  /*
+   * Reply to a message and a bar carrying the quoted one rises over the
+   * composer. Neither the rise nor the fall is smooth, and both come of the
+   * same thing: two motions that belong together are run by two different parts
+   * of WhatsApp, and they do not keep step. Sampled every frame on the live
+   * page, in a one-to-one and in a group alike:
+   *
+   *   opening -- the bar grows from nothing to its full 67px between 83ms and
+   *   156ms, and the conversation behind it does not move at all until 168ms,
+   *   when the messages jump 66px in a single frame. The bar arrives, and the
+   *   chat snaps up after it.
+   *
+   *   closing -- the bar is sprung down from 200px and its content is 67px
+   *   tall, so for 225ms nothing happens at all; then it collapses over 66ms
+   *   and the conversation comes back in two jumps, 36px and 31px.
+   *
+   * The bar's own height is Velocity's -- it writes `max-height` and
+   * `transform: translateY()` inline on [data-testid="popup_panel"] every frame
+   * -- and the conversation's is a watcher of WhatsApp's that answers a couple
+   * of frames later. Neither can be hurried from out here, so both are taken
+   * over.
+   *
+   * What replaces them is ONE motion given to two elements. The panel is pinned
+   * at the height it needs, which the footer takes in a single layout; the
+   * quoted message inside it is parked a bar-height below, out of sight under
+   * the `overflow-y: hidden` the panel already carries; and in the very frame
+   * the conversation shrinks, the messages are pushed back down by exactly the
+   * room that was taken and both are let go together. The bar rises into place
+   * while the messages rise with it, to the frame, and nothing but a transform
+   * moves.
+   *
+   * An eased `max-height` of our own shipped first and was not enough, which is
+   * worth writing down. The layout it costs is genuinely small -- 0.17ms a
+   * frame, median of fourteen forced layouts of a 28-row conversation, worst
+   * 0.61ms -- and the main thread stays free through the whole open (511,000
+   * zero-timeout callbacks in 450ms, worst gap 9ms, no long tasks at all). None
+   * of that is where a height animation costs. What it does every frame is make
+   * the footer AND the conversation above it paint again: the bar grows, the
+   * messages move up behind it, and all of it is re-rastered eleven times over.
+   * A transform is none of that.
+   *
+   * The mount is an event rather than a search. A one-millisecond animation in
+   * the user stylesheet raises `animationstart` on every mount (src/style.js),
+   * and this panel is unmounted every time the bar is dismissed -- the drawer's
+   * case turned round -- so it arrives every time, in every chat, group and
+   * community, with nothing observing the page to catch it.
+   */
+  const PANEL = 'footer [data-testid="popup_panel"]';
+  /* Long enough to be seen as motion, short enough not to be waited on. */
+  const PANEL_IN_MS = 220;
+  /* The quoted message leaving: a fade, and a fall of a quarter of its own
+     height. It goes before the room does, because it lives in that room, and it
+     goes quickly -- everything after it is waiting on it. */
+  const PANEL_OUT_MS = 90;
+  /* And the room closing after it. */
+  const PANEL_BACK_MS = 200;
+  /* How long the bar will wait for the conversation before arriving without it.
+     Measured from the frame the panel is pinned, the answer comes in 20ms --
+     two frames -- so this is only the point at which there is plainly no answer
+     coming, and a bar that never rises is far worse than one that rises
+     alone. */
+  const PANEL_REVEAL_MS = 150;
+  /* And how long the conversation goes on being watched, which is longer,
+     because a room that answers late still has to be caught: uncompensated, a
+     change at 200ms is the 66px jump this exists to remove, arriving after the
+     bar has settled and looking for all the world like a stutter. Bounded all
+     the same -- past this the height of that scroller is the owner's business
+     again, a composer growing a line as they type or a window being dragged by
+     its edge, and a glide chasing a drag is worse than anything here. */
+  const PANEL_WATCH_MS = 450;
+  /* Out of nothing and back into it: an entrance decelerates, an exit
+     accelerates away. WhatsApp's spring does neither -- it is nearly linear
+     across the part of its travel that shows. */
+  const PANEL_IN = 'cubic-bezier(0.16, 0.84, 0.44, 1)';
+  const PANEL_OUT = 'cubic-bezier(0.4, 0, 1, 1)';
+  /* Measured settle: 294ms. This is only the backstop for a spring that never
+     arrives -- and it lets the hold go to `none` rather than cancelling it,
+     which matters: a window nobody is looking at gets no animation frames, so
+     Velocity stops where it started, with `max-height: 0` inline. A cancel
+     there would hand the bar back to that nought and take a reply the owner is
+     still writing off the screen. */
+  const PANEL_SETTLE_MS = 1200;
+
+  /* The height the bar needs: the quoted message plus the margins that hold it
+     off the composer -- 59 and 8, measured, and 67 is where the panel settles
+     once Velocity has finished with it. Neither `panel.scrollHeight` nor the
+     panel's own box answers that while the bar is still shut: the panel is a
+     flex box its content overflows in both directions, and it says 34. */
+  const barHeight = panel => {
+    const inside = panel.firstElementChild;
+    if (!inside) return 0;
+    const style = getComputedStyle(inside);
+    return Math.round(inside.getBoundingClientRect().height +
+      (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0));
+  };
+
+  /* The conversation is the other half of this motion, and the half the eye is
+     actually on: the messages sit above the bar, so the room the bar takes
+     comes out of them and the last one jumps by a bar-height. Measured with the
+     bar up and down: the scroller's bottom edge moves between 851 and 784, and
+     the last row's between 842 and 776 -- the same 66 to 67 pixels, in the same
+     single frame.
+
+     What is moved is the list INSIDE the scroller and never the scroller
+     itself. A transform on the scroller moves its top edge too and opens a
+     67px gap under the header; a transform on the list is clipped by the
+     scroller's own overflow, which is the edge the bar is arriving at anyway.
+     Nothing about scrolling changes -- a transform is not layout, so scrollTop
+     and scrollHeight are what they were.
+
+     It is looked up from the panel outwards rather than from #main, because a
+     community thread draws its own conversation in a panel outside #main and a
+     reply written there moves its own messages, not the ones behind it. */
+  const roomBehind = panel => {
+    for (let where = panel.parentElement; where; where = where.parentElement) {
+      const scroller = where.querySelector('[data-testid="conversation-panel-messages"]');
+      if (scroller) {
+        return { scroller: scroller,
+                 list: [...scroller.children].find(kid => kid.querySelector('[role="row"]')) || null };
+      }
+    }
+    return null;
+  };
+
+  /* Where a thing starts, put there with no motion at all. */
+  const park = (element, at, dim) => {
+    element.style.transition = 'none';
+    element.style.transform = 'translateY(' + at + 'px)';
+    if (dim) element.style.opacity = '0';
+  };
+
+  /* And the move itself, back to wherever the page would have it.
+   *
+   * These are CSS transitions and not Web Animations, which is not a
+   * preference. A transition takes effect in the next style recalculation,
+   * whenever that is asked for; an animation from element.animate() does not --
+   * measured: pin a panel's max-height with one and read the height straight
+   * back in the same task with layout forced, and it is still the old height,
+   * because animation effects are folded into style once a frame, at a point
+   * that has already passed. The conversation is offset from a ResizeObserver,
+   * which runs after that point, so an animation started there would leave the
+   * messages 66px out of place for exactly the frame that matters.
+   *
+   * The forced read in the middle is the rest of it: without it both writes
+   * land in one style recalculation, the value the browser compares against is
+   * still the one from the frame before, and a transition from nought to nought
+   * does not run. */
+  const letGo = (element, ms, easing, dim) => {
+    void element.offsetHeight;
+    element.style.transition = 'transform ' + ms + 'ms ' + easing +
+      (dim ? ', opacity ' + Math.round(ms * 0.6) + 'ms linear' : '');
+    element.style.transform = '';
+    if (dim) element.style.opacity = '';
+    /* Tidied away after, and only if nothing else has taken it over since --
+       clearing a transition that is still running snaps whatever it is moving. */
+    const mine = element.style.transition;
+    setTimeout(() => { if (element.style.transition === mine) element.style.transition = ''; },
+               ms + 90);
+  };
+
+  /* How far down a thing is at this instant, mid-motion and all: a transition
+     resolves to a matrix, and the vertical of one is its 6th number in two
+     dimensions and its 14th in three. Read rather than worked out, because the
+     point of asking is to carry on from wherever the eye last saw it. */
+  const liftOf = element => {
+    const shape = getComputedStyle(element).transform;
+    if (!shape || shape.indexOf('(') < 0) return 0;
+    const numbers = shape.slice(shape.indexOf('(') + 1, -1).split(',').map(parseFloat);
+    if (numbers.length === 6) return numbers[5] || 0;
+    if (numbers.length === 16) return numbers[13] || 0;
+    return 0;
+  };
+
+  /* The conversation, answered in the frame it changes size and never a frame
+     before or after.
+   *
+   * Starting its slide in the same task that pins the bar's height looked right
+   * and shook: measured on the exit, one frame came out with the list already
+   * translated 56px and the scroller still at its old height, so the last
+   * message jumped 56px up and then slid back down -- a shudder, in the one
+   * direction it should never move. WhatsApp settles that height itself, two
+   * frames after the panel changed.
+   *
+   * A ResizeObserver answers after layout and before paint, with the size that
+   * frame actually has, so the offset is applied in the very frame the room
+   * changes and the two are never a frame apart. The amount is read rather than
+   * assumed, for the same reason.
+   *
+   * It answers every change it is given, not only the first, and this is the
+   * one thing here that was got wrong before: WhatsApp does not always give the
+   * room back in one piece. Measured on its own close, the conversation came
+   * down in two jumps a frame and a half apart, 36px and then 31px -- and a
+   * follower that had let go after the 36 would have glided the first and let
+   * the second land as a jerk halfway through the glide. Every change inside
+   * the window is folded into the motion already running instead: taken from
+   * where the messages are at that instant, and given whatever is left of the
+   * time, so they still arrive with the bar. */
+  const followTheRoom = (panel, ms, andThen) => {
+    const room = roomBehind(panel);
+    let watch = null;
+    let over = false;
+    let told = false;
+    let began = 0;
+    const tell = () => { if (told) return; told = true; if (andThen) andThen(); };
+    const stop = () => { over = true; if (watch) { watch.disconnect(); watch = null; } };
+    if (room && room.list && typeof ResizeObserver === 'function') {
+      let was = room.scroller.clientHeight;
+      /* Where the messages are before any of this, with whatever motion of ours
+         is on them taken back out of the reading. */
+      const wasTop = room.list.getBoundingClientRect().top - liftOf(room.list);
+      try {
+        watch = new ResizeObserver(() => {
+          const now = room.scroller.clientHeight;
+          const delta = now - was;
+          was = now;
+          if (over || !delta) return;   /* the first callback is the size it already had */
+          const lift = liftOf(room.list);
+          /* How far the messages MOVED, which is not the same as how much room
+             was taken -- and the difference is a whole case. A conversation at
+             the bottom is held there, so it is scrolled by the room it loses
+             and every message shifts by 67px; a conversation the owner has
+             scrolled up into is not held to anything, and loses the room off
+             its bottom edge without moving a pixel. Compensating the second by
+             a room's worth would invent a 67px slide where WhatsApp had the
+             good sense not to move at all.
+
+             So the first change is answered by measuring, and the ones after it
+             -- which only happen to a conversation being held at the bottom --
+             by the room, because by then the reading is of something already in
+             motion and the room's own change is the honest number. */
+          const shift = began ? -delta
+                              : Math.round(room.list.getBoundingClientRect().top - lift - wasTop);
+          /* The first change sets the clock the bar is keeping; the ones after
+             it get what remains of the same clock, down to a floor -- a change
+             that lands with 20ms left would otherwise snap. */
+          const left = began ? Math.max(90, ms - Math.round(performance.now() - began)) : ms;
+          if (!began) began = performance.now();
+          tell();
+          if (!shift) return;           /* nothing moved: there is nothing to undo */
+          park(room.list, lift - shift);
+          letGo(room.list, left, PANEL_IN);
+        });
+        watch.observe(room.scroller);
+      } catch (err) { watch = null; }
+    }
+    /* Nothing came: the bar took no room from anyone. Whatever was waiting on
+       the conversation still has to happen. */
+    setTimeout(tell, PANEL_REVEAL_MS);
+    setTimeout(stop, PANEL_WATCH_MS);
+    return { stop: stop };
+  };
+
+  const smoothTheReplyBar = () => {
+    addEventListener('animationstart', event => {
+      const panel = event.target;
+      if (!(panel instanceof Element) || !panel.matches || !panel.matches(PANEL)) return;
+      if (typeof panel.animate !== 'function') return;
+
+      /* What moves. The panel is the box the footer makes room for; the div
+         inside it carries the quoted message, and the panel clips it -- the
+         `overflow-y: hidden` is WhatsApp's own, on every frame of its spring --
+         so moving the child is a reveal that costs a composited layer and
+         nothing else. */
+      const inside = panel.firstElementChild;
+      if (!inside) return;
+
+      let height = 0;
+      try { height = barHeight(panel); } catch (err) { return; }
+      if (!height) return;
+
+      /* The height, held at one value rather than animated to it: the footer
+         grows once, in one layout, and Velocity writes underneath to no effect.
+         `transform` is pinned with it, because the spring lifts the panel 24px
+         over the same 294ms and a second, slower motion under this one is
+         exactly the drift it is meant to replace.
+         
+         A Web Animations effect beats an inline style in the cascade, so the
+         spring is left running underneath rather than fought -- checked on the
+         live page: with the spring still writing 89px, the height in use was
+         this one's. If any of this ever stops, WhatsApp's own motion is what
+         comes back. */
+      let hold = null;
+      const holdAt = to => {
+        try {
+          const next = panel.animate([{ maxHeight: to, transform: 'none' }],
+                                     { duration: 1, fill: 'forwards' });
+          if (hold) hold.cancel();
+          hold = next;
+          return true;
+        } catch (err) { return false; }
+      };
+
+      /* Out of sight before there is anywhere to be seen: the panel is still
+         nought pixels tall in this frame, and the pin below does not land until
+         the next one. */
+      park(inside, height, true);
+      if (!holdAt(height + 'px')) {          /* an older engine: the spring stands */
+        inside.style.transition = '';
+        inside.style.transform = '';
+        inside.style.opacity = '';
+        return;
+      }
+
+      /* Armed BEFORE the room changes, so the frame that takes the room is the
+         frame that answers it -- and the bar is revealed from inside that same
+         answer, which is the whole of what makes the two one motion. */
+      let follow = followTheRoom(panel, PANEL_IN_MS,
+                                 () => letGo(inside, PANEL_IN_MS, PANEL_IN, true));
+
+      let timer = 0;
+      let watch = null;
+      let last = 0;
+
+      /* The hold is let go the moment Velocity has caught up: max-height past
+         the height the bar has, and the lift back at nought. Held any longer
+         and the cap would be ours rather than WhatsApp's, which would clip a
+         bar whose quoted message grows while it is open. Let go any sooner and
+         the bar would drop to wherever the spring had got to -- at 220ms that
+         is two thirds of the way up, with 6px of lift still on it. The observer
+         stays: the exit is still to come. */
+      const release = () => {
+        clearTimeout(timer);
+        if (hold) { hold.cancel(); hold = null; }
+      };
+
+      /* The exit, caught on its first frame. The spring falls from 200px, so
+         the moment the inline height goes DOWN is the moment the bar was
+         dismissed -- by the cross, by Escape, or by the reply being sent -- and
+         it climbs monotonically all the way up, with no overshoot in either
+         direction, measured both ways. Waiting instead for a height the eye can
+         see would be waiting out the same 225ms of nothing this exists to
+         remove.
+         
+         Down at ANY point, not only once the entrance has been let go: an
+         Escape a hundred milliseconds in is a dismissal too, and the quoted
+         message is then part way up -- which is why it leaves from where it has
+         got to and not from where it would have ended. */
+      const shut = () => {
+        clearTimeout(timer);
+        if (watch) { watch.disconnect(); watch = null; }
+        follow.stop();
+        const from = Math.round(panel.getBoundingClientRect().height) || height;
+        holdAt(from + 'px');
+
+        /* The quoted message first, and it barely moves: a quarter of its own
+           height while it fades. The entrance run backwards would spend its
+           last frames dragging something already invisible, and the eye is not
+           on the bar by then -- it is on the conversation coming down.
+
+           The fade is the shorter of the two on purpose. What ends this is the
+           panel being taken to nought, and that clips whatever is still inside
+           it away in one frame; measured at an even fade, the cut landed with
+           the bar at about a tenth of its colour still showing. It is gone
+           before the room closes over it now. */
+        inside.style.transition = 'transform ' + PANEL_OUT_MS + 'ms ' + PANEL_OUT +
+          ', opacity ' + Math.round(PANEL_OUT_MS * 0.7) + 'ms linear';
+        inside.style.transform = 'translateY(' + Math.round(from / 4) + 'px)';
+        inside.style.opacity = '0';
+
+        /* Then the room, in one layout, with the conversation sliding down into
+           it. It happens after the bar has gone rather than beside it: the bar
+           lives IN that room, and a panel collapsed to nought clips its own
+           content away with nothing left to animate. */
+        setTimeout(() => {
+          follow = followTheRoom(panel, PANEL_BACK_MS, null);
+          holdAt('0px');
+        }, PANEL_OUT_MS);
+      };
+
+      timer = setTimeout(() => holdAt('none'), PANEL_SETTLE_MS);
+      watch = new MutationObserver(() => {
+        const now = parseFloat(panel.style.maxHeight) || 0;
+        if (now < last) { shut(); return; }
+        last = now;
+        if (hold && now >= height &&
+            /translateY\(0(?:px)?\)/.test(panel.style.transform || '')) release();
+      });
+      watch.observe(panel, { attributes: true, attributeFilter: ['style'] });
+    }, true);
+  };
+
+  smoothTheReplyBar();
+
   /* --------------------------------------------- the notifications WA raises */
 
   /* While the window is away WhatsApp Web raises its own notification, and it is

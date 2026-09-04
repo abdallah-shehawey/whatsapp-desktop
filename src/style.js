@@ -418,6 +418,36 @@ const DRAWER_MOTION = `
 }`;
 
 /*
+ * The reply bar over the composer, and the one thing this sheet does for it.
+ *
+ * Clicking Reply mounts [data-testid="popup_panel"] into a footer with the
+ * quoted message inside it. Its entrance and its exit are both taken over in
+ * src/page/inject.js -- why, and against what measurements, is written out
+ * there -- and all that needs from CSS is the moment it arrives.
+ *
+ * That is what this is: a one-millisecond animation that changes nothing and
+ * raises `animationstart` on every mount, in every chat, group and community,
+ * with no observer walking the page to find the panel.
+ *
+ * It is the drawer's case turned round, which is the only reason a mount event
+ * works here at all. That panel is never unmounted, so an animation of ours on
+ * it would play once and never again; this one is removed from the DOM every
+ * time the bar is dismissed -- measured, the node is gone about 300ms after the
+ * close begins -- and a fresh element gets a fresh animation.
+ *
+ * `!important` because the sheet is at user origin, where a normal declaration
+ * loses to the page's own. Overriding an animation is what the drawer's note
+ * above warns against, and there is nothing here to override: WhatsApp declares
+ * no animation on this panel -- computed animation-name: none, measured -- and
+ * springs the bar open from JavaScript instead.
+ */
+const PANEL_MOUNT = `
+footer [data-testid="popup_panel"] {
+  animation: whatsapp-desktop-panel 1ms !important;
+}
+@keyframes whatsapp-desktop-panel { from { opacity: 1; } to { opacity: 1; } }`;
+
+/*
  * Aliasing, which is how the desktop font is imposed now.
  *
  * Three mechanisms were measured against each other on a live session:
@@ -567,7 +597,7 @@ html {
  * 2026-09-03, when it came out of the settings for good.
  */
 const build = ({ fontSize }, before) => {
-  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION, ARABIC_CLIP, MESSAGE_BIDI, ICON_FIT];
+  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION, PANEL_MOUNT, ARABIC_CLIP, MESSAGE_BIDI, ICON_FIT];
 
   /* There is no font rule here any more, and that is the point. Forcing the
      desktop font with `* { font-family: X !important }` at user origin works and

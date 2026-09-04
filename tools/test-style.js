@@ -66,9 +66,20 @@ assert.doesNotMatch(thread.slice(0, thread.indexOf('}')), /isolate/);
    leaves the drawer nought pixels wide and Message info stops opening. */
 assert.match(shipped, /\[data-testid="drawer-right"\][\s\S]*animation-duration: 1ms !important/);
 assert.doesNotMatch(shipped, /animation: none/);
-/* And no keyframes of our own here: a CSS animation on that panel plays once,
+/* And no motion of our own on THAT panel: a CSS animation on it plays once,
    because it is never unmounted. The slide is inject.js's, on animationstart. */
-assert.doesNotMatch(shipped, /@keyframes/);
+const drawer = shipped.slice(shipped.indexOf('[data-testid="drawer-right"]'));
+assert.doesNotMatch(drawer.slice(0, drawer.indexOf('}')), /animation-name|@keyframes/);
+
+/* The reply bar over the composer is the case turned round -- its panel IS
+   unmounted every time, so keyframes on it fire on every mount and that is the
+   event inject.js hangs its own entrance and exit on. The rule carries no
+   motion itself; it exists to be started. */
+assert.match(shipped, /footer \[data-testid="popup_panel"\] \{\n  animation: whatsapp-desktop-panel 1ms !important;/);
+assert.match(shipped, /@keyframes whatsapp-desktop-panel/);
+/* Not scoped to #main: a community thread draws its composer in a panel of its
+   own, outside #main, and a reply written there deserves the same motion. */
+assert.doesNotMatch(shipped, /#main footer \[data-testid="popup_panel"\]/);
 
 /* The chat list is a left-to-right list and stays one: an Arabic name sits
    where an English name sits, and only the words inside it read right to left.
