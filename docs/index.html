@@ -600,55 +600,79 @@ sudo pacman -U ./whatsapp-desktop-*.pkg.tar.zst  <span class="c"># Arch</span></
       optional, and deleting one puts the default back.</p>
     </div>
 
-    <div class="two-col">
-      <div class="card">
-        <h3>Keys</h3>
-        <table class="keys">
-          <tbody>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd></td><td>zoom in, out, reset</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>,</kbd></td><td>Settings</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd></td><td>devtools</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>Q</kbd></td><td>quit for real</td></tr>
-            <tr><td><kbd>Esc</kbd></td><td>closes the emoji panel</td></tr>
-            <tr><td>window close</td><td>hides to the tray, stays connected</td></tr>
-          </tbody>
-        </table>
-      </div>
+    <!-- Six shortcuts as a strip rather than a six-row table in a column of
+         its own: paired with the 24-row file below in a two-column grid, it
+         ended after 300px and left the whole left half of the section empty
+         for the length of the table. -->
+    <div class="keycaps">
+      <div class="keycap"><span class="keys"><kbd>Ctrl</kbd><kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd></span><span>zoom in, out, reset</span></div>
+      <div class="keycap"><span class="keys"><kbd>Ctrl</kbd><kbd>,</kbd></span><span>Settings</span></div>
+      <div class="keycap"><span class="keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>I</kbd></span><span>devtools</span></div>
+      <div class="keycap"><span class="keys"><kbd>Ctrl</kbd><kbd>Q</kbd></span><span>quit for real</span></div>
+      <div class="keycap"><span class="keys"><kbd>Esc</kbd></span><span>close the emoji panel</span></div>
+      <div class="keycap"><span class="keys">window close</span><span>hides to the tray, stays connected</span></div>
+    </div>
 
-      <div class="card">
-        <h3>Configuration file</h3>
-        <div class="table-scroll">
-        <table>
-          <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
-          <tbody>
-            <tr><td><code>[view] theme</code></td><td><code>system</code></td><td>follows the desktop, or force <code>dark</code> / <code>light</code></td></tr>
-            <tr><td><code>[view] font</code></td><td>GNOME's</td><td>family for everything the client draws</td></tr>
-            <tr><td><code>[view] font-size</code></td><td><code>16</code></td><td>size of the whole interface, in px</td></tr>
-            <tr><td><code>[fonts] latin-inherit</code>, <code>arabic-inherit</code></td><td><code>true</code></td><td>each script follows the system font until you say otherwise</td></tr>
-            <tr><td><code>[fonts] latin-family</code>, <code>arabic-family</code></td><td>the system's own</td><td>a font per script, chosen in the Fonts window</td></tr>
-            <tr><td><code>[fonts] latin-size</code>, <code>arabic-size</code></td><td><code>100</code></td><td>each script's size, as a % of its own</td></tr>
-            <tr><td><code>[fonts] latin-bold</code>, <code>arabic-bold</code>, and the italics</td><td><code>false</code></td><td>the family's own bold or italic face</td></tr>
-            <tr><td><code>[view] zoom</code></td><td><code>1.0</code></td><td>also set with <kbd>Ctrl</kbd>+<kbd>+</kbd>/<kbd>-</kbd></td></tr>
-            <tr><td><code>[view] force-font</code></td><td><code>true</code></td><td>draw the page in one family</td></tr>
-            <tr><td><code>[window] width</code>, <code>height</code></td><td><code>1200×800</code></td><td>remembered on exit</td></tr>
-            <tr><td><code>[behaviour] close-to-tray</code></td><td><code>true</code></td><td>closing leaves the client running</td></tr>
-            <tr><td><code>[behaviour] minimize-to-tray</code></td><td><code>false</code></td><td>minimise is not close</td></tr>
-            <tr><td><code>[behaviour] spellcheck</code></td><td><code>true</code></td><td>Chromium's own, in the box you type in</td></tr>
-            <tr><td><code>[notifications] enabled</code></td><td><code>true</code></td><td>off hands notifications back to Chromium</td></tr>
-            <tr><td><code>[notifications] sound</code></td><td><code>true</code></td><td>a tone for the banners this client raises</td></tr>
-            <tr><td><code>[notifications] outgoing-sound</code></td><td><code>false</code></td><td>WhatsApp's tone for a message <em>you</em> send</td></tr>
-            <tr><td><code>[notifications] whatsapp-sound</code></td><td><code>false</code></td><td>let WhatsApp play its own arrival tone</td></tr>
-            <tr><td><code>[notifications] banner-seconds</code></td><td><code>12</code></td><td>before a banner is refiled silently</td></tr>
-            <tr><td><code>[notifications] hide-preview</code></td><td><code>false</code></td><td>on, a banner names the chat and never the words</td></tr>
-            <tr><td><code>[media] ask-where-to-save</code></td><td><code>true</code></td><td>every download asks; off, they land in <code>~/Downloads</code></td></tr>
-            <tr><td><code>[media] download-dir</code></td><td>—</td><td>where the last one went, so the chooser opens there</td></tr>
-            <tr><td><code>[media] download-stickers</code></td><td><code>true</code></td><td>fetch stickers whether or not photos are, like the phone</td></tr>
-            <tr><td><code>[media] hide-controls-when-paused</code></td><td><code>true</code></td><td>the desktop's media card goes when a voice note is paused</td></tr>
-            <tr><td><code>[links] claim-scheme</code></td><td><code>true</code></td><td>open <code>whatsapp:</code> links here, not in a browser tab</td></tr>
-            <tr><td><code>[updates] check</code></td><td><code>true</code></td><td>the daily look for a newer release; off, only About's <em>Check</em> asks</td></tr>
-          </tbody>
-        </table>
-        </div>
+    <div class="card conf">
+      <div class="conf-head">
+        <h3>Every key in the file</h3>
+        <p>Grouped the way the file itself is: the section name is the heading, and
+        each key under one is written the way it appears under it.</p>
+      </div>
+      <div class="table-scroll">
+      <table class="conf-table">
+        <colgroup><col class="c-key"><col class="c-def"><col></colgroup>
+        <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+
+        <tbody>
+          <tr class="grp"><th colspan="3" scope="colgroup">[view]</th></tr>
+          <tr><td><code>theme</code></td><td><code>system</code></td><td>follows the desktop, or force <code>dark</code> / <code>light</code></td></tr>
+          <tr><td><code>font</code></td><td>GNOME&#39;s</td><td>family for everything the client draws</td></tr>
+          <tr><td><code>font-size</code></td><td><code>16</code></td><td>size of the whole interface, in px</td></tr>
+          <tr><td><code>zoom</code></td><td><code>1.0</code></td><td>also set with <kbd>Ctrl</kbd>+<kbd>+</kbd>/<kbd>-</kbd></td></tr>
+          <tr><td><code>force-font</code></td><td><code>true</code></td><td>draw the page in one family</td></tr>
+        </tbody>
+
+        <tbody>
+          <tr class="grp"><th colspan="3" scope="colgroup">[fonts] <span>&mdash; every key twice, once per script</span></th></tr>
+          <tr><td><code>latin-inherit</code>, <code>arabic-inherit</code></td><td><code>true</code></td><td>that script follows the system font until you say otherwise</td></tr>
+          <tr><td><code>latin-family</code>, <code>arabic-family</code></td><td>the system&#39;s own</td><td>a font per script, chosen in the Fonts window</td></tr>
+          <tr><td><code>latin-size</code>, <code>arabic-size</code></td><td><code>100</code></td><td>that script&#39;s size, as a % of the family&#39;s own</td></tr>
+          <tr><td><code>latin-bold</code>, <code>arabic-bold</code>, and the italics</td><td><code>false</code></td><td>the family&#39;s own bold or italic face — nothing is synthesised</td></tr>
+        </tbody>
+
+        <tbody>
+          <tr class="grp"><th colspan="3" scope="colgroup">[notifications]</th></tr>
+          <tr><td><code>enabled</code></td><td><code>true</code></td><td>off hands notifications back to Chromium</td></tr>
+          <tr><td><code>sound</code></td><td><code>true</code></td><td>a tone for the banners this client raises</td></tr>
+          <tr><td><code>outgoing-sound</code></td><td><code>false</code></td><td>WhatsApp&#39;s tone for a message <em>you</em> send</td></tr>
+          <tr><td><code>whatsapp-sound</code></td><td><code>false</code></td><td>let WhatsApp play its own arrival tone</td></tr>
+          <tr><td><code>banner-seconds</code></td><td><code>12</code></td><td>before a banner is refiled silently</td></tr>
+          <tr><td><code>hide-preview</code></td><td><code>false</code></td><td>on, a banner names the chat and never the words</td></tr>
+        </tbody>
+
+        <tbody>
+          <tr class="grp"><th colspan="3" scope="colgroup">[media]</th></tr>
+          <tr><td><code>ask-where-to-save</code></td><td><code>true</code></td><td>every download asks; off, they land in <code>~/Downloads</code></td></tr>
+          <tr><td><code>download-dir</code></td><td>&mdash;</td><td>where the last one went, so the chooser opens there</td></tr>
+          <tr><td><code>download-stickers</code></td><td><code>true</code></td><td>fetch stickers whether or not photos are, like the phone</td></tr>
+          <tr><td><code>hide-controls-when-paused</code></td><td><code>true</code></td><td>the desktop&#39;s media card goes when a voice note is paused</td></tr>
+        </tbody>
+
+        <tbody>
+          <tr class="grp"><th colspan="3" scope="colgroup">[behaviour]</th></tr>
+          <tr><td><code>close-to-tray</code></td><td><code>true</code></td><td>closing leaves the client running</td></tr>
+          <tr><td><code>minimize-to-tray</code></td><td><code>false</code></td><td>minimise is not close</td></tr>
+          <tr><td><code>spellcheck</code></td><td><code>true</code></td><td>Chromium&#39;s own, in the box you type in</td></tr>
+        </tbody>
+
+        <tbody>
+          <tr class="grp"><th colspan="3" scope="colgroup">[window] &middot; [links] &middot; [updates] <span>&mdash; one key each</span></th></tr>
+          <tr><td><code>[window] width</code>, <code>height</code></td><td><code>1200×800</code></td><td>remembered on exit</td></tr>
+          <tr><td><code>[links] claim-scheme</code></td><td><code>true</code></td><td>open <code>whatsapp:</code> links here, not in a browser tab</td></tr>
+          <tr><td><code>[updates] check</code></td><td><code>true</code></td><td>the daily look for a newer release; off, only About&#39;s <em>Check</em> asks</td></tr>
+        </tbody>
+      </table>
       </div>
     </div>
 

@@ -459,8 +459,88 @@ th {
 }
 td { color: var(--dim); }
 td:first-child { color: var(--fg); white-space: nowrap; }
-.keys td:first-child { width: 45%; }
 .table-scroll { overflow-x: auto; }
+
+/* ------------------------------------------------------------ configure - */
+
+/* The shortcuts, as a strip of six rather than a six-row table. They used to
+   share a two-column grid with the configuration file below, which meant a
+   card that ends after 300px next to a table that runs past 1500 -- and the
+   whole left half of the section empty for the difference. */
+/* 340px, so six of them come out three-and-three on a wide screen rather than
+   five with one stranded underneath, and two-by-three from tablet down. The
+   `min()` keeps the track from outgrowing a narrow phone. */
+.keycaps {
+  display: grid; gap: 10px; margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+}
+.keycap {
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 13px 15px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 11px; color: var(--dim); font-size: .88rem;
+}
+.keycap .keys { display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  color: var(--fg); font-weight: 600; font-size: .84rem; }
+
+.conf-head { margin-bottom: 4px; }
+.conf-head h3 { margin: 0 0 6px; }
+.conf-head p { margin: 0 0 14px; color: var(--dim); font-size: .9rem; max-width: var(--measure); }
+
+/* Twenty-four rows with `[section]` repeated down the first column is a list
+   nobody reads twice. The file has eight sections, so the table has eight
+   groups: the section name is a heading row and the keys under it are written
+   the way they appear under it in the file. `[window]`, `[links]` and
+   `[updates]` are one key each, so they share the last group and keep their
+   prefixes -- a heading of its own for a single row is worse than the noise. */
+.conf-table .grp th {
+  padding: 20px 12px 7px;
+  color: var(--accent); font-size: .8rem; letter-spacing: .04em;
+  text-transform: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  border-bottom: 1px solid var(--line);
+}
+.conf-table tbody:first-of-type .grp th { padding-top: 8px; }
+.conf-table .grp th span { color: var(--dimmer); font-family: inherit;
+  font-weight: 400; letter-spacing: 0; }
+/* The last row of a group keeps its rule; only the very last row in the table
+   loses one, and `tr:last-child` cannot say that across several tbodies. */
+.conf-table tbody:last-of-type tr:last-child td { border-bottom: 0; }
+.conf-table tbody tr:last-child td { border-bottom: 1px solid var(--line-soft); }
+/* Proportions rather than nowrap: the key column stops stretching to fit the
+   longest key and the sentence beside it gets the room to stay on one line. */
+.conf-table .c-key { width: 27%; }
+.conf-table .c-def { width: 13%; }
+/* The CELL wraps -- two keys sharing a row break after the comma -- but a key
+   itself never does. Without this, a narrow screen split `latin-inherit` across
+   two lines and it stopped looking like something you could type. */
+.conf-table td:first-child { white-space: normal; }
+.conf-table td:first-child code, .conf-table td:nth-child(2) code { white-space: nowrap; }
+.conf-table td:nth-child(2) { color: var(--dim); }
+
+/* Below this there is no width for three columns: at 520px the key column and
+   the sentence beside it were each about four words wide, and a `min-width`
+   with a sideways scroll only moves the problem. So the row stops being a row.
+   Key and default share a line, the sentence gets the next one and the whole
+   card's width with it, and the header that labelled the columns goes away
+   because each cell now says what it is. */
+@media (max-width: 720px) {
+  .conf-table, .conf-table tbody, .conf-table tr, .conf-table td { display: block; }
+  .conf-table thead { display: none; }
+  .conf-table .grp th { display: block; padding-inline: 0; }
+  .conf-table tr:not(.grp) {
+    padding: 11px 2px; border-bottom: 1px solid var(--line-soft);
+  }
+  .conf-table tbody tr:last-child td,
+  .conf-table tbody:last-of-type tr:last-child td { border-bottom: 0; }
+  .conf-table tr:not(.grp) td { padding: 0; border-bottom: 0; }
+  .conf-table tr:not(.grp) td:first-child { font-weight: 600; }
+  .conf-table tr:not(.grp) td:nth-child(2) {
+    margin: 4px 0 6px; font-size: .82rem; color: var(--dimmer);
+  }
+  .conf-table tr:not(.grp) td:nth-child(2)::before {
+    content: "default "; color: var(--dimmer);
+  }
+}
 
 .fpr-line { margin: 22px 0 0; color: var(--dimmer); font-size: .85rem; }
 .fpr { color: var(--accent) !important; background: none !important;
