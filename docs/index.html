@@ -23,6 +23,10 @@
 <meta name="twitter:card" content="summary_large_image">
 
 <link rel="preconnect" href="https://api.github.com" crossorigin>
+<!-- The page's own font, found by the parser rather than by the stylesheet two
+     round-trips later. Only the Latin one: the Arabic face is for the odd word,
+     and a page with none of it should not pay 40 KB to find that out. -->
+<link rel="preload" href="assets/poetsen-one.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/site.css">
 
 <script type="application/ld+json">

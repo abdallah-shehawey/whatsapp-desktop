@@ -3,6 +3,49 @@
    grows on wide screens, rather than pinning everything to a centred column.
    Only running prose keeps a measure. */
 
+/* The page is drawn in the font this client's author reads their own desktop
+   in -- Poetsen One for Latin, and beside it a face built for the Arabic it has
+   none of. Two @font-face faces of ONE family, split by `unicode-range`: an
+   Arabic character matches both, and CSS breaks the tie by declaration order,
+   so the Arabic one is written SECOND and moving it is a bug. It is the same
+   mechanism the client uses on a conversation, for the same reason -- a
+   selector cannot say "the Arabic words in this paragraph", and a rule that
+   could would have to match every element on the page.
+
+   Self-hosted rather than fetched from Google: one origin, no third party
+   watching who reads this page, and nothing to go wrong offline. Subsetted, so
+   the pair is 81 KB. Licences and how the Arabic face was built: FONTS-NOTICE.txt.
+
+   `local()` first, because the machine this was written on already has both
+   installed and there is no reason to send it the files again.
+
+   One weight, 400 -- Poetsen One has no bold face and the heavier text on this
+   page is Chromium's synthesis, which is what it looks like on that desktop too. */
+@font-face {
+  font-family: "Poetsen";
+  src: local("PoetsenOne"), local("Poetsen One"),
+       url("poetsen-one.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-017F, U+0131, U+0152-0153, U+02BB-02BC,
+                 U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F,
+                 U+20AC, U+2122, U+2190-2193, U+2212, U+2215, U+2713-2714,
+                 U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Poetsen";
+  src: local("Poetsen Arabic"),
+       url("poetsen-arabic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  /* From the Arabic comma, not from U+0600: the Latin punctuation below it
+     reads better in the Latin face. The same list src/style.js ships. */
+  unicode-range: U+060C-06FF, U+0750-077F, U+0870-08FF, U+FB50-FDFF,
+                 U+FE70-FEFF, U+10E60-10E7E, U+1EE00-1EEFF;
+}
+
 :root {
   --bg:        #0a100d;
   --bg-alt:    #0d1512;
@@ -31,7 +74,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Cantarell, Roboto, sans-serif;
+  font: 16px/1.65 "Poetsen", system-ui, -apple-system, "Segoe UI", Cantarell, Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

@@ -1,0 +1,26 @@
+The two web fonts in this directory, and where they come from.
+
+poetsen-one.woff2
+  Poetsen One, by Pablo Impallari and Rodrigo Fuenzalida.
+  Copyright (c) 2012, Pablo Impallari (www.impallari.com | impallari@gmail.com)
+  and Rodrigo Fuenzalida (www.rfuenzalida.com), with Reserved Font Name Poetsen.
+  Licensed under the SIL Open Font License, Version 1.1:
+  https://scripts.sil.org/OFL
+  Subsetted to Latin and Latin Extended-A; no other change.
+
+poetsen-arabic.woff2
+  "Poetsen Arabic" -- Playpen Sans Arabic, instanced at weight 649 and matched
+  to Poetsen One on three axes: body height (heh at 0.510 em, 89% of Poetsen's
+  x-height), line box (Poetsen's hhea and OS/2 metrics copied verbatim: ascent
+  1.000, descent -0.200, gap 0) and charset (the Latin subsetted out, so this
+  face can never win a Latin lookup).
+  Playpen Sans Arabic is Copyright (c) 2023 The Playpen Sans Arabic Project
+  Authors (https://github.com/googlefonts/playpen-sans-arabic), licensed under
+  the SIL Open Font License, Version 1.1: https://scripts.sil.org/OFL
+  It is a modification of an OFL font, so it carries the OFL and, under clause
+  3, a name that is not the original's.
+
+Both are the fonts this project's author reads their own desktop in -- the
+pairing is the reason the two faces have the same line box. They are declared
+as one family split by `unicode-range`, exactly the way the client itself
+draws a conversation; see src/style.js.
