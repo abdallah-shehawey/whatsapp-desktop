@@ -148,11 +148,21 @@
 
       <article class="card feat">
         <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h16"/><path d="M6 17 10.5 6h3L18 17"/><path d="M8 13h8"/></svg></div>
-        <h3>Text the size you want it</h3>
-        <p>Make the messages bigger or smaller from Settings — the conversation only, so
-        your chat list stays where it was. The whole app is drawn in your desktop's own
-        font, and Arabic reads right to left everywhere — line by line, in the
-        conversation, in the replies to a community post, and in the notifications.</p>
+        <h3>A font for each alphabet</h3>
+        <p>Not one font for everything: a family, a size and a weight for Latin, and
+        another set for Arabic, each with its own switch. So you can give Arabic the face
+        it deserves without touching your English, or the other way round. Left alone, it
+        draws everything in your desktop's own font and follows it when you change it.</p>
+      </article>
+
+      <article class="card feat">
+        <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"/><path d="M20 12H9"/><path d="M20 18h-7"/><path d="m7 15-3-3 3-3"/></svg></div>
+        <h3>Arabic that reads like Arabic</h3>
+        <p>Every line takes its direction from its own first word, so Arabic sits against
+        the right and English against the left — in the same message, in a group, and in
+        the replies under a community post. Letters get the room their descenders need,
+        the timestamp stays off the last line, and the notifications read the same way.
+        Nothing to switch on.</p>
       </article>
 
       <article class="card feat">
@@ -173,6 +183,24 @@
       </article>
 
       <article class="card feat">
+        <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16"/><path d="m8 8 4-4 4 4"/><path d="m8 16 4 4 4-4"/></svg></div>
+        <h3>Smoother than the browser</h3>
+        <p>Long conversations scroll on the graphics card, a wheel notch glides instead
+        of jumping, and the panel beside a chat slides in and out. Reply to a message and
+        the bar and the conversation above it move as one piece, rather than the bar
+        growing and the messages catching up a frame later. Nothing to turn on — it is
+        how it draws.</p>
+      </article>
+
+      <article class="card feat">
+        <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg></div>
+        <h3>It says when there is a newer one</h3>
+        <p>It asks GitHub once a day whether a release is out, and when there is one the
+        tray menu names it. It never installs anything itself — your own package manager
+        does that, on your say-so, with the rest of your system.</p>
+      </article>
+
+      <article class="card feat">
         <div class="feat-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-4.35 7-10V5l-7-2-7 2v6c0 5.65 7 10 7 10Z"/><path d="m9 12 2 2 4-4"/></svg></div>
         <h3>Your account is untouched</h3>
         <p>Inside the window is WhatsApp's own web app, the one you would open in a
@@ -184,7 +212,7 @@
 
     <div class="showcase">
       <figure>
-        <img src="assets/settings.png" alt="The whatsapp-desktop Settings window: theme, startup and tray, notification sounds, and zoom." width="520" height="950" loading="lazy" decoding="async">
+        <img src="assets/settings.png" alt="The whatsapp-desktop Settings window: a theme picked from System, Dark and Light; switches for start at login, close to tray and minimise to tray; switches for desktop notifications, the notification sound and the outgoing message tone; and a zoom level." width="560" height="840" loading="lazy" decoding="async">
       </figure>
       <div class="showcase-copy">
         <h3>Everything is a switch</h3>
@@ -219,14 +247,66 @@
           <dd>Scales the whole interface, pictures and spacing and all — the same as
           <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd>.</dd>
 
-          <dt>Fonts</dt>
-          <dd>A window of its own, on the tray's <em>Fonts…</em>: a family, a size and a
-          weight for Latin and for Arabic, each on its own, with a preview of both.</dd>
-
         </dl>
         <p class="note">All of it lands in
         <code>~/.config/whatsapp-desktop/whatsapp-desktop.conf</code> —
         <a href="#configure">the file is documented below</a>.</p>
+      </div>
+    </div>
+
+    <div class="showcase flip">
+      <figure>
+        <img src="assets/fonts.png" alt="The whatsapp-desktop Fonts window: a Latin and English section and an Arabic section, each with a use-the-system-font switch, a family picker, a size and bold and italic buttons, and each ending in a preview line drawn in the font chosen." width="560" height="960" loading="lazy" decoding="async">
+      </figure>
+      <div class="showcase-copy">
+        <h3>A font for English, and a different one for Arabic</h3>
+        <p>Most apps give you one font for everything, which means picking the one that
+        is least wrong for both alphabets. This one has a window — the tray's
+        <em>Fonts…</em> — with the two scripts side by side and a switch on each, so an
+        Arabic face of your own does not oblige you to choose a Latin one, or the other
+        way round.</p>
+        <dl class="switches">
+          <dt>Two switches, not one</dt>
+          <dd>Leave either script on your desktop's own font and set only the other.</dd>
+
+          <dt>Family</dt>
+          <dd>Picked from the fonts actually installed on your machine — the Arabic list
+          holds only the ones that can draw Arabic, so nothing on it comes out in boxes.</dd>
+
+          <dt>Size, per script</dt>
+          <dd>Arabic sits smaller than Latin at the same nominal size in almost every
+          pairing. Nudge one up and it matches the other, in the same line, without
+          moving the Latin.</dd>
+
+          <dt>Bold and italic</dt>
+          <dd>The family's real bold or italic face — never a slanted or smeared
+          imitation. A family that has none says so instead of offering a button that
+          does nothing.</dd>
+
+          <dt>A preview of each</dt>
+          <dd>A line in Latin and a line in Arabic, drawn in what you just picked.</dd>
+        </dl>
+        <p class="note">It costs nothing to draw: the two scripts are two faces of one
+        family split by character range, resolved by the font engine, rather than a
+        style rule the page has to match against every element while you scroll.</p>
+      </div>
+    </div>
+
+    <div class="showcase narrow">
+      <figure>
+        <img src="assets/about.png" alt="The whatsapp-desktop About window: the app icon, the name, the version running, an update row reading Up to date with a Check button, and rows linking to the website and the source code." width="430" height="554" loading="lazy" decoding="async">
+      </figure>
+      <div class="showcase-copy">
+        <h3>It tells you when there is a newer one</h3>
+        <p><em>About WhatsApp</em>, in the tray menu, has the version you are running and
+        a <em>Check</em> that asks GitHub for the latest release. It also looks once a
+        day on its own, and when there is something newer the tray item says so by
+        name — so you find out from the app rather than from somebody else's screenshot.</p>
+        <p>It never installs anything. Your package manager does that, and
+        <a href="#update">the command for your distribution</a> is a few lines down this
+        page. If you would rather it did not look at all, one switch in the
+        <a href="#configure">configuration file</a> stops the daily check and leaves the
+        button.</p>
       </div>
     </div>
   </section>

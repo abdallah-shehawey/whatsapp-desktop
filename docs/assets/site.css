@@ -312,11 +312,20 @@ kbd {
   background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--radius); padding: clamp(24px, 3vw, 40px);
 }
+/* Every other one has its picture on the right, so three windows in a row down
+   the page read as three and not as a list. `order` rather than a second column
+   rule: it leaves the source in the order it should be read aloud in, and it
+   stops applying by itself when the grid collapses to one column below. */
+.showcase.flip { grid-template-columns: minmax(0, 1fr) minmax(0, 380px); }
+.showcase.flip figure { order: 2; }
 .showcase figure { margin: 0; }
 .showcase img {
   width: 100%; height: auto; display: block; border-radius: 10px;
   border: 1px solid var(--line); box-shadow: 0 22px 50px -28px #000;
 }
+/* The About window is the short one of the three, and stretched to the same
+   380px column it would tower over the paragraph beside it. */
+.showcase.narrow figure { max-width: 300px; margin-inline: auto; }
 .showcase-copy h3 { margin: 0 0 12px; font-size: 1.25rem; letter-spacing: -.02em; }
 
 /* What each switch does, beside the picture of them. A description list rather
@@ -480,7 +489,10 @@ td:first-child { color: var(--fg); white-space: nowrap; }
 
 @media (max-width: 980px) {
   .hero { grid-template-columns: 1fr; }
-  .showcase { grid-template-columns: 1fr; }
+  .showcase, .showcase.flip { grid-template-columns: 1fr; }
+  /* One column: the picture goes back above its words in every one of them,
+     including the flipped ones, so the reading order is the source order. */
+  .showcase.flip figure { order: 0; }
   .showcase figure { max-width: 380px; }
   .foot-grid { grid-template-columns: 1fr 1fr; }
   .foot-grid > div:first-child { grid-column: 1 / -1; }

@@ -70,7 +70,13 @@ the latest release.
 - **Banners come down on the client's own clock.** GNOME shows one at a time,
   queues three behind it and drops the rest, so each banner is closed after
   twelve seconds and refiled silently in the notification centre.
-- **Voice and video calls work out of the box.** Full WebRTC support for microphone and camera with automatic device permissions and Linux-specific rendering fixes.
+- **Voice and video calls, with nothing to allow first.** The camera and the
+  microphone are granted to WhatsApp's own origin and to no other, so a call
+  rings or is answered without a permission prompt in the way. Each one opens in
+  a window of its own, drawn in this client's font like every other page it
+  shows. WebGPU is turned off deliberately: on Linux and Wayland its external
+  texture path hands video frames back black, and a call camera that renders a
+  black 1280×720 rectangle is what that looks like.
 - **Two windows of switches, and no text editor.** Settings (`Ctrl+,`, or the
   tray) has the theme — system, dark or light — start-at-login, what closing
   the window does, which sounds you want and the zoom; *Fonts…* has the two
@@ -81,15 +87,43 @@ the latest release.
   the client also looks once a day by itself, and the tray item names the
   version when there is one to name. It never installs anything — your package
   manager does that, and the site has the command for your distribution.
+- **It moves better than the browser it is.** Three things, all measured rather
+  than guessed. The conversation scrolls on the GPU: Chromium's Linux driver
+  blocklist is years out of date and decides against compositing on hardware
+  that is fine, which turns every wheel tick into a software raster of the whole
+  viewport — that is overridden, the messages list is put on a layer of its own,
+  and a wheel notch is animated instead of jumped. The right-hand drawer slides
+  in and out rather than appearing. And the reply bar and the conversation above
+  it now rise as one: WhatsApp animates the bar from JavaScript every frame
+  while the messages follow a watcher two frames behind, so the bar grew for
+  73ms and the messages then jumped 66px in a single frame — both halves are
+  taken over and released together, and the last row now travels that 66px in 21
+  to 23 steps. None of it is a setting: it is how the client draws a page.
+  There are deliberately **no** custom scrollbars — one `::-webkit-scrollbar`
+  rule takes a scroller off Chromium's composited path and puts it back on the
+  main thread, and that is a cosmetic gain paid for in frames.
 - **Screen sharing in a call**, over PipeWire on Wayland, offering windows as
   well as whole screens.
 - Dark or light follows the desktop, links open in your browser, every download
   asks where to put it, `Ctrl` `+`/`-`/`0` zoom and the window size is
   remembered. `Esc` closes the emoji panel whether or not you picked one.
 
+## What it looks like
+
+Three windows of its own, and no text editor anywhere. Widths differ so the
+heights match; every one of them is a real window, photographed by
+`make screenshots`.
+
 <p align="center">
-  <img src="screenshots/settings.png" alt="The Settings window: theme, startup and tray, notifications, zoom" width="380" />
-  <img src="screenshots/fonts.png" alt="The Fonts window: a family, a size and a weight for Latin and for Arabic" width="380" />
+  <img src="screenshots/settings.png" alt="The Settings window: theme, start at login, close and minimise to tray, notifications and their sounds, and the zoom level." height="430" />
+  <img src="screenshots/fonts.png" alt="The Fonts window: a family, a size and a weight for Latin and for Arabic, each with its own switch, and a preview line in each script." height="430" />
+  <img src="screenshots/about.png" alt="The About window: the version running, an update check that says it is up to date, and links to the site and the source." height="430" />
+</p>
+
+<p align="center">
+  <sub><b>Settings</b> — theme, tray, notifications, zoom &nbsp;·&nbsp;
+  <b>Fonts</b> — one for Latin, one for Arabic &nbsp;·&nbsp;
+  <b>About</b> — the version, and whether a newer one is out</sub>
 </p>
 
 ## Install
@@ -121,6 +155,7 @@ make            # fetches Electron
 make install    # ~/.local, plus a desktop entry and icons
 make autostart  # also start hidden at login
 make test       # replays a chat list past the watcher, no browser needed
+make screenshots # re-photographs the three windows, for the README and the site
 ```
 
 ## Keys
@@ -178,6 +213,7 @@ State lives in `~/.local/share/whatsapp-desktop`.
 | `src/fonts.js`, `src/tray.js`, `src/config.js`, `src/desktop.js`, `src/sound.js`, `src/debug.js` | |
 | `tools/make-icons.py` | regenerates `data/icons` — `make icons`, never hand-edit the PNGs |
 | `tools/make-og.py` | redraws the site's link-preview card — `make og` |
+| `tools/capture-windows.js` | photographs the three windows above — `make screenshots`, which also copies them to `docs/assets` |
 | `docs/` | the landing page, served by GitHub Pages from `main` |
 | `tools/test-inject.js`, `tools/test-style.js`, `tools/test-settings.js` | `make test` |
 
