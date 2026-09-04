@@ -123,6 +123,17 @@ icons:
 og:
 	python3 tools/make-og.py
 
+# The pictures of the client's own windows, for the README and the site. Real
+# windows with their real preloads, grown to their full content -- so run this
+# whenever one of them gains or loses a row, and commit what comes out. The site
+# reads the same files: docs/ is served from main, and nothing fetches them from
+# elsewhere.
+SHOTS = settings fonts about
+screenshots:
+	@env -u ELECTRON_RUN_AS_NODE npx electron tools/capture-windows.js
+	@for s in $(SHOTS); do cp screenshots/$$s.png docs/assets/$$s.png; done
+	@echo "  SHOTS  screenshots/ and docs/assets/"
+
 # Replays a chat list past src/page/inject.js in plain node -- no browser, no
 # account. Every notification bug this client has had lived in that file.
 test:
@@ -163,4 +174,4 @@ package: package-deb package-rpm package-arch package-source
 clean:
 	rm -rf node_modules
 
-.PHONY: all install autostart no-autostart uninstall icons og test run package-deb package-rpm package-arch package-source package clean
+.PHONY: all install autostart no-autostart uninstall icons og screenshots test run package-deb package-rpm package-arch package-source package clean
