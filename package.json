@@ -1,9 +1,9 @@
 {
   "name": "whatsapp-desktop",
   "productName": "WhatsApp",
-  "version": "1.6.6",
+  "version": "1.6.7",
   "description": "WhatsApp Web desktop client for Linux with tray integration, notifications, and Arabic text fixes",
-  "license": "GPL-3.0-only",
+  "license": "GPL-3.0-or-later",
   "author": "Abdallah Shehawey <shehawey9@gmail.com>",
   "main": "src/main.js",
   "scripts": {
