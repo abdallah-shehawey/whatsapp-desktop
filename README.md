@@ -87,7 +87,7 @@ the latest release.
   the client also looks once a day by itself, and the tray item names the
   version when there is one to name. It never installs anything — your package
   manager does that, and the site has the command for your distribution.
-- **It moves better than the browser it is.** Three things, all measured rather
+- **It moves better than the browser it is.** Four things, all measured rather
   than guessed. The conversation scrolls on the GPU: Chromium's Linux driver
   blocklist is years out of date and decides against compositing on hardware
   that is fine, which turns every wheel tick into a software raster of the whole
@@ -98,7 +98,12 @@ the latest release.
   while the messages follow a watcher two frames behind, so the bar grew for
   73ms and the messages then jumped 66px in a single frame — both halves are
   taken over and released together, and the last row now travels that 66px in 21
-  to 23 steps. None of it is a setting: it is how the client draws a page.
+  to 23 steps. And a message landing in the conversation on screen no longer
+  arrives by teleport: WhatsApp appends the row and scrolls by exactly its
+  height in the same frame, so the whole conversation used to step up 55px at
+  once — it now glides that distance while the new bubble grows out of its own
+  bottom corner, the corner measured from the box so an Arabic conversation pops
+  from the other side. None of it is a setting: it is how the client draws a page.
   There are deliberately **no** custom scrollbars — one `::-webkit-scrollbar`
   rule takes a scroller off Chromium's composited path and puts it back on the
   main thread, and that is a cosmetic gain paid for in frames.
