@@ -621,6 +621,7 @@ sudo pacman -U ./whatsapp-desktop-*.pkg.tar.zst  <span class="c"># Arch</span></
         <table>
           <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
+            <tr><td><code>[view] theme</code></td><td><code>system</code></td><td>follows the desktop, or force <code>dark</code> / <code>light</code></td></tr>
             <tr><td><code>[view] font</code></td><td>GNOME's</td><td>family for everything the client draws</td></tr>
             <tr><td><code>[view] font-size</code></td><td><code>16</code></td><td>size of the whole interface, in px</td></tr>
             <tr><td><code>[fonts] latin-inherit</code>, <code>arabic-inherit</code></td><td><code>true</code></td><td>each script follows the system font until you say otherwise</td></tr>
@@ -632,12 +633,19 @@ sudo pacman -U ./whatsapp-desktop-*.pkg.tar.zst  <span class="c"># Arch</span></
             <tr><td><code>[window] width</code>, <code>height</code></td><td><code>1200×800</code></td><td>remembered on exit</td></tr>
             <tr><td><code>[behaviour] close-to-tray</code></td><td><code>true</code></td><td>closing leaves the client running</td></tr>
             <tr><td><code>[behaviour] minimize-to-tray</code></td><td><code>false</code></td><td>minimise is not close</td></tr>
+            <tr><td><code>[behaviour] spellcheck</code></td><td><code>true</code></td><td>Chromium's own, in the box you type in</td></tr>
             <tr><td><code>[notifications] enabled</code></td><td><code>true</code></td><td>off hands notifications back to Chromium</td></tr>
             <tr><td><code>[notifications] sound</code></td><td><code>true</code></td><td>a tone for the banners this client raises</td></tr>
             <tr><td><code>[notifications] outgoing-sound</code></td><td><code>false</code></td><td>WhatsApp's tone for a message <em>you</em> send</td></tr>
             <tr><td><code>[notifications] whatsapp-sound</code></td><td><code>false</code></td><td>let WhatsApp play its own arrival tone</td></tr>
             <tr><td><code>[notifications] banner-seconds</code></td><td><code>12</code></td><td>before a banner is refiled silently</td></tr>
+            <tr><td><code>[notifications] hide-preview</code></td><td><code>false</code></td><td>on, a banner names the chat and never the words</td></tr>
             <tr><td><code>[media] ask-where-to-save</code></td><td><code>true</code></td><td>every download asks; off, they land in <code>~/Downloads</code></td></tr>
+            <tr><td><code>[media] download-dir</code></td><td>—</td><td>where the last one went, so the chooser opens there</td></tr>
+            <tr><td><code>[media] download-stickers</code></td><td><code>true</code></td><td>fetch stickers whether or not photos are, like the phone</td></tr>
+            <tr><td><code>[media] hide-controls-when-paused</code></td><td><code>true</code></td><td>the desktop's media card goes when a voice note is paused</td></tr>
+            <tr><td><code>[links] claim-scheme</code></td><td><code>true</code></td><td>open <code>whatsapp:</code> links here, not in a browser tab</td></tr>
+            <tr><td><code>[updates] check</code></td><td><code>true</code></td><td>the daily look for a newer release; off, only About's <em>Check</em> asks</td></tr>
           </tbody>
         </table>
         </div>

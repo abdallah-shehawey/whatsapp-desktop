@@ -173,6 +173,7 @@ make screenshots # re-photographs the three windows, for the README and the site
 
 | Key | Default | What it does |
 |---|---|---|
+| `[view] theme` | `system` | `system` follows the desktop, or force `dark` / `light` |
 | `[view] font` | the GNOME interface font | family for everything the client draws |
 | `[view] font-size` | `16` | root font size in pixels — WhatsApp sizes in rem |
 | `[view] zoom` | `1.0` | also set with `Ctrl` `+`/`-` |
@@ -188,12 +189,18 @@ make screenshots # re-photographs the three windows, for the README and the site
 | `[window] width`, `height` | `1200x800` | remembered on exit |
 | `[behaviour] close-to-tray` | `true` | closing the window leaves the client running |
 | `[behaviour] minimize-to-tray` | `false` | minimise is not close |
+| `[behaviour] spellcheck` | `true` | Chromium's own, in the box you type in |
 | `[notifications] enabled` | `true` | off hands notifications back to Chromium |
 | `[notifications] sound` | `true` | a tone for the banners this client raises |
 | `[notifications] outgoing-sound` | `false` | WhatsApp's own tone for a message *you* send |
 | `[notifications] whatsapp-sound` | `false` | let WhatsApp play its own tone for a message arriving, instead of the desktop tone this client plays either way |
 | `[notifications] banner-seconds` | `12` | before a banner is refiled silently |
+| `[notifications] hide-preview` | `false` | on, a banner names the chat and the kind of message and never the words |
 | `[media] ask-where-to-save` | `true` | every download asks; off, they land in `~/Downloads` |
+| `[media] download-dir` | — | where the last one went, so the chooser opens there; written by the client |
+| `[media] download-stickers` | `true` | fetch stickers whether or not photos are — the phone has no sticker switch either |
+| `[media] hide-controls-when-paused` | `true` | take the desktop's media card down when a voice note is paused, rather than when it ends |
+| `[links] claim-scheme` | `true` | open `whatsapp:` links here rather than in a browser tab |
 | `[updates] check` | `true` | the daily look for a newer release; off, nothing asks by itself and *Check* in About still does |
 
 State lives in `~/.local/share/whatsapp-desktop`.
