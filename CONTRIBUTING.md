@@ -29,4 +29,4 @@ Pull requests should describe the problem, the approach, how the change was test
 
 ## License
 
-By contributing, you agree that your contribution is provided under the project’s GPL-3.0-only license.
+By contributing, you agree that your contribution is provided under the project’s GPL-3.0-or-later license.

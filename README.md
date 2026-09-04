@@ -13,7 +13,7 @@
   <a href="https://abdallah-shehawey.github.io/whatsapp-desktop/"><img alt="website" src="https://img.shields.io/badge/site-abdallah--shehawey.github.io%2Fwhatsapp--desktop-38bdf8"></a>
   <a href="https://abdallah-shehawey.github.io/shinux-repo/"><img alt="packages" src="https://img.shields.io/badge/packages-rpm%20%7C%20deb%20%7C%20arch-f59e0b"></a>
   <img alt="built on" src="https://img.shields.io/badge/built%20on-Electron%2040-22c55e">
-  <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0-64748b">
+  <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-64748b">
 </p>
 
 ---
@@ -250,4 +250,5 @@ Unset by default — it is a way into a live WhatsApp session, not a feature.
 
 ## Licence
 
-GPL-3.0. Icon origins are recorded in `data/icons/NOTICE`.
+GPL-3.0-or-later. Icon origins are recorded in `data/icons/NOTICE`, and the
+two web fonts the site is drawn in are in `docs/assets/FONTS-NOTICE.txt`.

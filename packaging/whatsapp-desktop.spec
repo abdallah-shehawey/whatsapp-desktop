@@ -22,7 +22,7 @@ Name:           whatsapp-desktop
 Version:        %{?version}%{!?version:1.3.0}
 Release:        %{?release}%{!?release:1}%{?dist}
 Summary:        WhatsApp Web desktop client for Linux
-License:        GPL-3.0-only
+License:        GPL-3.0-or-later
 URL:            https://github.com/abdallah-shehawey/whatsapp-desktop
 Source0:        %{name}-%{version}.tar.gz
 
