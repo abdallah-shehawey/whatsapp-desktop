@@ -123,7 +123,7 @@ kbd {
 .brand:hover { text-decoration: none; }
 .brand img { border-radius: 7px; }
 
-/* Scrolls rather than pushes: the bar carries a brand, five links, a version
+/* Scrolls rather than pushes: the bar carries a brand, eight links, a version
    pill and a button, and a reader whose browser forces its own font draws every
    one of them wider than this was measured with. */
 .topnav {
@@ -135,7 +135,7 @@ kbd {
 .topnav a {
   color: var(--dim); font-size: .92rem; padding: 6px 12px; border-radius: 8px;
 }
-/* Seven sections fit a wide bar with room to spare and a narrow one only if
+/* Eight sections fit a wide bar with room to spare and a narrow one only if
    they give up their padding. Below this the nav is hidden altogether, so this
    is the band where the choice is between tighter links and a nav that has to
    be scrolled sideways to reach the last of them. */
