@@ -103,12 +103,17 @@ the latest release.
   height in the same frame, so the whole conversation used to step up 55px at
   once — it now glides that distance while the new bubble grows out of its own
   bottom corner, the corner measured from the box so an Arabic conversation pops
-  from the other side. And clicking the pinned message at the top of a chat now
-  lands on it and stays: WhatsApp puts the message exactly where the click asked
-  for it and then animates the scroll a thousand pixels past it, because the
-  destination was measured while the rows above it were still being rendered —
-  the message is held at its own landing until the conversation stops growing.
-  None of it is a setting: it is how the client draws a page.
+  from the other side. And jumping to a message — the pinned one at the top of a
+  chat, a quoted reply, a search result — now ends on the message rather than a
+  screenful past it. WhatsApp scrolls twice: once instantly, to bring the message
+  onto the screen, and then a 400ms settle that centres it. The settle works out
+  where it is going the moment it starts, while the rows above the message are
+  still being rendered, so it scrolls faithfully to a measurement of a
+  conversation that no longer exists: the message went from 35px below the top of
+  the room to 1304px above it. It is run again here instead, on WhatsApp's own
+  curve and to WhatsApp's own destination, but against a measurement taken every
+  frame — so the second and third pinned messages of a chat land as squarely as
+  the first. None of it is a setting: it is how the client draws a page.
   There are deliberately **no** custom scrollbars — one `::-webkit-scrollbar`
   rule takes a scroller off Chromium's composited path and puts it back on the
   main thread, and that is a cosmetic gain paid for in frames.

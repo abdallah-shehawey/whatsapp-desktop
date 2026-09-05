@@ -3495,107 +3495,205 @@ const start = ({ send, on }) => {
   setInterval(smoothTheArrivals, ARRIVAL_ADOPT_MS);
   smoothTheArrivals();
 
-  /* -------------------------------------------- the jump to a pinned message */
+  /* --------------------------------------------------- the jump to a message */
 
   /*
-   * Clicking the pinned banner lands on the message and then scrolls a
-   * thousand pixels past it. Measured on the live page 2026-09-05, the row
-   * sampled every frame:
+   * Clicking the pinned message at the top of a chat -- or a quoted reply, or a
+   * search result -- lands on the message and then scrolls a screenful past it.
    *
-   *   +0ms    WhatsApp's own scrollAt writes scrollTop 1443, and the pinned
-   *           row is framed 76px below the top of the room -- exactly where
-   *           the click asked for it
-   *   +12ms   a Velocity "scroll" animation on that same row starts writing
-   *           scrollTop on every tick
-   *   +290ms  it settles at 2691 and the row's top is -1093: the message the
-   *           click was for is a viewport and a half above the fold
+   * WhatsApp announces the jump before it makes it, on its own command bus.
+   * MEASURED on the live page 2026-09-05, the row sampled every frame:
    *
-   * Both are WhatsApp's own and they disagree. Velocity works out where to
-   * scroll to when it is CALLED, from the row's box at that instant -- and at
-   * that instant React is still mounting the rows above it. The list grows
-   * 1244 -> 3400 -> 5342 over the next 300ms, and the componentDidUpdate that
-   * puts the scroll back lands in the middle of the animation. So the
-   * destination is a measurement of a conversation that no longer exists, and
-   * the animation scrolls faithfully to it.
+   *   +0ms    open_chat             { msgContext: { key, msg, highlightMsg } }
+   *   +14ms   scroll_to_focused_msg { pos: 'top', scrollIfNeeded: true }
+   *   +15ms   scroll_to_focused_msg { pos: 'center', animate: true,
+   *                                   duration: 400,
+   *                                   easing: [0.88, 0.64, 0.13, 0.99] }
    *
-   * Nothing here can make that measurement right. What it can do is keep the
-   * message where the instant jump already put it: the row is written back to
-   * its own landing on every frame until the room stops changing. That costs
-   * one scrollTop write a frame and it beats Velocity's tick to the paint --
-   * measured, the row held at a constant offset through both list growths
-   * while the animation ran underneath it.
+   * So the jump is two scrolls, and WhatsApp says which message they are for and
+   * where it wants it to end up. The first is instant, it brings the message
+   * onto the screen, and it is right: it framed the row 35px below the top of
+   * the room. The second is a Velocity animation meant to settle the row in the
+   * middle of the room, and it is the one that is wrong. Velocity works out
+   * where it is going at the moment it is CALLED, from the row's box at that
+   * instant -- and at that instant React is still mounting the rows above it, so
+   * the list grows underneath the animation (3509 -> 6097, 21 rows -> 45, over
+   * the 200ms that followed). It then scrolls faithfully to a measurement of a
+   * conversation that no longer exists: the row went from 35px below the top of
+   * the room to 1304px ABOVE it, and stayed there.
    *
-   * WhatsApp names the row for us. Velocity marks whatever it is animating,
-   * and inside the conversation the only thing wearing that mark during a jump
-   * is the wrapper around the message being scrolled to -- so this never has
-   * to guess which of a chat's pinned messages the banner is showing. The
-   * banner's own press animation wears it too, and the toast under it, but
-   * both are outside the list and neither has a row in it.
+   * Both scrolls are WhatsApp's own. This client writes scrollTop nowhere near
+   * them, and turning its stylesheet off changes none of it.
+   *
+   * What is done about it: the settle is called off and run again here. The row
+   * is measured LIVE every frame and written to where WhatsApp asked for it --
+   * centred -- on the curve and over the duration WhatsApp asked for. A
+   * destination recomputed every frame cannot go stale, so the list growing
+   * underneath the animation stops mattering: rows mount, the row moves, and the
+   * same frame takes the movement back out. Measured after: the row glides from
+   * 35px below the top of the room to 196, which is (737 - 345) / 2, and stays
+   * there -- and the second pinned message of the same chat, an 180px row, to
+   * 278, which is (737 - 180) / 2.
+   *
+   * The first version of this held the row wherever the instant scroll had left
+   * it, which is why it worked on a chat's first pinned message and on no other.
+   * There is no "wherever it landed" for the second one: the banner cycles
+   * through the chat's pins, the message for the next click is often on screen
+   * already, WhatsApp's instant scroll then correctly does nothing -- and
+   * holding the room where it stands is holding it exactly where the jump was
+   * asked to move it away from. That version also had to guess the row, from
+   * whatever Velocity had marked as animating, and what Velocity animates is a
+   * WRAPPER of up to three rows: the guess took the first of them, so the two
+   * pinned messages behind it were held by the wrong message's box. Reading the
+   * target from WhatsApp instead of guessing it from the page is the whole of
+   * this fix.
    */
 
-  const PINNED_BANNER = '[data-testid="conversation-subheader"]';
+  /* How long to keep asking for the command bus before giving up on it. The
+     same wait the links above use, for the same reason: a client started by a
+     link is running before the page's registry has been built. */
+  const JUMP_WAIT_MS = 60000;
+  const JUMP_POLL_MS = 400;
 
-  /* Long enough for the rows above the message to arrive: the list grew twice
-     over 300ms here, and it is filled from the network, so a slow morning takes
-     rather more. It ends the moment the room is still, so the whole window is
-     only ever paid for by a jump that never finished. */
+  /* How long a landing may take in all. WhatsApp's own settle is 400ms and rows
+     above it kept arriving for 200ms after that here; the rest is for a
+     conversation being filled in over a slow link. It ends the moment the room
+     is still, so the whole window is only ever paid for by a jump that never
+     finished. */
   const JUMP_HOLD_MS = 4000;
 
-  /* Still: nothing to put back and nothing new rendered, for this long. */
+  /* Still: nothing left to put right and nothing new rendered, for this long. */
   const JUMP_QUIET_MS = 350;
 
-  /* Where the jump frames the message, for the case where the row is first
-     seen already off the fold and there is no landing worth keeping. */
-  const JUMP_REST_TOP = 76;
+  /* Past this many rooms away, a landing is not a glide. WhatsApp's own instant
+     scroll is what covers distance, so what is left for the settle is a screen
+     or two -- and three screens of conversation crossed in 400ms is a blur
+     nobody reads. */
+  const JUMP_FAR_ROOMS = 3;
 
-  /* The message WhatsApp is scrolling to, named by WhatsApp: the marked
-     wrapper is looked through for the row's own id, and it is the id that is
-     kept. Nothing else here may be: the panel, the scroller and every row in
-     it are thrown away and built again -- twice -- while this is running, so a
-     held element would be a detached one before the animation it is answering
-     had finished. */
-  const markedJump = () => {
+  /* What the settle is, when WhatsApp does not say. */
+  const JUMP_MS = 400;
+  const JUMP_EASE = [0.88, 0.64, 0.13, 0.99];
+
+  /* How long after a jump is announced its animated scroll still belongs to it.
+     Measured at 15ms; a second is a wide margin around that, and a
+     scroll_to_focused_msg outside it is somebody else's. */
+  const JUMP_FRESH_MS = 1000;
+
+  /* A cubic-bezier read at a point, the way CSS reads the four numbers WhatsApp
+     hands over: x has to be solved for before y can be answered. Eight halvings
+     put x inside a 256th of the curve -- a tenth of a frame of a 400ms one --
+     and cost no derivative, which is what a Newton step would want and what
+     this curve, whose control points cross over each other, is a poor candidate
+     for. */
+  const easedBy = (curve, u) => {
+    if (!(u > 0)) return 0;
+    if (u >= 1) return 1;
+    const along = (a, b, t) => {
+      const s = 1 - t;
+      return 3 * s * s * t * a + 3 * s * t * t * b + t * t * t;
+    };
+    let low = 0;
+    let high = 1;
+    let t = u;
+    for (let i = 0; i < 8; i++) {
+      if (along(curve[0], curve[2], t) < u) low = t; else high = t;
+      t = (low + high) / 2;
+    }
+    return along(curve[1], curve[3], t);
+  };
+
+  /* Where in the room WhatsApp wants the message, in pixels below its top. A
+     message taller than the room cannot be centred in it and goes to the top,
+     which is where the eye starts reading it. */
+  const restingPlace = (pos, room, row) => {
+    if (pos === 'center') return Math.max(0, Math.round((room - row) / 2));
+    if (pos === 'bottom') return Math.max(0, Math.round(room - row));
+    return 0;
+  };
+
+  /*
+   * WhatsApp's own settle, called off.
+   *
+   * It has to be, rather than merely out-written. The paint belongs to whoever
+   * wrote last in the frame, and Velocity's tick runs AFTER this one: measured
+   * over a whole settle, every frame put the scroller back where the message
+   * belongs -- 1612 -- and the next frame read 2027, 1933, 2122, further away
+   * each time. Left running, the animation is what the eye sees for its whole
+   * 400ms: the message flies off the top of the room and is put back only when
+   * the animation ends. That is the "it scrolls somewhere and then jumps onto
+   * the message" this is here to end.
+   *
+   * Nothing is lost by stopping it. The whole of what WhatsApp asked for is in
+   * the options it passed -- `{ duration: 400, easing: generateBezier(0.88,
+   * 0.64, 0.13, 0.99), container, offset: -278.5 }` on the jump measured here,
+   * where 278.5 is (737 - 180) / 2 exactly: the room, less the row, halved.
+   * There is NO complete and NO begin callback in it, so the animation answers
+   * to nobody and its end is not a step in anything. The offset is the only
+   * thing it knows that this does not, and it is recomputed here every frame
+   * instead of once, which is the whole disagreement.
+   *
+   * `velocity-animate` is a private name like every other on this page, so the
+   * whole of it is asked for inside a try and every part of its answer is
+   * checked. A build that has taken it away leaves the settle running, and the
+   * writes below still land the message -- just with the animation showing
+   * underneath them until it ends.
+   */
+  const callOffTheSettle = scroller => {
+    try {
+      const V = grab('velocity-animate');
+      if (typeof V !== 'function' || !V.State || !Array.isArray(V.State.calls)) return;
+      for (const call of V.State.calls) {
+        if (!call || !call[2] || call[2].container !== scroller) continue;
+        for (const tween of call[0] || [])
+          if (tween && tween.scroll && tween.element) V(tween.element, 'stop');
+      }
+    } catch (err) {
+      /* WhatsApp's animation library, on WhatsApp's own terms. */
+    }
+  };
+
+  /* The message, wherever its row is now.
+   *
+   * By id and never by element: the panel, the scroller and every row in it are
+   * thrown away and built again -- twice -- during one jump, so an element kept
+   * from the frame before is a detached one within 200ms. `data-id` is the bare
+   * message id on the build measured here and has been the whole serialised key
+   * on others, so both are answered. */
+  const rowOfJump = id => {
     for (const where of listsOnPage())
-      for (const marked of where.scroller.querySelectorAll('.velocity-animating')) {
-        const row = marked.querySelector('[data-id]');
-        if (row) return { scroller: where.scroller, row: row, id: row.getAttribute('data-id') };
+      for (const row of where.scroller.querySelectorAll('[data-id]')) {
+        const value = row.getAttribute('data-id');
+        if (value === id || value.endsWith('_' + id))
+          return { scroller: where.scroller, row: row };
       }
     return null;
   };
 
-  /* And the same message once the mark has gone, wherever its row is now. */
-  const jumpRow = id => {
-    for (const where of listsOnPage())
-      for (const row of where.scroller.querySelectorAll('[data-id]'))
-        if (row.getAttribute('data-id') === id) return { scroller: where.scroller, row: row };
-    return null;
-  };
+  let landing = null;
 
-  let letGoOfTheJump = null;
-
-  const holdTheJump = () => {
+  const landTheJump = (id, pos, ms, curve) => {
     /* One at a time: the banner cycles through a chat's pinned messages, and a
        second click is a second jump that this one has no business finishing. */
-    if (letGoOfTheJump) letGoOfTheJump();
+    if (landing) landing();
 
     const began = performance.now();
-    let id = null;
-    let rest = JUMP_REST_TOP;
+    let start = null;              /* the distance the settle is animating away */
     let grown = -1;
     let stillFrom = 0;
     let done = false;
 
-    /* The owner moving the conversation themselves ends it there and then.
-       Holding a message against a hand on the wheel is the one way this could
-       be worse than the scroll it exists to answer. */
+    /* A hand on the wheel ends it there and then. Holding a message against
+       somebody scrolling away from it is the one way this could be worse than
+       the scroll it exists to replace. */
     const letGo = () => {
       if (done) return;
       done = true;
-      if (letGoOfTheJump === letGo) letGoOfTheJump = null;
+      if (landing === letGo) landing = null;
       for (const name of ['wheel', 'pointerdown', 'keydown'])
         window.removeEventListener(name, letGo, true);
     };
-    letGoOfTheJump = letGo;
+    landing = letGo;
     for (const name of ['wheel', 'pointerdown', 'keydown'])
       window.addEventListener(name, letGo, true);
 
@@ -3604,31 +3702,41 @@ const start = ({ send, on }) => {
       if (done || now - began > JUMP_HOLD_MS) return letGo();
       requestAnimationFrame(step);
 
-      const at = id === null ? markedJump() : jumpRow(id);
-      if (!at) return;
+      const at = rowOfJump(id);
+      if (!at) return;                    /* being rebuilt: ask again next frame */
 
-      const room = at.scroller.getBoundingClientRect();
-      const off = Math.round(at.row.getBoundingClientRect().top - room.top);
+      const room = at.scroller.clientHeight;
+      const box = at.row.getBoundingClientRect();
+      const rest = restingPlace(pos, room, box.height);
 
-      if (id === null) {
-        id = at.id;
-        /* The landing the instant jump chose is the answer the click asked
-           for. A row first seen already past the fold is not one -- the mark
-           was found late -- and the offset a jump uses stands in for it. */
-        rest = off >= 0 && off < at.scroller.clientHeight ? off : JUMP_REST_TOP;
-      }
+      /* How far the row still is from where it belongs. Positive is below it,
+         and the room scrolls down by exactly that to take it away. */
+      const need = Math.round(box.top - at.scroller.getBoundingClientRect().top - rest);
 
-      /* Velocity has already written this frame's step by the time this runs --
-         measured, the scroller reads 1826 here and goes back to 1481 -- and a
-         write after it is the one the frame is painted from. */
-      const put = off - rest;
+      /* What the settle has to animate, taken once, and WhatsApp's own settle
+         called off in the same breath -- while the curve is running, because a
+         second one can start behind the first when a conversation is still
+         being filled in. A distance that is really a jump is not animated at
+         all: the first frame writes the whole of it. */
+      if (now - began <= ms) callOffTheSettle(at.scroller);
+      if (start === null)
+        start = Math.abs(need) > room * JUMP_FAR_ROOMS || stillnessAsked() ? 0 : need;
+
+      /* The error this frame is entitled to keep, on WhatsApp's own curve; at
+         the end of the duration it is nought and the row is exactly where the
+         jump asked for it. Everything else in `need` -- a row mounting above,
+         WhatsApp's own componentDidUpdate putting the scroll back, Velocity's
+         tick writing a stale destination a moment ago -- is measured out and
+         taken back out in the same frame. */
+      const left = Math.round(start * (1 - easedBy(curve, (now - began) / ms)));
+      const put = need - left;
       const was = at.scroller.scrollTop;
       if (put) at.scroller.scrollTop += put;
 
-      /* Still: nothing left to put back, or nowhere left to put it -- a message
-         at the end of a conversation cannot be lifted to the offset a jump
-         would choose, and asking for four seconds would be a poor answer to
-         a scroller already against its stop. */
+      /* Still: nothing left to put right, or nowhere left to put it -- a message
+         at the end of a conversation cannot be lifted to the middle of the room,
+         and asking for four seconds of it would be a poor answer to a scroller
+         already against its stop. */
       if ((!put || at.scroller.scrollTop === was) && at.scroller.scrollHeight === grown) {
         if (!stillFrom) stillFrom = now;
         if (now - stillFrom > JUMP_QUIET_MS) letGo();
@@ -3640,13 +3748,51 @@ const start = ({ send, on }) => {
     requestAnimationFrame(step);
   };
 
-  /* In the capture phase, so the hold is armed before WhatsApp has begun the
-     jump this is here to finish. */
-  document.addEventListener('click', event => {
-    if (event.button) return;
-    const where = event.target;
-    if (where && where.closest && where.closest(PINNED_BANNER)) holdTheJump();
-  }, true);
+  /* WhatsApp's own account of the jump, rather than a guess taken off the page.
+     Private names, so each is asked for inside a try and its answer checked: a
+     bus that never appears leaves the jump exactly as WhatsApp makes it, which
+     is what this client did before this code existed. */
+  const watchTheJumps = (waitedFor = 0) => {
+    const module = grab('WAWebCmd');
+    const Cmd = module && module.Cmd;
+    if (!Cmd || typeof Cmd.on !== 'function') {
+      if (waitedFor < JUMP_WAIT_MS)
+        setTimeout(() => watchTheJumps(waitedFor + JUMP_POLL_MS), JUMP_POLL_MS);
+      else
+        log('WhatsApp never offered its command bus, so a jump to a message is left as it comes');
+      return;
+    }
+
+    let wanted = null;
+    let asked = 0;
+
+    Cmd.on('open_chat', where => {
+      const context = where && where.msgContext;
+      const key = context && context.key;
+      const id = key && key.id;
+      if (typeof id !== 'string' || !id) return;    /* a chat opened at its bottom */
+      wanted = id;
+      asked = performance.now();
+    });
+
+    /* Two of these arrive per jump: the instant one that brings the message onto
+       the screen, which is right and is left alone, and the animated settle,
+       which is the one taken over. */
+    Cmd.on('scroll_to_focused_msg', (where, how) => {
+      if (!wanted || !how || !how.animate) return;
+      if (performance.now() - asked > JUMP_FRESH_MS) return;
+      const id = wanted;
+      wanted = null;
+      landTheJump(id,
+                  how.pos || 'center',
+                  how.duration > 0 ? how.duration : JUMP_MS,
+                  Array.isArray(how.easing) && how.easing.length === 4 ? how.easing : JUMP_EASE);
+    });
+
+    log('a jump to a message lands where WhatsApp asks for it');
+  };
+
+  watchTheJumps();
 
   /* ------------------------------------------- the caret after a message goes */
 
