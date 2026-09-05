@@ -19,6 +19,9 @@
  * them. "#tone" plays the notification sound the client uses for its own
  * banners. "#story <message key>" opens a story the way a clicked banner for a
  * mention in one does, which is the one path with no pointer to drive it.
+ * "#click <x> <y>" and "#right <x> <y>" press the mouse where nothing else can:
+ * React ignores a MouseEvent a script constructs, and Chromium decides whether
+ * to raise a context menu at all from the trusted one.
  *
  * Devtools are a Ctrl+Shift+I away here, which is what the GTK client could not
  * offer -- WebKitGTK's remote inspector never answered on its port. This stays
@@ -215,6 +218,29 @@ const install = (getWindow, getBanners, actions = {}) => {
       win.webContents.focus();
       win.webContents.insertText(source.slice(6));
       console.log('debug: typed %d character(s)', source.length - 6);
+      return;
+    }
+
+    /* A real mouse press, for the same reason #key exists: a MouseEvent the page
+       constructs is untrusted, React ignores a good many of them, and Chromium
+       decides whether to raise a context menu at all from the trusted one --
+       so whether the page took a right-click for itself or left it to the
+       client is a question only this can answer.
+
+       The coordinates are the WINDOW's, which are device pixels: a page laid
+       out at devicePixelRatio 1.5 puts a box getBoundingClientRect calls 471,520
+       at 707,780 here. Multiply by devicePixelRatio and aim from the page. */
+    if (/^#(click|right)\b/.test(source)) {
+      const button = source.startsWith('#right') ? 'right' : 'left';
+      const [x, y] = source.replace(/^#\w+/, '').trim().split(/\s+/).map(Number);
+      const size = win.getContentSize();
+      const at = { x: Number.isFinite(x) ? x : Math.round(size[0] / 2),
+                   y: Number.isFinite(y) ? y : Math.round(size[1] / 2) };
+      win.webContents.focus();
+      win.webContents.sendInputEvent({ type: 'mouseMove', ...at });
+      win.webContents.sendInputEvent({ type: 'mouseDown', ...at, button, clickCount: 1 });
+      win.webContents.sendInputEvent({ type: 'mouseUp', ...at, button, clickCount: 1 });
+      console.log('debug: %s-clicked at %d,%d', button, at.x, at.y);
       return;
     }
 
