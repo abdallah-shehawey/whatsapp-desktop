@@ -9,7 +9,7 @@
  */
 'use strict';
 
-const { app, BrowserWindow, Menu, session, shell, nativeTheme, ipcMain, screen: electronScreen, desktopCapturer } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, session, shell, nativeTheme, ipcMain, screen: electronScreen, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -1095,6 +1095,8 @@ const createWindow = () => {
 
   win.webContents.on('did-create-window', adoptPopup);
 
+  win.webContents.on('context-menu', (event, params) => showContextMenu(win.webContents, params));
+
   win.webContents.on('will-navigate', (event, url) => {
     /* A link this file knows how to act on is acted on, even when isWhatsApp
        would have waved it through: chat.whatsapp.com ends in whatsapp.com and is
@@ -1268,6 +1270,89 @@ const popupOptions = features => {
   };
 };
 
+/*
+ * The right-click menu, which Electron does not draw and a browser does.
+ *
+ * WhatsApp draws its own over a message: measured on the live page, a
+ * right-click anywhere in the conversation -- on a bubble or on the wallpaper
+ * between two of them -- is taken by the page and cancelled, so this is never
+ * asked for there and WhatsApp's Reply/React/Forward menu is what opens. What
+ * is left is everything the page does NOT answer for: the composer, the search
+ * boxes, the window's own chrome, and every page a link opens in a popup. Those
+ * had nothing at all, which is what the report was.
+ *
+ * The composer is the one that matters, so the menu is built around it. It is
+ * also the only place the spell checker can be acted on: it is on by default
+ * (behaviour.spellcheck) and draws its red underline, and without a menu there
+ * was no way to see what it wanted instead.
+ */
+const showContextMenu = (contents, params) => {
+  const flags = params.editFlags || {};
+  const template = [];
+  const rule = () => { if (template.length) template.push({ type: 'separator' }); };
+
+  /* First, above the editing actions, the way every desktop puts them: what
+     the underline is asking is the reason the menu was opened. */
+  if (params.misspelledWord) {
+    for (const word of params.dictionarySuggestions || [])
+      template.push({ label: word, click: () => contents.replaceMisspelling(word) });
+    if (!(params.dictionarySuggestions || []).length)
+      template.push({ label: 'No spelling suggestions', enabled: false });
+    template.push({
+      label: 'Add to dictionary',
+      click: () => contents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+    });
+  }
+
+  if (params.isEditable) {
+    rule();
+    template.push(
+      { role: 'undo', enabled: !!flags.canUndo },
+      { role: 'redo', enabled: !!flags.canRedo },
+      { type: 'separator' },
+      { role: 'cut', enabled: !!flags.canCut },
+      { role: 'copy', enabled: !!flags.canCopy },
+      { role: 'paste', enabled: !!flags.canPaste },
+      /* WhatsApp's composer is a rich-text editor and a paste carries the
+         formatting of wherever it came from. */
+      { role: 'pasteAndMatchStyle', enabled: !!flags.canPaste },
+      { role: 'delete', enabled: !!flags.canDelete },
+      { role: 'selectAll' },
+    );
+  } else if (params.selectionText) {
+    rule();
+    template.push({ role: 'copy' }, { role: 'selectAll' });
+  }
+
+  /* A link, and an image, on the pages a chat opens in a window of its own --
+     inside a conversation both of these belong to WhatsApp's own menu. The
+     link is opened in the browser rather than here because that is what this
+     client does with one everywhere else. */
+  if (params.linkURL) {
+    rule();
+    template.push(
+      { label: 'Open link in browser', click: () => shell.openExternal(params.linkURL) },
+      { label: 'Copy link', click: () => clipboard.writeText(params.linkURL) },
+    );
+  }
+  if (params.mediaType === 'image') {
+    rule();
+    template.push({ label: 'Copy image', click: () => contents.copyImageAt(params.x, params.y) });
+  }
+
+  /* Last, and always: the devtools are a documented Ctrl+Shift+I in this
+     client, and a menu that can point at the element is the other half of it. */
+  rule();
+  template.push({ label: 'Inspect', click: () => contents.inspectElement(params.x, params.y) });
+
+  /* A native menu is drawn by the toolkit and never appears in a capturePage,
+     so what it says is only ever readable from here. */
+  debug.trace('menu: %s', template.map(item => item.label || item.role || '--').join(' / '));
+
+  const window = BrowserWindow.fromWebContents(contents);
+  if (window) Menu.buildFromTemplate(template).popup({ window: window });
+};
+
 const adoptPopup = popup => {
   popups.add(popup);
   popup.on('closed', () => {
@@ -1277,6 +1362,8 @@ const adoptPopup = popup => {
   popup.on('close', () => debug.trace('popup: asked to close'));
 
   const contents = popup.webContents;
+
+  contents.on('context-menu', (event, params) => showContextMenu(contents, params));
 
   contents.on('did-finish-load', async () => {
     debug.trace('popup: loaded %s', contents.getURL());

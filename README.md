@@ -107,6 +107,12 @@ the latest release.
   There are deliberately **no** custom scrollbars — one `::-webkit-scrollbar`
   rule takes a scroller off Chromium's composited path and puts it back on the
   main thread, and that is a cosmetic gain paid for in frames.
+- **A right-click menu where the page has none.** WhatsApp answers a right-click
+  over a message with its own menu, and this stays out of its way; everywhere it
+  does not — the composer, the search boxes, a page a link opened in a window of
+  its own — there is now a native one, with the spell checker's suggestions at
+  the top of it. Copy, paste and paste-without-formatting, a link's address, an
+  image, and *Inspect* for the devtools that are already a `Ctrl+Shift+I` away.
 - **Screen sharing in a call**, over PipeWire on Wayland, offering windows as
   well as whole screens.
 - Dark or light follows the desktop, links open in your browser, every download
