@@ -3495,6 +3495,159 @@ const start = ({ send, on }) => {
   setInterval(smoothTheArrivals, ARRIVAL_ADOPT_MS);
   smoothTheArrivals();
 
+  /* -------------------------------------------- the jump to a pinned message */
+
+  /*
+   * Clicking the pinned banner lands on the message and then scrolls a
+   * thousand pixels past it. Measured on the live page 2026-09-05, the row
+   * sampled every frame:
+   *
+   *   +0ms    WhatsApp's own scrollAt writes scrollTop 1443, and the pinned
+   *           row is framed 76px below the top of the room -- exactly where
+   *           the click asked for it
+   *   +12ms   a Velocity "scroll" animation on that same row starts writing
+   *           scrollTop on every tick
+   *   +290ms  it settles at 2691 and the row's top is -1093: the message the
+   *           click was for is a viewport and a half above the fold
+   *
+   * Both are WhatsApp's own and they disagree. Velocity works out where to
+   * scroll to when it is CALLED, from the row's box at that instant -- and at
+   * that instant React is still mounting the rows above it. The list grows
+   * 1244 -> 3400 -> 5342 over the next 300ms, and the componentDidUpdate that
+   * puts the scroll back lands in the middle of the animation. So the
+   * destination is a measurement of a conversation that no longer exists, and
+   * the animation scrolls faithfully to it.
+   *
+   * Nothing here can make that measurement right. What it can do is keep the
+   * message where the instant jump already put it: the row is written back to
+   * its own landing on every frame until the room stops changing. That costs
+   * one scrollTop write a frame and it beats Velocity's tick to the paint --
+   * measured, the row held at a constant offset through both list growths
+   * while the animation ran underneath it.
+   *
+   * WhatsApp names the row for us. Velocity marks whatever it is animating,
+   * and inside the conversation the only thing wearing that mark during a jump
+   * is the wrapper around the message being scrolled to -- so this never has
+   * to guess which of a chat's pinned messages the banner is showing. The
+   * banner's own press animation wears it too, and the toast under it, but
+   * both are outside the list and neither has a row in it.
+   */
+
+  const PINNED_BANNER = '[data-testid="conversation-subheader"]';
+
+  /* Long enough for the rows above the message to arrive: the list grew twice
+     over 300ms here, and it is filled from the network, so a slow morning takes
+     rather more. It ends the moment the room is still, so the whole window is
+     only ever paid for by a jump that never finished. */
+  const JUMP_HOLD_MS = 4000;
+
+  /* Still: nothing to put back and nothing new rendered, for this long. */
+  const JUMP_QUIET_MS = 350;
+
+  /* Where the jump frames the message, for the case where the row is first
+     seen already off the fold and there is no landing worth keeping. */
+  const JUMP_REST_TOP = 76;
+
+  /* The message WhatsApp is scrolling to, named by WhatsApp: the marked
+     wrapper is looked through for the row's own id, and it is the id that is
+     kept. Nothing else here may be: the panel, the scroller and every row in
+     it are thrown away and built again -- twice -- while this is running, so a
+     held element would be a detached one before the animation it is answering
+     had finished. */
+  const markedJump = () => {
+    for (const where of listsOnPage())
+      for (const marked of where.scroller.querySelectorAll('.velocity-animating')) {
+        const row = marked.querySelector('[data-id]');
+        if (row) return { scroller: where.scroller, row: row, id: row.getAttribute('data-id') };
+      }
+    return null;
+  };
+
+  /* And the same message once the mark has gone, wherever its row is now. */
+  const jumpRow = id => {
+    for (const where of listsOnPage())
+      for (const row of where.scroller.querySelectorAll('[data-id]'))
+        if (row.getAttribute('data-id') === id) return { scroller: where.scroller, row: row };
+    return null;
+  };
+
+  let letGoOfTheJump = null;
+
+  const holdTheJump = () => {
+    /* One at a time: the banner cycles through a chat's pinned messages, and a
+       second click is a second jump that this one has no business finishing. */
+    if (letGoOfTheJump) letGoOfTheJump();
+
+    const began = performance.now();
+    let id = null;
+    let rest = JUMP_REST_TOP;
+    let grown = -1;
+    let stillFrom = 0;
+    let done = false;
+
+    /* The owner moving the conversation themselves ends it there and then.
+       Holding a message against a hand on the wheel is the one way this could
+       be worse than the scroll it exists to answer. */
+    const letGo = () => {
+      if (done) return;
+      done = true;
+      if (letGoOfTheJump === letGo) letGoOfTheJump = null;
+      for (const name of ['wheel', 'pointerdown', 'keydown'])
+        window.removeEventListener(name, letGo, true);
+    };
+    letGoOfTheJump = letGo;
+    for (const name of ['wheel', 'pointerdown', 'keydown'])
+      window.addEventListener(name, letGo, true);
+
+    const step = () => {
+      const now = performance.now();
+      if (done || now - began > JUMP_HOLD_MS) return letGo();
+      requestAnimationFrame(step);
+
+      const at = id === null ? markedJump() : jumpRow(id);
+      if (!at) return;
+
+      const room = at.scroller.getBoundingClientRect();
+      const off = Math.round(at.row.getBoundingClientRect().top - room.top);
+
+      if (id === null) {
+        id = at.id;
+        /* The landing the instant jump chose is the answer the click asked
+           for. A row first seen already past the fold is not one -- the mark
+           was found late -- and the offset a jump uses stands in for it. */
+        rest = off >= 0 && off < at.scroller.clientHeight ? off : JUMP_REST_TOP;
+      }
+
+      /* Velocity has already written this frame's step by the time this runs --
+         measured, the scroller reads 1826 here and goes back to 1481 -- and a
+         write after it is the one the frame is painted from. */
+      const put = off - rest;
+      const was = at.scroller.scrollTop;
+      if (put) at.scroller.scrollTop += put;
+
+      /* Still: nothing left to put back, or nowhere left to put it -- a message
+         at the end of a conversation cannot be lifted to the offset a jump
+         would choose, and asking for four seconds would be a poor answer to
+         a scroller already against its stop. */
+      if ((!put || at.scroller.scrollTop === was) && at.scroller.scrollHeight === grown) {
+        if (!stillFrom) stillFrom = now;
+        if (now - stillFrom > JUMP_QUIET_MS) letGo();
+      } else {
+        stillFrom = 0;
+        grown = at.scroller.scrollHeight;
+      }
+    };
+    requestAnimationFrame(step);
+  };
+
+  /* In the capture phase, so the hold is armed before WhatsApp has begun the
+     jump this is here to finish. */
+  document.addEventListener('click', event => {
+    if (event.button) return;
+    const where = event.target;
+    if (where && where.closest && where.closest(PINNED_BANNER)) holdTheJump();
+  }, true);
+
   /* ------------------------------------------- the caret after a message goes */
 
   /*
