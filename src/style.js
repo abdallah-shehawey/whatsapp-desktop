@@ -224,6 +224,36 @@ ${BODY} li::before {
   margin-right: 0 !important;
   margin-inline-end: 4px !important;
 }
+/* The quoted message above a reply, which wears the same two classes -- and the
+ * one place where making a body a block is wrong.
+ *
+ * Measured on the live client: the preview WhatsApp draws for the message being
+ * replied to is span.quoted-mention.selectable-text.copyable-text, so the BODY
+ * selector matches it, and display:block puts it on a line of its own. For a quoted
+ * text message that is exactly right -- the span is its parent's ONLY child, so
+ * the block is the whole preview and its own direction places it, which is what
+ * puts an Arabic quote against the right margin.
+ *
+ * A quoted voice note, photo or video is drawn differently: WhatsApp puts a
+ * 20x20 inline-block icon in front of the span, and a block after an inline
+ * cannot share its line. So "microphone 0:20" came apart into two lines and a
+ * reply to a voice note grew a storey -- measured on the reported bubble,
+ * 63x124px, with "You", the microphone and "0:20" stacked one under the other.
+ *
+ * The exception is the sibling, not the icon: a preview that is not alone in its
+ * box goes back to the inline WhatsApp drew, where the icon and the words share
+ * a line and the parent's own ellipsis cuts it. Nothing is said about direction
+ * there -- what such a preview holds is a duration or the word "Video", which
+ * has none to take.
+ *
+ * It is spelled out of BODY rather than written short, and that is not tidiness:
+ * both rules are important and in the same sheet, so the one that wins is the
+ * more specific one. "span.quoted-mention:not(:only-child)" is a class and a
+ * pseudo-class against BODY's three classes, and it lost -- measured, the
+ * preview came back display:block with the rule in the sheet. */
+${BODY}.quoted-mention:not(:only-child) {
+  display: inline !important;
+}
 /* A community thread -- the panel behind "6 replies" -- and why none of the
    above reaches it. It is mounted OUTSIDE #main, in a [role="dialog"], and it
    holds no div.copyable-text at all: measured on the live panel, 43 message
@@ -314,6 +344,48 @@ ${BODY} li::before {
  * page's own. */
 #pane-side span[title][dir] {
   text-align: left !important;
+}`;
+
+/*
+ * How narrow a bubble is allowed to get, and why a received one needed telling.
+ *
+ * The clock is on a line of its own here -- that is what `display: block` in
+ * MESSAGE_BIDI does, and it is what keeps the clock off the last line of an
+ * Arabic message. What it costs is the width WhatsApp used to get for free: a
+ * bubble is shrink-to-fit, so with the words and the clock on ONE line its
+ * width was the sum of the two, and with them on two lines it is the wider of
+ * them. A three-letter message collapsed to the width of "2:21 AM" and came out
+ * a tall little column with a word above a time -- "الشكل المقرف دا".
+ *
+ * A SENT bubble never looked like that, and the reason is the ticks. Measured
+ * side by side on the same conversation, the invisible span that reserves room
+ * for the clock is 46.8px on a received message and 68.1px on a sent one -- the
+ * 21.3px difference is the pair of check marks -- so the same three letters made
+ * a 62.8px bubble one way round and an 84.1px bubble the other. The owner
+ * pointed at the sent one: "شوف في المرسله حلوه ازاي مع انها قصيره".
+ *
+ * So that is the floor, and it is stated as the number the ticks come to rather
+ * than picked by eye: 4.9em at the 14px a message is drawn in is 68.6px, half a
+ * pixel over the widest of the two spacers. Every short bubble in a conversation
+ * is then the same size whichever side it sits on -- 85.6px measured, received
+ * and sent -- and nothing longer moves, because a floor only ever raises a
+ * bubble that is under it: a 129.1px sent bubble was 129.1px after. Wider was
+ * tried and rejected the same night: at 9em the shape is roomier and no longer
+ * WhatsApp's -- "لا يسطا متوسعهاش اوي كده".
+ *
+ * `em` rather than px because the whole page is sized from the root font, which
+ * this client sets: a floor in pixels would be a different floor at every size.
+ * It goes on the message body's own box rather than on the bubble -- a bubble
+ * holds pictures, voice notes and stickers, all of which are wider than this and
+ * none of which should be told a width by a rule about text -- and
+ * `[data-pre-plain-text]` is what marks that box as a text message: it is the
+ * "[2:21 AM, 9/6/2026] Mega: " prefix WhatsApp puts there for a copy. Scoped to
+ * `#main` so it reaches the conversation and not the drawers beside it, where
+ * the same class appears in a box that is 30% of the window wide.
+ */
+const BUBBLE_MIN = `
+#main div.copyable-text[data-pre-plain-text] {
+  min-width: 4.9em !important;
 }`;
 
 /*
@@ -597,7 +669,7 @@ html {
  * 2026-09-03, when it came out of the settings for good.
  */
 const build = ({ fontSize }, before) => {
-  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION, PANEL_MOUNT, ARABIC_CLIP, MESSAGE_BIDI, ICON_FIT];
+  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION, PANEL_MOUNT, ARABIC_CLIP, MESSAGE_BIDI, BUBBLE_MIN, ICON_FIT];
 
   /* There is no font rule here any more, and that is the point. Forcing the
      desktop font with `* { font-family: X !important }` at user origin works and
