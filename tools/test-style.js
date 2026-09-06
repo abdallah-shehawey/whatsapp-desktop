@@ -147,6 +147,49 @@ assert.strictEqual(
 const rowRule = shipped.slice(shipped.indexOf('#pane-side span[title][dir]'));
 assert.match(rowRule.slice(0, rowRule.indexOf('}')), /\.selectable-text[\s\S]*text-align: left/);
 
+/* A name does not always carry a `title`, so the name is asked for by the box
+   it sits in as well. The Communities tab draws a community's OWN name with no
+   title attribute on the span -- measured, all 5 of them -- so the rule that
+   asks for one matched none of them and the Arabic community sat 29px off in
+   an English list while its own subgroups were flush. */
+assert.match(shipped, /\[data-testid="cell-frame-title"\] span\[dir\]/);
+assert.match(shipped, /\[data-testid="cell-frame-label"\] span\[dir\]/);
+assert.match(shipped, /\[data-testid="cell-frame-title"\]:dir\(rtl\) span\[dir\]/);
+assert.match(shipped, /\[data-testid="cell-frame-label"\]:dir\(rtl\) span\[dir\]/);
+/* And the widening stops there. `cell-frame-secondary` is the line UNDER the
+   name, and it is a message preview far more often than an About: 68 of the 71
+   on the live page carry no title and not one of them is a name. So the PREFIX
+   rule keeps its `[title]`, and dropping it would sweep every Arabic preview in
+   the chat list into the column. */
+assert.doesNotMatch(shipped, /\[data-testid\^="cell-frame-"\] span\[dir\][^\w]/);
+assert.doesNotMatch(shipped, /\[data-testid="cell-frame-secondary"\] span\[dir\]/);
+
+/* The bio in the info drawer -- the same request one panel over. A contact's
+   About is drawn there with no row around it, so the row rule never reached it:
+   measured at 213px off the left in a 465px box, under a name flush at 0.
+
+   The drawer draws a real MESSAGE too (Message info, starred messages), and
+   that must keep BODY's treatment or an Arabic one goes flush left in the one
+   place it is quoted back at the user. `.copyable-area` does not separate them
+   -- all 4 of the drawer's furniture spans sit in one -- but `msg-container`
+   does: 14 of 14 message bodies in the conversation are inside one and none of
+   the drawer's name/About spans is. Rows are excluded with it, so a search
+   MATCH stays governed by the row rule above. */
+assert.match(shipped, /\[data-testid="drawer-right"\] span\.selectable-text\.copyable-text:not\(/);
+assert.match(shipped, /\[data-testid="drawer-right"\]:dir\(rtl\) span\.selectable-text\.copyable-text:not\(/);
+const drawerRule = shipped.slice(shipped.indexOf('[data-testid="drawer-right"] span.selectable-text'));
+assert.match(drawerRule.slice(0, drawerRule.indexOf('{')), /\[data-testid="msg-container"\] \*/);
+assert.match(drawerRule.slice(0, drawerRule.indexOf('{')), /\[data-testid\^="cell-frame-"\] \*/);
+/* Both directions, or the bio is pinned to one margin in the other interface --
+   the same trap as the pane pair and the row pair above. */
+assert.strictEqual(
+  (shipped.match(/\[data-testid="drawer-right"\] span\.selectable-text/g) || []).length,
+  (shipped.match(/\[data-testid="drawer-right"\]:dir\(rtl\) span\.selectable-text/g) || []).length);
+/* Every one of these is an ALIGNMENT and says nothing about direction: which
+   way a name or a bio reads is WhatsApp's answer to give, not this sheet's. */
+const wide = shipped.slice(shipped.indexOf('[data-testid="cell-frame-title"] span[dir]'));
+assert.doesNotMatch(wide.slice(0, wide.indexOf('}')), /direction:|unicode-bidi:/);
+
 /* There is no size knob for the conversation's own text any more. It was
    `view.chat-font-size`, it was a percentage that belonged to neither script
    beside the two per-script sizes in the Fonts window, and it came out of the

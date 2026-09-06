@@ -432,15 +432,75 @@ ${BODY}.quoted-mention:not(:only-child) {
  * list -- measured on a live page, 1 element in the whole document matched it
  * and it was this one, and the chat list's own previews matched it 0 times --
  * so the smaller change is to outrank it here rather than to carve list rows
- * out of the rule every message on the page depends on. */
+ * out of the rule every message on the page depends on.
+ *
+ * AND A NAME DOES NOT ALWAYS CARRY A title, which is what the row rule above
+ * still assumed. span[title][dir] was read off the chat list, where every
+ * name happens to have one; the Communities tab draws a row whose name does
+ * NOT -- "لما فتحت ال community مش مظبوطه". Measured 2026-09-07 with the tab
+ * open and the interface in English: the five community-tab-community-cell
+ * rows -- a community's OWN name, the heading over its groups -- hold a
+ * cell-frame-title whose span has dir="auto" and no title attribute at all,
+ * so the rule matched none of them and they kept WhatsApp's own start
+ * alignment -- which is the fault at the top of this comment again. The four
+ * Latin ones came out at 0px by luck, because start IS left for them; the one
+ * Arabic community sat 29px off with its box empty to the left. The subgroup
+ * rows under it (community-tab-subgroup-cell) DO carry a title, matched, and
+ * were already flush at 0 -- so the two halves of one list disagreed.
+ *
+ * So the name is asked for by the box it is drawn in rather than by an
+ * attribute it may or may not have: cell-frame-title is the name and
+ * cell-frame-label the community above it, and inside those two, any span
+ * with a direction is the name. The [title] spelling stays for the PREFIX
+ * rule, and that is the whole point of keeping both -- cell-frame-secondary
+ * is the line underneath, and it is a message preview far more often than it
+ * is an About. Dropping [title] from the prefix would have swept every
+ * Arabic preview in the chat list into the column too, and a preview is what
+ * somebody SAID: 68 of the 71 secondary lines on the live page carry no title,
+ * and none of them is a name. The title/label rules are the ones that widen;
+ * the prefix rule stays exactly as narrow as it was.
+ *
+ * AND THE BIO IN THE INFO DRAWER, which is the same request one panel over --
+ * "ما تظبط ال bio بالمره يعم يبقي تحت الاسم". The row rule fixed the About
+ * that appears UNDER a name in a list; a contact's own panel draws that same
+ * About with no row around it, and it was never reached. Measured with Contact
+ * info open and the interface in English: the About "كَذَٰلِكَ كُنتُم مِّن
+ * قَبْلُ" sat 213px off the left in a 465px box, under a name flush at 0.
+ *
+ * The drawer's furniture is all one shape -- span.selectable-text.copyable-
+ * text -- and so is a real message, which is the difficulty: Message info
+ * draws the message itself in this same panel, and starred messages do too. A
+ * message must keep BODY's treatment, or an Arabic one goes flush left in the
+ * one place it is being quoted back at the user. .copyable-area does NOT
+ * separate them -- measured, all 4 of the drawer's furniture spans are inside
+ * one. msg-container does: 14 of 14 message bodies in the conversation sit
+ * in one, 0 of the drawer's name/About spans do, and Message info opened
+ * through WhatsApp's own Cmd.msgInfoDrawer puts both of its bodies inside
+ * one. Search results and Groups in common are rows, so cell-frame-* is
+ * excluded with it and goes on being governed by the row rule above -- which
+ * is what keeps a search MATCH (a secondary with no title) out of this.
+ *
+ * That leaves exactly the furniture: the contact's name, the push name under
+ * it, the About, and in a group the subject and the description. Naming both
+ * classes puts this at (0,4,1) against BODY's (0,3,2), the same lift the row
+ * rule needed one paragraph up, so the bio settles on the same answer as the
+ * name above it and the two can never disagree. */
 #pane-side span[title][dir],
 [data-testid^="cell-frame-"] span[title][dir],
-[data-testid^="cell-frame-"] span[title][dir].selectable-text {
+[data-testid^="cell-frame-"] span[title][dir].selectable-text,
+[data-testid="cell-frame-title"] span[dir],
+[data-testid="cell-frame-label"] span[dir],
+[data-testid="drawer-right"] span.selectable-text.copyable-text:not(
+  [data-testid="msg-container"] *, [data-testid^="cell-frame-"] *) {
   text-align: left !important;
 }
 #pane-side:dir(rtl) span[title][dir],
 [data-testid^="cell-frame-"]:dir(rtl) span[title][dir],
-[data-testid^="cell-frame-"]:dir(rtl) span[title][dir].selectable-text {
+[data-testid^="cell-frame-"]:dir(rtl) span[title][dir].selectable-text,
+[data-testid="cell-frame-title"]:dir(rtl) span[dir],
+[data-testid="cell-frame-label"]:dir(rtl) span[dir],
+[data-testid="drawer-right"]:dir(rtl) span.selectable-text.copyable-text:not(
+  [data-testid="msg-container"] *, [data-testid^="cell-frame-"] *) {
   text-align: right !important;
 }`;
 
