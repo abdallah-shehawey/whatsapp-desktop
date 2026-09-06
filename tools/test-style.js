@@ -81,7 +81,7 @@ assert.match(shipped, /@keyframes whatsapp-desktop-panel/);
    own, outside #main, and a reply written there deserves the same motion. */
 assert.doesNotMatch(shipped, /#main footer \[data-testid="popup_panel"\]/);
 
-/* The chat list is a column drawn one way round, and every name in it starts
+/* A list of names is a column drawn one way round, and every name in it starts
    where the column does: an Arabic name sits where an English name sits, and
    only the words inside it read right to left.
 
@@ -98,7 +98,8 @@ assert.doesNotMatch(shipped, /#pane-side[^{]*dir="rtl"/);
    window and the picture at the right of every row, and a hard `left` there is
    the whole column pinned to the far side from the pictures. So the second half
    of the rule aligns the names to the right when the pane resolves rtl. */
-assert.match(shipped, /#pane-side:dir\(rtl\) span\[title\]\[dir\] \{\n  text-align: right !important;/);
+assert.match(shipped, /#pane-side:dir\(rtl\) span\[title\]\[dir\]/);
+assert.match(list.slice(list.indexOf(':dir(rtl)')), /text-align: right !important;/);
 /* On the PANE, never on the name. `:dir()` against the span itself is the
    original bug written a second way -- dir="auto" resolves per name, so the
    Arabic ones would go right and the English ones left, which is exactly the
@@ -108,7 +109,43 @@ assert.doesNotMatch(shipped, /span\[title\]\[dir\]:dir\(/);
    sits in its box; `direction` or `unicode-bidi` on a name would be this client
    deciding which way a name reads, which is WhatsApp's answer to give. */
 assert.doesNotMatch(list.slice(0, list.indexOf('}')), /direction:|unicode-bidi:/);
-assert.doesNotMatch(list.slice(list.indexOf('#pane-side:dir(rtl)')), /direction:|unicode-bidi:/);
+assert.doesNotMatch(list.slice(list.indexOf(':dir(rtl)')), /direction:|unicode-bidi:/);
+
+/* The chat list is only one of those columns. The same names are listed again
+   in the forward picker, on the Status tab, under New chat and in the search
+   results, and each of those is a panel `#pane-side` cannot see -- so the scope
+   is the row, which names itself `cell-frame-*` in every one of them. */
+assert.match(shipped, /\[data-testid\^="cell-frame-"\] span\[title\]\[dir\]/);
+assert.match(shipped, /\[data-testid\^="cell-frame-"\]:dir\(rtl\) span\[title\]\[dir\]/);
+/* A PREFIX, and not `cell-frame-title`. A community's name above a group's is
+   `cell-frame-label` -- 5 of the 76 names in the live chat list -- so a rule
+   aimed at the title alone would drop them out of the column it claims to be
+   generalising. `cell-frame-secondary`, the line underneath, comes with it and
+   is meant to: it is furniture in the same row. */
+assert.doesNotMatch(shipped, /\[data-testid="cell-frame-title"\] span\[title\]/);
+/* Both halves of the pane rule stay, or neither does. `#pane-side` carries an
+   id, so the plain one (1,2,1) outranks the general `:dir(rtl)` rule (0,4,1);
+   drop `#pane-side:dir(rtl)` alone and an Arabic interface pins the chat list
+   back to the left, which is the bug the pane rules were written to fix. */
+assert.strictEqual(/#pane-side span\[title\]\[dir\]/.test(shipped),
+                   /#pane-side:dir\(rtl\) span\[title\]\[dir\]/.test(shipped));
+
+/* And the bio travels with the name it sits under -- "يبقي مع ال bio كمان يعني
+   نحركهم الاتنين". A contact's About wears selectable-text and copyable-text on
+   a plain div, so BODY above claims it as a message body at (0,3,2) and beats
+   the row rule's (0,3,1); the name moved and the bio stayed against the right
+   margin. Naming the class lifts the row rule over it. */
+assert.match(shipped, /\[data-testid\^="cell-frame-"\] span\[title\]\[dir\]\.selectable-text/);
+assert.match(shipped, /\[data-testid\^="cell-frame-"\]:dir\(rtl\) span\[title\]\[dir\]\.selectable-text/);
+/* Both directions, or the bio is pinned left in an Arabic interface -- the same
+   trap as the pane pair, one rule further down. */
+assert.strictEqual(
+  (shipped.match(/\[data-testid\^="cell-frame-"\] span\[title\]\[dir\]\.selectable-text/g) || []).length,
+  (shipped.match(/\[data-testid\^="cell-frame-"\]:dir\(rtl\) span\[title\]\[dir\]\.selectable-text/g) || []).length);
+/* The lift is specificity, not a second declaration: the class is named on the
+   SAME rule, so a bio and the name above it can never disagree. */
+const rowRule = shipped.slice(shipped.indexOf('#pane-side span[title][dir]'));
+assert.match(rowRule.slice(0, rowRule.indexOf('}')), /\.selectable-text[\s\S]*text-align: left/);
 
 /* There is no size knob for the conversation's own text any more. It was
    `view.chat-font-size`, it was a percentage that belonged to neither script

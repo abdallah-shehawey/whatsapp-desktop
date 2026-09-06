@@ -305,7 +305,7 @@ ${BODY}.quoted-mention:not(:only-child) {
   unicode-bidi: plaintext !important;
   text-align: start !important;
 }
-/* The chat list, which is a column and is drawn the way the interface is.
+/* Every list of names, which is a column and is drawn the way the interface is.
  *
  * A conversation is the words themselves and they are laid out the way they
  * read; the list beside it is furniture -- a column of rows with a picture at
@@ -364,14 +364,83 @@ ${BODY}.quoted-mention:not(:only-child) {
  * So the side is the interface's, named twice rather than left to "start":
  * "start" on these spans resolves against the SPAN's own direction, which
  * dir="auto" works out per name -- which is the fault at the top of this
- * comment. :dir() asks the question of the pane instead, where the answer is
+ * comment. :dir() asks the question of the row instead, where the answer is
  * the one WhatsApp put on <html>, and the names follow the column they are in.
  * Nothing is said about direction here either: an English name in an Arabic
- * interface still reads left to right, it just starts where the row does. */
-#pane-side span[title][dir] {
+ * interface still reads left to right, it just starts where the row does.
+ *
+ * AND THE CHAT LIST IS ONLY ONE OF THESE COLUMNS, which is what was still
+ * missing: the same names are listed again when a message is forwarded, on the
+ * Status tab, in the calls list, under New chat, and every one of them had the
+ * fault the chat list was cured of -- "فيه حجات كتير انت مظبطتش فيها موضوع
+ * الاسماء دا ... اظبط بقي خلي الموضوع في list الاسماء عام".
+ *
+ * The rule was scoped to #pane-side because that is where it was reported, and
+ * the pane is one panel among many. Measured 2026-09-07 in the forward picker,
+ * interface in English: Arabic names 0px off the RIGHT with the empty box to
+ * their LEFT -- 153px on "صنايعيه امبيديد", 84px on "خريجين قسم كهرباء" --
+ * while every Latin name sat 0px off the left. The chat-list bug exactly, on a
+ * surface the rule could not see.
+ *
+ * So the scope is the ROW rather than the panel, and the row names itself:
+ *
+ *   [data-testid="cell-frame-title"]      the name
+ *   [data-testid="cell-frame-label"]      the community above a group's name
+ *   [data-testid="cell-frame-secondary"]  the line under it -- a chat's preview,
+ *                                         a contact's About, a search match
+ *
+ * Measured on the live client with all of them mounted: 87 of 87
+ * span[title][dir] on the whole page sit inside a cell-frame-*, and NONE of
+ * them is in a conversation -- #main [data-testid^="cell-frame-"] is empty, so
+ * a rule written this wide cannot reach a message. The same shape was found
+ * under #pane-side, [data-testid="new-chat-drawer"],
+ * [data-testid="status-list-drawer"], the calls tab (which re-uses #pane-side
+ * and was therefore already right), the forward picker's [role="dialog"], the
+ * search results and the group-info participants.
+ *
+ * The prefix is what makes it one rule instead of three, and cell-frame-label
+ * is why it is a prefix and not cell-frame-title: 5 of the 76 names in the
+ * chat list are community labels, and a selector aimed at the title alone would
+ * have QUIETLY DROPPED them out of the column while claiming to generalise.
+ *
+ * None of the 252 rows on the page carries a dir attribute of its own, nor does
+ * any ancestor up to <html> -- measured -- so :dir() on the row asks the same
+ * question of the same element as :dir() on the pane did.
+ *
+ * #pane-side is kept beside it, and kept as a PAIR. Both spellings hit today;
+ * the day WhatsApp renames cell-frame-*, the list the client is mostly used
+ * through still reads correctly rather than every list breaking at once -- the
+ * same reason the conversation scroller below is matched two ways. What must not
+ * happen is one of the two pane rules being tidied away on its own: #pane-side
+ * carries an id, so the plain one outranks the general :dir(rtl) rule (1,2,1
+ * against 0,4,1) and an Arabic interface would pin the chat list back to the
+ * left. Either both stay or both go.
+ *
+ * The third selector is a cascade collision, not a wider net. A contact's About
+ * -- the line under the name under New chat -- wears selectable-text and
+ * copyable-text and hangs off a plain div, so it matches BODY above and is
+ * styled as though it were a MESSAGE: display block, plaintext, and
+ * text-align START, which is the whole fault again. BODY is two classes and two
+ * types, (0,3,2); the row rule is three attributes and a type, (0,3,1); so
+ * WhatsApp's About lines went on sitting against the right margin under names
+ * that had moved to the left -- measured, 9 of them in the New chat list,
+ * "اللهم سنداً صالحاً" and "وَمـا فَقَدَ المرء" flush right in a column of
+ * left-flushed names. Naming one of the two classes lifts the row rule to
+ * (0,4,1) and settles it.
+ *
+ * BODY is left alone deliberately. It reaches this line and nothing else in a
+ * list -- measured on a live page, 1 element in the whole document matched it
+ * and it was this one, and the chat list's own previews matched it 0 times --
+ * so the smaller change is to outrank it here rather than to carve list rows
+ * out of the rule every message on the page depends on. */
+#pane-side span[title][dir],
+[data-testid^="cell-frame-"] span[title][dir],
+[data-testid^="cell-frame-"] span[title][dir].selectable-text {
   text-align: left !important;
 }
-#pane-side:dir(rtl) span[title][dir] {
+#pane-side:dir(rtl) span[title][dir],
+[data-testid^="cell-frame-"]:dir(rtl) span[title][dir],
+[data-testid^="cell-frame-"]:dir(rtl) span[title][dir].selectable-text {
   text-align: right !important;
 }`;
 
