@@ -52,10 +52,15 @@ install: $(ELECTRON)/electron
 	@install -d $(DESTDIR)$(libdir)/resources/app
 	@cp -a $(APP_FILES) $(DESTDIR)$(libdir)/resources/app/
 	@# Chromium's sandbox uses unprivileged user namespaces where they are
-	@# allowed, and falls back to this setuid helper where they are not. It has
-	@# to be owned by root to be either, so a staged package install leaves the
-	@# mode and lets the packaging own it.
-	@test -n "$(DESTDIR)" || chmod 4755 $(DESTDIR)$(libdir)/chrome-sandbox 2>/dev/null || true
+	@# allowed, and falls back to this setuid helper where they are not --
+	@# Ubuntu confines the first behind AppArmor, so there it is the helper or
+	@# no start at all. Electron ships it 0755, so the bit is set here, on the
+	@# staged tree too: the package records the mode, and every install and
+	@# every upgrade lays it down again. Root ownership is the packaging's
+	@# (dpkg-deb --root-owner-group, rpmbuild, makepkg under fakeroot); a local
+	@# install has only the user's, which Chromium rejects -- and does not need,
+	@# since a system that allows namespaces never looks at the helper.
+	@chmod 4755 $(DESTDIR)$(libdir)/chrome-sandbox 2>/dev/null || true
 	@install -d $(DESTDIR)$(bindir)
 	@printf '#!/bin/sh\n'                                                     >  $(DESTDIR)$(bindir)/$(BIN)
 	@printf '# A terminal inside VS Code exports ELECTRON_RUN_AS_NODE=1, and\n' >> $(DESTDIR)$(bindir)/$(BIN)
