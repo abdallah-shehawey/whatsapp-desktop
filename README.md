@@ -211,6 +211,7 @@ make screenshots # re-photographs the three windows, for the README and the site
 | `[behaviour] close-to-tray` | `true` | closing the window leaves the client running |
 | `[behaviour] minimize-to-tray` | `false` | minimise is not close |
 | `[behaviour] spellcheck` | `true` | Chromium's own, in the box you type in |
+| `[behaviour] raise` | `auto` | how the window is brought to the front when a banner is clicked. `auto` picks one and corrects itself once from what the window actually did; `activate` (ask the compositor) and `remap` (take it down and open it again) are taken as given |
 | `[notifications] enabled` | `true` | off hands notifications back to Chromium |
 | `[notifications] sound` | `true` | a tone for the banners this client raises |
 | `[notifications] outgoing-sound` | `false` | WhatsApp's own tone for a message *you* send |

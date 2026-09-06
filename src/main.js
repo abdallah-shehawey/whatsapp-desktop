@@ -394,6 +394,36 @@ let graceTimer = null;
 const windowInFront = () => remapping || (windowOnScreen() &&
   (windowState.focused || Date.now() - blurredAt < FOCUS_GRACE_MS));
 
+/*
+ * A raise, and whether it took.
+ *
+ * There is more than one compositor and they do not agree about what brings a
+ * window to the user -- see showWindow below, where both answers live. So this
+ * client stops assuming there is only one: it raises the window the way that
+ * works here, watches whether the window actually arrived, and swaps to the
+ * other way for the rest of the session when it did not.
+ *
+ * Whether it arrived is answered by the focus event rather than by asking the
+ * window, for the reason the whole of windowState is: an event is a fact where
+ * a query is an opinion. `gen` is which raise is being watched, so a later
+ * raise -- or a hide the owner asked for in between -- retires the check the
+ * earlier one left behind.
+ */
+const RAISE_VERIFY_MS = 250;
+/* One click's worth of asking is one raise. WhatsApp's own window.focus() comes
+   back to this process as a focus-request (see src/preload.js), so a single
+   banner click can ask twice -- and the second ask landing mid-remap is a hide
+   arriving after the show, which is the window taken back down. */
+const RAISE_COALESCE_MS = 600;
+const raising = { gen: 0, at: 0, took: false };
+/* Which way up works here: seeded on the first raise, and corrected by
+   measurement when the seed turns out to be wrong -- unless the config named
+   one, which is taken at its word. A desktop where the measurement itself is
+   wrong is the only reason to name one, so measuring it again would be
+   answering the same question with the same wrong answer. */
+let raiseStrategy = '';
+let raiseMeasured = true;
+
 const traceWindowState = () => {
   /* The raw stream, before anything is made of it: which events the compositor
      actually sends and in what order is the whole question about this window,
@@ -430,7 +460,12 @@ const traceWindowState = () => {
   win.on('restore', () => set(win.isFocused() ? { minimized: false } : {}));
   /* Having the focus settles the dock: a window in it does not hold the
      keyboard, whatever a `restore` that never arrived implies. */
-  win.on('focus', () => { clearTimeout(graceTimer); set({ minimized: false, focused: true }); });
+  win.on('focus', () => {
+    clearTimeout(graceTimer);
+    /* The one answer a raise is waiting for. */
+    raising.took = true;
+    set({ minimized: false, focused: true });
+  });
   win.on('blur', () => {
     blurredAt = Date.now();
     set({ focused: false });
@@ -447,8 +482,8 @@ const traceWindowState = () => {
 };
 
 /*
- * The window, brought to the user -- which on Wayland is not what asking for it
- * does.
+ * The window, brought to the user by being opened again -- which is not what
+ * asking for it does on Wayland.
  *
  * Wayland has no raise. A client cannot put itself in front of anything; the
  * one way up is the xdg-activation protocol, and whether it is granted is the
@@ -502,19 +537,14 @@ const traceWindowState = () => {
  * not running, so for the frame in between the icon leaves an unpinned dock and
  * the icons beside it close the gap, which reads as a flicker. Pinning the app
  * settles it: a favourite keeps its place and only the running dot blinks.
+ *
+ * And this is one of the two ways up, not the only one. The other is to ask and
+ * be given it -- activateWindow below -- which is what X11 has always honoured,
+ * and what a shell that activates a window on its application's behalf when its
+ * notification is clicked makes work on Wayland as well. Which of the two a
+ * machine answers to is measured rather than assumed: see showWindow.
  */
-const showWindow = () => {
-  if (!win || win.isDestroyed()) return;
-
-  /* Already up, and already the owner's. There is nothing to raise, and raising
-     it anyway means the re-map below -- which takes the window down for a frame
-     and puts the page through a rebuild to no purpose. Clicking a banner while
-     looking at the client should move to the chat and do nothing else. */
-  if (win.isVisible() && !win.isMinimized() && win.isFocused()) {
-    win.focus();
-    return;
-  }
-
+const remapWindow = () => {
   /* Down and up again in one turn of the loop, with no frame in between. The
      frame was insurance -- a compositor that sees an unmap and a map together is
      free to fold them into no change at all, and then nothing is raised -- and
@@ -557,8 +587,100 @@ const showWindow = () => {
   setTimeout(() => { remapping = false; }, 0);
 };
 
+/* The other way up: ask, and be given it.
+ *
+ * All a raise ever needed to be, and all it is on X11 -- where a client may put
+ * its own window in front and Chromium sends the activation with a timestamp
+ * that says so. On Wayland it is the compositor's decision (see above), and a
+ * shell that hands the client an activation token when its own banner is
+ * clicked decides yes: the window arrives without being taken down first, which
+ * costs neither the closing animation nor the gap in the dock.
+ *
+ * The un-minimising comes first and the show after it, which is the opposite of
+ * the order in the re-map and for the opposite reason: nothing is unmapped
+ * here, so there is no kMinimized window for show() to be refused over -- and a
+ * window still in the dock is one show() alone would leave there. */
+const activateWindow = () => {
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+};
+
+/* One raise, and -- on the first try, never on the correction -- whether it
+   took. A window that never took the focus is a window that never arrived,
+   whatever was asked for on its behalf; the other way is tried at once for the
+   click still waiting on it, and kept for the rest of the session. */
+const raiseWindow = (strategy, why, verify) => {
+  const gen = ++raising.gen;
+  raising.at = Date.now();
+  raising.took = false;
+  debug.trace('raise: %s (%s)', strategy, why || 'no reason given');
+  if (strategy === 'remap') remapWindow();
+  else activateWindow();
+  if (!verify) return;
+
+  setTimeout(() => {
+    /* Retired: a later raise, or a hide the owner asked for in between. */
+    if (gen !== raising.gen || !win || win.isDestroyed()) return;
+    if (raising.took || win.isFocused()) return;
+    const other = strategy === 'remap' ? 'activate' : 'remap';
+    console.log('the window did not come forward when raised by %s; %s from here on',
+                strategy, other);
+    raiseStrategy = other;
+    raiseWindow(other, why, false);
+  }, RAISE_VERIFY_MS);
+};
+
+/*
+ * The window, brought to the user, whichever of the two ways this desktop
+ * answers to.
+ *
+ * The re-map is what GNOME 50 needs and it is the seed on any Wayland session;
+ * X11 is given the plain ask, which it has always honoured and which costs it
+ * neither a flicker nor a rebuild of the page. Neither is trusted: the raise is
+ * measured, and a seed that is wrong here is corrected on the first click and
+ * not again -- which is the whole of the "clicking a banner leaves the client
+ * in the dock" report from GNOME 46, where the re-map is folded into no change
+ * at all. `behaviour.raise` in the config settles it by hand for a desktop that
+ * wants neither answer measured.
+ */
+const showWindow = why => {
+  if (!win || win.isDestroyed()) return;
+
+  /* Already up, and already the owner's. There is nothing to raise, and raising
+     it anyway means the re-map -- which takes the window down for a frame and
+     puts the page through a rebuild to no purpose. Clicking a banner while
+     looking at the client should move to the chat and do nothing else. */
+  if (win.isVisible() && !win.isMinimized() && win.isFocused()) {
+    win.focus();
+    return;
+  }
+
+  /* One click, however many raises it turns into. See RAISE_COALESCE_MS: the
+     page asks for the focus on its own account, and the second ask landing
+     inside the first raise is a hide arriving after the show. */
+  if (Date.now() - raising.at < RAISE_COALESCE_MS) {
+    debug.trace('raise: a second ask (%s) arrived while one was still settling; ignored',
+                why || 'no reason given');
+    return;
+  }
+
+  if (!raiseStrategy) {
+    const asked = String(config.get('behaviour.raise') || 'auto').toLowerCase();
+    raiseMeasured = asked !== 'activate' && asked !== 'remap';
+    raiseStrategy = raiseMeasured ? (onWayland ? 'remap' : 'activate') : asked;
+    console.log('raising the window by %s%s', raiseStrategy,
+                raiseMeasured ? '' : ', as the config asks');
+  }
+  raiseWindow(raiseStrategy, why, raiseMeasured);
+};
+
 const hideWindow = () => {
   if (!win || win.isDestroyed()) return;
+  /* And a raise still waiting to be measured is retired with it: a window the
+     owner has just put away is not one to fetch back a quarter of a second
+     later. */
+  raising.gen++;
   win.hide();
 };
 
@@ -571,7 +693,7 @@ const hideWindow = () => {
  * is one the owner is asking for, not one they are asking to put away. */
 const toggleWindow = () => {
   if (windowInFront()) hideWindow();
-  else showWindow();
+  else showWindow('the tray was asked for it');
 };
 
 const setTheme = theme => {
@@ -1023,7 +1145,7 @@ const createWindow = () => {
   traceWindowState();
 
   win.once('ready-to-show', () => {
-    if (!hidden) showWindow();
+    if (!hidden) showWindow('the client started');
     pushFocus();
   });
 
@@ -1180,7 +1302,7 @@ const openLinkedChat = (chat, why) => {
   if (!chat || !win || win.isDestroyed()) return;
   console.log('opening a chat with +%s%s (%s)', chat.phone,
               chat.text ? ' with a message ready to send' : '', why);
-  showWindow();
+  showWindow('a link to a chat');
   /* A link that started this client arrives before there is a page to tell, and
      a send into a window still loading is a send into nothing. It is held and
      handed over by did-finish-load; the page waits from there for WhatsApp's own
@@ -1207,7 +1329,7 @@ const openLinkedChat = (chat, why) => {
 const openGroupInvite = (code, why) => {
   if (!code || !win || win.isDestroyed()) return;
   console.log('opening a group invite (%s)', why);
-  showWindow();
+  showWindow('a group invite');
   /* An invite that started this client arrives before there is a page to tell;
      did-finish-load hands it over, and the page waits from there for WhatsApp's
      own modules. */
@@ -1688,7 +1810,7 @@ const describeThenNotify = () => setTimeout(async () => {
        wherever they already were. The page has no handler to hand this one back
        to, so it is asked for the chat by name. */
     onClick: () => {
-      showWindow();
+      showWindow('a banner was clicked');
       /* The row this banner was made from travels back with the click, because a
          chat cannot always be found again by its name: two of them can share one,
          and this account has such a pair. The name and the message go too, for
@@ -1911,7 +2033,10 @@ const wireIpc = () => {
     fonts.learn(app.getPath('userData'), stack.split(','));
   });
 
-  ipcMain.on('wa:focus-request', showWindow);
+  /* Wrapped rather than passed: ipcMain hands the event in as the first
+     argument, and showWindow's first argument is what the log says the raise
+     was for. */
+  ipcMain.on('wa:focus-request', () => showWindow('the page asked for the focus'));
 
   /* The page could not find WhatsApp's own modules for opening a chat, so it is
      asked for the page WhatsApp serves for the purpose. A reload, and the last
@@ -1997,7 +2122,7 @@ const wireIpc = () => {
       redacted: bidi.words(mark, kindOf(message)),
       icon: note.avatar,
       onClick: () => {
-        showWindow();
+        showWindow('a banner was clicked');
         if (win && !win.isDestroyed()) win.webContents.send('wa:notification-clicked', note.id);
       },
     });
@@ -2131,7 +2256,7 @@ const wireIpc = () => {
       redacted: bidi.words(aimed, note.redacted || mark || 'New message'),
       icon: note.avatar,
       onClick: () => {
-        showWindow();
+        showWindow('a banner was clicked');
         /* The message travels with the click, and a story travels with a flag
            saying so: a story mention landed in `status@broadcast` along with
            everybody else's updates, and opening that chat is not what the user
@@ -2191,7 +2316,7 @@ const wireIpc = () => {
       redacted: note.mark,
       icon: note.avatar,
       onClick: () => {
-        showWindow();
+        showWindow('a ringing banner was clicked');
         if (win && !win.isDestroyed())
           win.webContents.send('wa:store-open', { chat: note.chat, name: note.title });
       },
@@ -2494,7 +2619,7 @@ app.on('second-instance', (event, argv) => {
   /* A --hidden launch that finds one already running exits without raising the
      window: that is the login autostart arriving on top of a client the user
      started themselves. */
-  if (!argv.includes('--hidden')) showWindow();
+  if (!argv.includes('--hidden')) showWindow('a second copy was started');
 });
 
 /* macOS delivers the same thing as an event rather than as argv. Nothing here
@@ -2570,7 +2695,7 @@ app.whenReady().then(() => {
        menu decides which of the two it is offering when it opens and the click
        has to do what the word said -- not what has become true in the seconds
        the menu spent open. */
-    onShow: showWindow,
+    onShow: () => showWindow('the tray'),
     onHide: hideWindow,
     /* Asked again as the menu opens, so the item cannot be caught wearing the
        wrong word because an event went missing. */
@@ -2609,7 +2734,8 @@ app.whenReady().then(() => {
   }
 
   debug.install(() => win, () => banners,
-                { show: showWindow, toggle: toggleWindow, onScreen: windowOnScreen,
+                { show: () => showWindow('the debug rig'), toggle: toggleWindow,
+                  onScreen: windowOnScreen,
                   inFront: windowInFront, settings: openSettings, fonts: openFonts,
                   set: changeSetting,
                   about: openAbout, checkUpdate: checkForUpdates,

@@ -46,6 +46,13 @@ const DEFAULTS = {
   'behaviour.close-to-tray': true,
   'behaviour.minimize-to-tray': false,
   'behaviour.spellcheck': true,
+  /* How the window is brought to the user, which is not the same question on
+     every desktop: 'remap' takes it down and opens it again, 'activate' simply
+     asks for it. 'auto' seeds one of those from the session and corrects it
+     from what the window actually did -- see showWindow in src/main.js. This
+     is here for the desktop where the measurement is wrong, and nothing in the
+     client ever writes it. */
+  'behaviour.raise': 'auto',
   'notifications.enabled': true,
   'notifications.sound': true,     // a tone for the banners this client raises itself
   'notifications.outgoing-sound': false,  // WhatsApp's own tone for a message you send
@@ -179,6 +186,12 @@ class Config {
       '# Minimising does the same. Off by default: minimise is not close.',
       `minimize-to-tray = ${v['behaviour.minimize-to-tray']}`,
       `spellcheck = ${v['behaviour.spellcheck']}`,
+      '# How the window is brought to the front when a banner is clicked, a link',
+      '# is followed, or the tray is asked. auto: worked out from the session and',
+      '# corrected once from what the window actually did. activate: ask the',
+      '# compositor for it, which X11 always honours. remap: take the window down',
+      '# and open it again, which is the only way up on some Wayland compositors.',
+      `raise = ${v['behaviour.raise'] || 'auto'}`,
       '',
       '[notifications]',
       `enabled = ${v['notifications.enabled']}`,
