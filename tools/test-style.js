@@ -81,8 +81,9 @@ assert.match(shipped, /@keyframes whatsapp-desktop-panel/);
    own, outside #main, and a reply written there deserves the same motion. */
 assert.doesNotMatch(shipped, /#main footer \[data-testid="popup_panel"\]/);
 
-/* The chat list is a left-to-right list and stays one: an Arabic name sits
-   where an English name sits, and only the words inside it read right to left.
+/* The chat list is a column drawn one way round, and every name in it starts
+   where the column does: an Arabic name sits where an English name sits, and
+   only the words inside it read right to left.
 
    The name is the span that carries a dir attribute -- measured on the live
    list, every one of them says dir="auto" and NOT dir="rtl", so a rule written
@@ -92,10 +93,22 @@ const list = shipped.slice(shipped.indexOf('#pane-side span[title][dir]'));
 assert.match(list, /text-align: left !important/);
 assert.doesNotMatch(list.slice(0, list.indexOf('}')), /text-align: right/);
 assert.doesNotMatch(shipped, /#pane-side[^{]*dir="rtl"/);
-/* And the rule says nothing about direction. Alignment is where the text sits
-   in its box; `direction` or `unicode-bidi` on a name would be this client
+/* And which way round the column is drawn is WhatsApp's answer, not a constant:
+   an Arabic interface puts <html dir="rtl">, the list on the right of the
+   window and the picture at the right of every row, and a hard `left` there is
+   the whole column pinned to the far side from the pictures. So the second half
+   of the rule aligns the names to the right when the pane resolves rtl. */
+assert.match(shipped, /#pane-side:dir\(rtl\) span\[title\]\[dir\] \{\n  text-align: right !important;/);
+/* On the PANE, never on the name. `:dir()` against the span itself is the
+   original bug written a second way -- dir="auto" resolves per name, so the
+   Arabic ones would go right and the English ones left, which is exactly the
+   report both halves of this rule exist to answer. */
+assert.doesNotMatch(shipped, /span\[title\]\[dir\]:dir\(/);
+/* And neither rule says anything about direction. Alignment is where the text
+   sits in its box; `direction` or `unicode-bidi` on a name would be this client
    deciding which way a name reads, which is WhatsApp's answer to give. */
 assert.doesNotMatch(list.slice(0, list.indexOf('}')), /direction:|unicode-bidi:/);
+assert.doesNotMatch(list.slice(list.indexOf('#pane-side:dir(rtl)')), /direction:|unicode-bidi:/);
 
 /* There is no size knob for the conversation's own text any more. It was
    `view.chat-font-size`, it was a percentage that belonged to neither script

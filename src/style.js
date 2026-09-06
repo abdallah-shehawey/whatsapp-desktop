@@ -305,12 +305,12 @@ ${BODY}.quoted-mention:not(:only-child) {
   unicode-bidi: plaintext !important;
   text-align: start !important;
 }
-/* The chat list, which is a left-to-right list and stays one.
+/* The chat list, which is a column and is drawn the way the interface is.
  *
  * A conversation is the words themselves and they are laid out the way they
  * read; the list beside it is furniture -- a column of rows with a picture at
  * one end, a name at the top and a time at the other end -- and that column is
- * drawn left-to-right whatever the names in it happen to be. Arabic names were
+ * drawn one way round whatever the names in it happen to be. Arabic names were
  * hanging off the right margin while the English ones started at the left, so
  * there was no column at all: "خلي مكان الاسماء في نفس مكان الانجليزي ... بس
  * يكون مكتوب صح".
@@ -341,9 +341,38 @@ ${BODY}.quoted-mention:not(:only-child) {
  *
  * !important because this sheet is at user origin, where a normal declaration
  * loses to the page's own -- and the alignment being corrected here is the
- * page's own. */
+ * page's own.
+ *
+ * AND THE SAME LIST WITH THE INTERFACE IN ARABIC, which is the other half of
+ * this and was missing: "لما يكون الواتس عربي ... يكون اتجاه اسامي الناس في
+ * الشات كلهم نفس اتجاه الاسامي العربي".
+ *
+ * WhatsApp Web takes the direction of the whole interface from the language,
+ * and the language from a cookie -- measured on the live client: with
+ * wa_web_lang_pref=en_GB the page carries dir="ltr" on <html>, with
+ * wa_web_lang_pref=ar_AR it carries dir="rtl", the chat list moves to the right
+ * of the window (#side at x=1130 of 1705, having been at x=65) and every row is
+ * mirrored with it: the picture at the right, the time at the left.
+ *
+ * A hard "left" is the whole column pinned to the far side from the picture in
+ * that layout. Measured with the rule above in the sheet and the interface in
+ * Arabic: every name flush LEFT, with the empty part of the box on the RIGHT
+ * where the row starts -- 200px of it on "Team php ITI 2026", 243px on "PCB
+ * Community", 268px on "صنايعيه امبيديد". English and Arabic agreed with each
+ * other and both disagreed with the row they sat in.
+ *
+ * So the side is the interface's, named twice rather than left to "start":
+ * "start" on these spans resolves against the SPAN's own direction, which
+ * dir="auto" works out per name -- which is the fault at the top of this
+ * comment. :dir() asks the question of the pane instead, where the answer is
+ * the one WhatsApp put on <html>, and the names follow the column they are in.
+ * Nothing is said about direction here either: an English name in an Arabic
+ * interface still reads left to right, it just starts where the row does. */
 #pane-side span[title][dir] {
   text-align: left !important;
+}
+#pane-side:dir(rtl) span[title][dir] {
+  text-align: right !important;
 }`;
 
 /*
