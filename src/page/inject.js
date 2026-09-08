@@ -25,6 +25,7 @@
 const wording = require('../wording.js');
 const store = require('./store.js');
 const media = require('./media.js');
+const pictures = require('./pictures.js');
 
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
@@ -66,6 +67,7 @@ const start = ({ send, on }) => {
      picture drawn for a person and infer from it, and the store is asked. */
   let waStore = null;
   let waMedia = null;
+  let waPictures = null;
   const storeLive = () => !!(waStore && waStore.ready);
 
   /* ------------------------------------------------------------- visibility */
@@ -4067,6 +4069,23 @@ const start = ({ send, on }) => {
        photos off leaves every sticker blank with no way to fetch one. */
     if (!waMedia && config && config.downloadStickers !== false) {
       waMedia = media.start({ log });
+    }
+
+    /* And the chat faces, which are nothing to do with notifications either.
+       They are started from here for the same reason the two above are: this is
+       the point at which the page is up and WhatsApp's own registry answers.
+       Nothing about them is configurable -- a picture that will not load is not
+       a preference -- so they take no setting, only the way in. See
+       pictures.js. */
+    if (!waPictures) {
+      waPictures = pictures.start({
+        log,
+        grab: name => {
+          try {
+            return typeof window.require === 'function' ? window.require(name) : null;
+          } catch (err) { return null; }
+        },
+      });
     }
     muteSendTone = !!(config && config.muteSendTone);
     mutePageTone = !!(config && config.mutePageTone);

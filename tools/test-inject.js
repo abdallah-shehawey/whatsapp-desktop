@@ -331,6 +331,12 @@ const sandbox = {
        a module. */
     if (name === './store.js') return require('../src/page/store.js');
     if (name === './media.js') return require('../src/page/media.js');
+    /* And the pictures module, for the same reason as the store: the registry
+       this rig hands it answers for nothing, so it installs its listener and
+       then finds no profile-picture collection to ask about any failure. That
+       is the shape of the day WhatsApp renames one of those names, and it must
+       be quiet rather than fatal. */
+    if (name === './pictures.js') return require('../src/page/pictures.js');
     /* Anything else is a name out of WhatsApp's own registry, which the page
        reaches for through this same require -- contextIsolation is off, so
        window.require IS Meta's. The rig answers for a name only once a check has
