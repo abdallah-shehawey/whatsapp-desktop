@@ -29,6 +29,7 @@ const autostart = require('./autostart.js');
 const links = require('./links.js');
 const updates = require('./update.js');
 const { MprisService } = require('./mpris.js');
+const privacy = require('./privacy.js');
 /* Version, licence and author, read from the one file that already says them. */
 const manifest = require('../package.json');
 
@@ -254,6 +255,10 @@ let banners = null;
 /* The desktop's media card, while there is a bus to put it on -- see
    src/mpris.js. Null on a session without one, and the client carries on. */
 let mpris = null;
+/* Whether the conversation is blurred, and what makes it so -- see
+   src/privacy.js. Built once, because the manual switch it holds is the one
+   Ctrl+Alt+P toggles and it has to survive the page reloading. */
+const shield = new privacy.PrivacyManager(config);
 let quitting = false;
 /* Every user stylesheet this process has put into the page, newest last. One
    key was not enough: two overlapping applyStyle calls both read it, both
@@ -469,10 +474,18 @@ const traceWindowState = () => {
     /* The one answer a raise is waiting for. */
     raising.took = true;
     set({ minimized: false, focused: true });
+    /* Readable again, if it was auto-blur that covered it. A manual Ctrl+Alt+P
+       outlives the focus coming back; see isBlurred. */
+    shield.setWindowFocus(true);
+    applyShield();
   });
   win.on('blur', () => {
     blurredAt = Date.now();
     set({ focused: false });
+    /* Covered on the way out, before the window is drawn anywhere else -- a
+       screenshot of the workspace, an overview, a screen being shared. */
+    shield.setWindowFocus(false);
+    applyShield();
     /* And again when the grace above runs out, because the grace is the only
        reason the tray was not told. Without this the desktop keeps "Minimize to
        Tray" in its cache until something else about the window moves, and it is
@@ -1027,6 +1040,11 @@ const styleSheet = () => {
        is Arabic. No selector, so no per-element cost, which is the whole
        reason the font lives in @font-face and not in a rule. */
     forcingFont() ? style.fontFaces(pageFontStack, chosenFonts()) : '',
+    /* The blur rules, always in the sheet and never conditional on the switch:
+       what turns them on is a class on <body>, which is one DOM write rather
+       than a stylesheet round trip. Pressing Ctrl+Alt+P has to blur the screen
+       in the frame it was pressed, and inserting a sheet does not. */
+    privacy.PRIVACY_CSS,
   ].filter(Boolean).join('\n');
 };
 
@@ -1113,6 +1131,14 @@ const createWindow = () => {
     if (input.type === 'keyDown' && (input.control || input.meta) && input.key === ',') {
       event.preventDefault();
       openSettings();
+      return;
+    }
+    /* Read from `code` rather than `key`, so it is the same physical key on an
+       Arabic layout -- where that key types ح -- as on a Latin one. */
+    if (input.type === 'keyDown' && input.control && input.alt && !input.shift &&
+        input.code === 'KeyP') {
+      event.preventDefault();
+      toggleShield();
     }
   });
 
@@ -1166,6 +1192,11 @@ const createWindow = () => {
       pendingInvite = '';
     }
     await applyStyle();
+    /* After the sheet, because the classes are what the sheet's rules hang off:
+       put on first and they would sit on a page with nothing to apply. A reload
+       is the other reason this is here -- the body is new, and whatever the
+       shield was holding has to go back on it. */
+    applyShield();
     win.webContents.setZoomFactor(Number(config.get('view.zoom')) || 1);
     win.webContents.send('wa:config', {
       notifications: !!config.get('notifications.enabled'),
@@ -1899,6 +1930,24 @@ const setBadge = count => {
   badgeShown = wanted;
   try { app.badgeCount = wanted; } catch (e) { /* no launcher listening */ }
   console.log('badge: %d', wanted);
+};
+
+/* -------------------------------------------------------------- the shield */
+
+/* Put the shield's classes on the page, or take them off. Cheap enough to call
+   on every focus change, which is what auto-blur is. */
+const applyShield = () => {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.executeJavaScript(shield.getInjectScript()).catch(() => {});
+};
+
+/* Ctrl+Alt+P. Kept out of the page's own key handling, because the one moment
+   this is pressed is the moment the page must not see it: a page that takes it
+   as a shortcut of its own would act on it while the screen is being covered. */
+const toggleShield = () => {
+  const blurred = shield.toggleStealth();
+  applyShield();
+  console.log('privacy: the conversation is %s', blurred ? 'blurred' : 'readable');
 };
 
 /* ----------------------------------------------------------- the media card */

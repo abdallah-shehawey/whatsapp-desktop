@@ -58,6 +58,17 @@ const DEFAULTS = {
      music player is also registered. Turn it off to leave the media keys with
      whatever had them before -- see src/mpris.js. */
   'behaviour.mpris': true,
+  /* Blur the conversation against a glance over your shoulder -- Ctrl+Alt+P,
+     and see src/privacy.js. `stealth` is the switch that press holds, kept
+     across a restart; `auto-blur` is the one that catches the window being left
+     in the background. `hover-reveal` is what makes leaving it on bearable --
+     the line under the pointer reads, the rest does not. `blur-contacts` takes
+     the chat list and the header with it, which is the half a screenshot or a
+     shared screen gives away without a conversation being open at all. */
+  'privacy.stealth': false,
+  'privacy.auto-blur': false,
+  'privacy.hover-reveal': true,
+  'privacy.blur-contacts': true,
   'notifications.enabled': true,
   'notifications.sound': true,     // a tone for the banners this client raises itself
   'notifications.outgoing-sound': false,  // WhatsApp's own tone for a message you send

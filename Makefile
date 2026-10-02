@@ -151,6 +151,7 @@ test:
 	@node tools/test-links.js
 	@node tools/test-tray.js
 	@node tools/test-mpris.js
+	@node tools/test-privacy.js
 	@node tools/test-update.js
 
 run:
