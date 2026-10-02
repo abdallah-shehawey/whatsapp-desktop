@@ -9,7 +9,7 @@
  */
 'use strict';
 
-const { app, BrowserWindow, Menu, clipboard, session, shell, nativeTheme, ipcMain, screen: electronScreen, desktopCapturer } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, session, shell, nativeTheme, ipcMain, globalShortcut, screen: electronScreen, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -2016,6 +2016,50 @@ const setBadge = count => {
   console.log('badge: %d', wanted);
 };
 
+/* ------------------------------------------------------------ global keys */
+
+/*
+ * The two keys the desktop catches for this client wherever the focus is.
+ *
+ * This is the part a shortcut inside the page cannot do: the window is behind
+ * something else, or in the tray, so there is nothing to send a key to. Both
+ * are registered with the desktop instead, and both are deliberately
+ * Super+Alt+something -- a combination a text field will never be holding.
+ *
+ * Registering can fail, and the usual reason is that the desktop has already
+ * given that combination to something else. Said once, in words that name the
+ * key, rather than retried: there is nothing this can do about it, and the
+ * owner is the one who can.
+ */
+const wireGlobalKeys = () => {
+  globalShortcut.unregisterAll();
+  if (config.get('shortcuts.global') === false) return;
+
+  const register = (key, what, run) => {
+    if (!key) return;
+    try {
+      if (!globalShortcut.register(key, run)) {
+        console.warn('keys: %s is already taken, so %s has no global key', key, what);
+      }
+    } catch (err) {
+      console.warn('keys: %s is not a key this desktop understands (%s)', key, err.message);
+    }
+  };
+
+  register(config.get('shortcuts.toggle'), 'showing the window', () => {
+    if (!win || win.isDestroyed()) return;
+    /* The same decision the tray's own item makes, so the key and the item
+       never disagree about which of the two they are offering. */
+    if (windowInFront()) hideWindow();
+    else showWindow('a global key');
+  });
+
+  register(config.get('shortcuts.mute-call'), 'muting a call', () => {
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send('wa:toggle-call-mute');
+  });
+};
+
 /* -------------------------------------------------------------- the shield */
 
 /* Put the shield's classes on the page, or take them off. Cheap enough to call
@@ -2104,6 +2148,10 @@ const quit = () => {
   /* Taken down before the loop stops, so the name is released and no host is
      left holding a card for a player that has gone. */
   if (mpris) { try { mpris.destroy(); } catch (e) {} mpris = null; }
+  /* Electron does this on the way out anyway; saying it here is what makes a
+     relaunch -- which is the same process asking for the keys again -- find
+     them free rather than held by the copy that is leaving. */
+  try { globalShortcut.unregisterAll(); } catch (e) {}
   app.quit();
 };
 
@@ -2921,6 +2969,7 @@ app.whenReady().then(() => {
 
   startMpris();
   watchCustomCss();
+  wireGlobalKeys();
 
   /*
    * One quiet look for a newer version, and then one a day.

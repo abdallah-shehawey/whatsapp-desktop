@@ -68,6 +68,19 @@ const DEFAULTS = {
      music player is also registered. Turn it off to leave the media keys with
      whatever had them before -- see src/mpris.js. */
   'behaviour.mpris': true,
+  /* Keys the desktop catches for this client wherever the focus is -- the point
+     being to reach a window that is behind something else, or in the tray. Only
+     two, and both chosen to be ones nothing else is likely to want: `toggle`
+     shows the window or puts it away, and `mute` is the microphone in a call,
+     which is the one thing worth reaching without finding the window first.
+
+     A combination the desktop has already given to something else cannot be
+     registered twice; the client says so on startup and carries on. Written in
+     Electron's own accelerator spelling -- Super, Control, Alt, Shift. Set
+     either to an empty value to leave that key alone. */
+  'shortcuts.global': true,
+  'shortcuts.toggle': 'Super+Alt+W',
+  'shortcuts.mute-call': 'Super+Alt+M',
   /* Blur the conversation against a glance over your shoulder -- Ctrl+Alt+P,
      and see src/privacy.js. `stealth` is the switch that press holds, kept
      across a restart; `auto-blur` is the one that catches the window being left

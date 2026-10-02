@@ -1364,6 +1364,21 @@ const start = ({ send, on }) => {
     log('no composer to put the link\'s message in');
   };
 
+  /* The microphone button in a call, pressed from a key the desktop caught
+     while the window was behind something else -- which is the whole point of
+     it, and why it cannot be a shortcut in the page. Matched on the label
+     rather than a test id: WhatsApp changes those, and the label is what a
+     screen reader is given and so the thing least likely to move. The Arabic
+     label is here because the client is read in Arabic too. */
+  on('toggle-call-mute', () => {
+    const found = document.querySelector(
+      'button[aria-label*="mute" i], button[aria-label*="mic" i], button[aria-label*="كتم" i], ' +
+      'span[data-icon="mic-off"], span[data-icon="mic"]');
+    if (!found) { log('no call to mute'); return; }
+    (found.closest('button') || found).click();
+    log('call microphone toggled');
+  });
+
   on('open-link', chat => {
     const phone = chat && chat.phone;
     if (!phone) return;
