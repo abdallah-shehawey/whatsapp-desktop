@@ -14,7 +14,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const { Config } = require('./config.js');
+const { Config, CUSTOM_CSS_PATH } = require('./config.js');
 const desktop = require('./desktop.js');
 const style = require('./style.js');
 const { TrayIcon } = require('./tray.js');
@@ -1045,7 +1045,91 @@ const styleSheet = () => {
        than a stylesheet round trip. Pressing Ctrl+Alt+P has to blur the screen
        in the frame it was pressed, and inserting a sheet does not. */
     privacy.PRIVACY_CSS,
+    /* Last, so an owner who has written a rule gets it -- including over the
+       font and the blur above. Read from disk on every draw rather than cached,
+       because the file changing is the one thing that has to be picked up, and
+       a stylesheet is never big enough for that to be worth avoiding. */
+    customCss(),
   ].filter(Boolean).join('\n');
+};
+
+/* The owner's own sheet, or nothing. A file that cannot be read is not worth a
+   dialog -- it is a file they are editing, and the next save will say. */
+const customCss = () => {
+  if (!config.get('view.custom-css')) return '';
+  try {
+    return fs.readFileSync(CUSTOM_CSS_PATH, 'utf8');
+  } catch (e) {
+    return '';
+  }
+};
+
+/*
+ * Redraw the page when that file is saved.
+ *
+ * The directory is watched rather than the file. Most editors save by writing a
+ * temporary file and renaming it over the original, which replaces the inode
+ * the watch was placed on; inotify does keep firing across that here, but the
+ * directory is the thing that is actually stable, and it is also what catches
+ * the file being created for the first time -- a watch on a path that does not
+ * exist yet cannot be placed at all.
+ *
+ * Debounced, because one save arrives as several events.
+ */
+let cssWatcher = null;
+const watchCustomCss = () => {
+  if (cssWatcher) return;
+  const dir = path.dirname(CUSTOM_CSS_PATH);
+  const name = path.basename(CUSTOM_CSS_PATH);
+  let settle = null;
+  try {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    cssWatcher = fs.watch(dir, (event, changed) => {
+      if (changed && changed !== name) return;
+      clearTimeout(settle);
+      settle = setTimeout(() => {
+        console.log('style: custom.css changed, drawing again');
+        applyStyle();
+      }, 120);
+    });
+  } catch (err) {
+    console.warn('style: cannot watch %s (%s); custom.css needs a restart', dir, err.message);
+  }
+};
+
+/* Written on the first ask rather than at install, so a config directory that
+   has never been looked at stays empty. The examples are commented out with one
+   level of comment only: CSS has no nested comments, and a /* inside a /* ends
+   at the first *\/ -- which is how a sample file can take the rules under it
+   with it. */
+const CUSTOM_CSS_TEMPLATE = `/* Your own rules for WhatsApp Web.
+ *
+ * This file is read last, so what is here wins over everything the client
+ * draws -- including the font and the privacy blur. Saving it redraws the
+ * page; there is nothing to restart.
+ *
+ * Turn it on in Settings, or with \`custom-css = true\` under [view].
+ */
+
+/* A shorter row in the chat list:
+#pane-side [role="row"] { height: 60px !important; }
+*/
+
+/* No pictures in the chat list:
+#pane-side [role="gridcell"] img { display: none !important; }
+*/
+`;
+
+const openCustomCss = async () => {
+  try {
+    if (!fs.existsSync(CUSTOM_CSS_PATH)) {
+      fs.mkdirSync(path.dirname(CUSTOM_CSS_PATH), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(CUSTOM_CSS_PATH, CUSTOM_CSS_TEMPLATE, { mode: 0o644 });
+    }
+    await shell.openPath(CUSTOM_CSS_PATH);
+  } catch (err) {
+    console.warn('style: could not open %s (%s)', CUSTOM_CSS_PATH, err.message);
+  }
 };
 
 const drawStyle = async () => {
@@ -2836,6 +2920,7 @@ app.whenReady().then(() => {
   tray.setInFront(windowInFront());
 
   startMpris();
+  watchCustomCss();
 
   /*
    * One quiet look for a newer version, and then one a day.

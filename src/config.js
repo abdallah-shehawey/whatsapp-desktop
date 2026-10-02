@@ -13,6 +13,10 @@ const os = require('os');
 const CONFIG_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'),
                              'whatsapp-desktop');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'whatsapp-desktop.conf');
+/* A stylesheet of the owner's own, next to the config file so there is one
+   directory to know about. Read last, so it can contradict everything the
+   client draws -- see styleSheet in src/main.js. */
+const CUSTOM_CSS_PATH = path.join(CONFIG_DIR, 'custom.css');
 
 const DEFAULTS = {
   'view.theme': 'system',          // 'system' (follow desktop), 'dark', or 'light'
@@ -20,6 +24,12 @@ const DEFAULTS = {
   'view.font-size': 16,            // WhatsApp sizes in rem, so this scales the client
   'view.zoom': 1.0,
   'view.force-font': true,         // draw the page in one family, like a browser told to ignore page fonts
+  /* Read ~/.config/whatsapp-desktop/custom.css into the page, last, so it wins
+     over everything else the client draws. Off by default: a stylesheet that
+     can hide any element in WhatsApp is a good way to lose a button and not
+     know why, and it should be a thing somebody turned on. Saving the file
+     redraws the page -- see watchCustomCss in src/main.js. */
+  'view.custom-css': false,
   /* A font per script, and a switch per script to say whether the desktop's own
      is being followed. Two switches and not one, because the two questions are
      genuinely separate: an owner who wants a different Arabic face has no
@@ -262,4 +272,4 @@ class Config {
   }
 }
 
-module.exports = { Config, CONFIG_PATH, CONFIG_DIR };
+module.exports = { Config, CONFIG_PATH, CONFIG_DIR, CUSTOM_CSS_PATH };
