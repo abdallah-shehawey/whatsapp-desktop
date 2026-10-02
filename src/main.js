@@ -28,6 +28,7 @@ const fonts = require('./fonts.js');
 const autostart = require('./autostart.js');
 const links = require('./links.js');
 const updates = require('./update.js');
+const { MprisService } = require('./mpris.js');
 /* Version, licence and author, read from the one file that already says them. */
 const manifest = require('../package.json');
 
@@ -250,6 +251,9 @@ let fontsWin = null;
 let aboutWin = null;
 let tray = null;
 let banners = null;
+/* The desktop's media card, while there is a bus to put it on -- see
+   src/mpris.js. Null on a session without one, and the client carries on. */
+let mpris = null;
 let quitting = false;
 /* Every user stylesheet this process has put into the page, newest last. One
    key was not enough: two overlapping applyStyle calls both read it, both
@@ -1897,10 +1901,76 @@ const setBadge = count => {
   console.log('badge: %d', wanted);
 };
 
+/* ----------------------------------------------------------- the media card */
+
+/*
+ * What a media key has to reach, which is a button in a page rather than a
+ * player this process owns.
+ *
+ * WhatsApp draws its own transport for a voice note, and that button is what
+ * knows which note is loaded; clicking it is therefore the reliable half. The
+ * <audio> elements underneath are the other half, because a note that WhatsApp
+ * started playing on its own -- autoplay down a run of notes -- is not always
+ * one whose button is in the state the DOM says. Doing both leaves the page in
+ * the state the key asked for either way.
+ */
+const MEDIA_KEYS = {
+  playPause: `(() => {
+    const btn = document.querySelector('#main div[role="button"]:has(span[data-icon="audio-play"]), #main div[role="button"]:has(span[data-icon="audio-pause"])');
+    if (btn) btn.click();
+    document.querySelectorAll('audio').forEach(a => { if (a.paused) a.play().catch(() => {}); else a.pause(); });
+  })()`,
+  play: `(() => {
+    const btn = document.querySelector('#main div[role="button"]:has(span[data-icon="audio-play"])');
+    if (btn) btn.click();
+    document.querySelectorAll('audio').forEach(a => { if (a.paused) a.play().catch(() => {}); });
+  })()`,
+  pause: `(() => {
+    const btn = document.querySelector('#main div[role="button"]:has(span[data-icon="audio-pause"])');
+    if (btn) btn.click();
+    document.querySelectorAll('audio').forEach(a => { if (!a.paused) a.pause(); });
+  })()`,
+  stop: `(() => {
+    document.querySelectorAll('audio').forEach(a => { a.pause(); a.currentTime = 0; });
+  })()`,
+};
+
+const pressMediaKey = which => {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.executeJavaScript(MEDIA_KEYS[which]).catch(() => {});
+};
+
+/* Registered once the window exists, because every handler here needs somewhere
+   to send the key. A session with no bus -- a container, a login without one --
+   says so once and the client carries on without a card. */
+const startMpris = () => {
+  if (config.get('behaviour.mpris') === false) return;
+  try {
+    mpris = new MprisService({
+      onRaise: () => showWindow('the media card'),
+      onQuit: quit,
+      onPlayPause: () => pressMediaKey('playPause'),
+      onPlay: () => pressMediaKey('play'),
+      onPause: () => pressMediaKey('pause'),
+      onStop: () => pressMediaKey('stop'),
+    });
+    mpris.start(err => {
+      if (err) console.log('mpris: no media card (%s)', err.message);
+      else console.log('mpris: media card on %s', mpris.busName);
+    });
+  } catch (err) {
+    console.warn('mpris: could not start (%s)', err.message);
+    mpris = null;
+  }
+};
+
 /* --------------------------------------------------------------- the app */
 
 const quit = () => {
   quitting = true;
+  /* Taken down before the loop stops, so the name is released and no host is
+     left holding a card for a player that has gone. */
+  if (mpris) { try { mpris.destroy(); } catch (e) {} mpris = null; }
   app.quit();
 };
 
@@ -2715,6 +2785,8 @@ app.whenReady().then(() => {
   /* The tray is built after the window, so the events that would have told it
      where the window is have already been and gone. */
   tray.setInFront(windowInFront());
+
+  startMpris();
 
   /*
    * One quiet look for a newer version, and then one a day.

@@ -53,6 +53,11 @@ const DEFAULTS = {
      is here for the desktop where the measurement is wrong, and nothing in the
      client ever writes it. */
   'behaviour.raise': 'auto',
+  /* Put a media card on the desktop while a voice note is playing, so the
+     headset button and the lock screen reach the note rather than whatever
+     music player is also registered. Turn it off to leave the media keys with
+     whatever had them before -- see src/mpris.js. */
+  'behaviour.mpris': true,
   'notifications.enabled': true,
   'notifications.sound': true,     // a tone for the banners this client raises itself
   'notifications.outgoing-sound': false,  // WhatsApp's own tone for a message you send
