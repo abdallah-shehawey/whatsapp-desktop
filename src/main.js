@@ -1070,11 +1070,23 @@ const styleSheet = () => {
        is Arabic. No selector, so no per-element cost, which is the whole
        reason the font lives in @font-face and not in a rule. */
     forcingFont() ? style.fontFaces(pageFontStack, chosenFonts()) : '',
-    /* The blur rules, always in the sheet and never conditional on the switch:
-       what turns them on is a class on <body>, which is one DOM write rather
-       than a stylesheet round trip. Pressing Ctrl+Alt+P has to blur the screen
-       in the frame it was pressed, and inserting a sheet does not. */
-    privacy.PRIVACY_CSS,
+    /*
+     * The blur rules, and only while something is actually blurred.
+     *
+     * They used to live in the sheet permanently, with a class on <body>
+     * switching them on, so that Ctrl+Alt+P took effect in the frame it was
+     * pressed. That is wrong, and measurably so: several of these selectors end
+     * in `div:has(> span[title])`, and Chromium matches right to left -- so the
+     * :has() is evaluated against every div on the page on every style recalc,
+     * whether or not the ancestor `body.wa-privacy-active` is there to make the
+     * rule apply. On a chat list that redraws constantly that is 3.5x the
+     * style cost of the same page without them, bought for a feature that is
+     * switched off. See tools/test-privacy.js.
+     *
+     * Now the sheet is redrawn when the shield turns on or off. The class still
+     * goes on first, so the page is never left half-covered.
+     */
+    shield.isBlurred() ? privacy.PRIVACY_CSS : '',
     /* Last, so an owner who has written a rule gets it -- including over the
        font and the blur above. Read from disk on every draw rather than cached,
        because the file changing is the one thing that has to be picked up, and
@@ -1310,8 +1322,8 @@ const createWindow = () => {
     /* After the sheet, because the classes are what the sheet's rules hang off:
        put on first and they would sit on a page with nothing to apply. A reload
        is the other reason this is here -- the body is new, and whatever the
-       shield was holding has to go back on it. */
-    applyShield();
+       shield was holding has to go back on it, which is what `force` says. */
+    applyShield(true);
     win.webContents.setZoomFactor(Number(config.get('view.zoom')) || 1);
     win.webContents.send('wa:config', {
       notifications: !!config.get('notifications.enabled'),
@@ -2234,11 +2246,26 @@ const wireGlobalKeys = () => {
 
 /* -------------------------------------------------------------- the shield */
 
-/* Put the shield's classes on the page, or take them off. Cheap enough to call
-   on every focus change, which is what auto-blur is. */
-const applyShield = () => {
+/* What the page is currently wearing, and whether the sheet carries the rules
+   for it. Both so that the common case -- a focus change with auto-blur off,
+   which is every alt-tab of a default install -- costs nothing at all rather
+   than a round trip to the renderer saying the same thing again. */
+let shieldClasses = null;
+let shieldDrawn = false;
+
+/* Put the shield's classes on the page, or take them off, and redraw the sheet
+   when the answer has actually changed. `force` is for a page that is new --
+   a reload has a fresh <body>, so what this last sent is no longer on it. */
+const applyShield = (force = false) => {
   if (!win || win.isDestroyed()) return;
+  const wanted = shield.isBlurred();
+  const classes = shield.getClasses().join(' ');
+  if (!force && classes === shieldClasses && wanted === shieldDrawn) return;
+  shieldClasses = classes;
   win.webContents.executeJavaScript(shield.getInjectScript()).catch(() => {});
+  if (wanted === shieldDrawn) return;
+  shieldDrawn = wanted;
+  applyStyle();
 };
 
 /* Ctrl+Alt+P. Kept out of the page's own key handling, because the one moment

@@ -13,9 +13,16 @@
  * pointer is readable and the rest of the screen is not.
  *
  * It is drawn as a user stylesheet, so WhatsApp's own !important rules do not
- * win over it, and the classes are put on <body> rather than the rules being
- * inserted and removed -- a class toggle is one DOM write, and what is on screen
- * must blur in the same frame it was asked to.
+ * win over it. The sheet is inserted only while something is actually covered
+ * -- see styleSheet in src/main.js -- and the classes on <body> decide which
+ * parts of it apply.
+ *
+ * Nothing here uses :has(). It is the obvious way to reach the row around a
+ * name, and it cost 22ms of the 27ms this sheet spent per style recalc on a
+ * 300-row list: Chromium matches right to left, so `div:has(> span[title])`
+ * is evaluated against every div on the page. The name inside those rows is
+ * already blurred by its own selector, so the :has() rules were buying the
+ * padding around text that was covered anyway.
  */
 'use strict';
 
@@ -36,7 +43,8 @@ body.wa-privacy-active #main div[data-testid="audio-player"],
 body.wa-privacy-active #main div[data-testid="ptt-draft-player"],
 body.wa-privacy-active #main div[data-testid="sticker"],
 body.wa-privacy-active #main div[data-testid="image-thumb"],
-body.wa-privacy-active #main div[role="button"]:has(span[data-icon="audio-play"]) {
+body.wa-privacy-active #main span[data-icon="audio-play"],
+body.wa-privacy-active #main span[data-icon="audio-pause"] {
   filter: blur(12px) !important;
   transition: filter 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -46,13 +54,11 @@ body.wa-privacy-active.wa-privacy-contacts #pane-side [role="row"] span[title],
 body.wa-privacy-active.wa-privacy-contacts #pane-side [role="row"] span[dir="auto"],
 body.wa-privacy-active.wa-privacy-contacts #pane-side [role="row"] span[dir="ltr"],
 body.wa-privacy-active.wa-privacy-contacts #pane-side [role="row"] span[dir="rtl"],
-body.wa-privacy-active.wa-privacy-contacts #pane-side [role="row"] div:has(> span[title]),
 body.wa-privacy-active.wa-privacy-contacts #pane-side [role="row"] [data-testid="last-msg-status"],
 body.wa-privacy-active.wa-privacy-contacts #pane-side [role="row"] div[data-testid="cell-frame-title"],
 body.wa-privacy-active.wa-privacy-contacts #pane-side [role="gridcell"] span[title],
 body.wa-privacy-active.wa-privacy-contacts #pane-side [role="gridcell"] span[dir="auto"],
 body.wa-privacy-active.wa-privacy-contacts #pane-side div[role="listitem"] span[title],
-body.wa-privacy-active.wa-privacy-contacts #pane-side div[role="listitem"] div:has(> span[title]),
 body.wa-privacy-active.wa-privacy-contacts #side [role="row"] span[title],
 body.wa-privacy-active.wa-privacy-contacts #side [role="row"] span[dir="auto"] {
   filter: blur(7px) !important;
@@ -93,7 +99,6 @@ body.wa-privacy-active.wa-privacy-hover #pane-side [role="row"]:hover span[title
 body.wa-privacy-active.wa-privacy-hover #pane-side [role="row"]:hover span[dir="auto"],
 body.wa-privacy-active.wa-privacy-hover #pane-side [role="row"]:hover span[dir="ltr"],
 body.wa-privacy-active.wa-privacy-hover #pane-side [role="row"]:hover span[dir="rtl"],
-body.wa-privacy-active.wa-privacy-hover #pane-side [role="row"]:hover div:has(> span[title]),
 body.wa-privacy-active.wa-privacy-hover #pane-side [role="row"]:hover [data-testid="last-msg-status"],
 body.wa-privacy-active.wa-privacy-hover #pane-side [role="row"]:hover div[data-testid="cell-frame-title"],
 body.wa-privacy-active.wa-privacy-hover #pane-side [role="row"]:hover img,
@@ -101,7 +106,6 @@ body.wa-privacy-active.wa-privacy-hover #pane-side [role="gridcell"]:hover span[
 body.wa-privacy-active.wa-privacy-hover #pane-side [role="gridcell"]:hover span[dir="auto"],
 body.wa-privacy-active.wa-privacy-hover #pane-side [role="gridcell"]:hover img,
 body.wa-privacy-active.wa-privacy-hover #pane-side div[role="listitem"]:hover span[title],
-body.wa-privacy-active.wa-privacy-hover #pane-side div[role="listitem"]:hover div:has(> span[title]),
 body.wa-privacy-active.wa-privacy-hover #side [role="row"]:hover span[title],
 body.wa-privacy-active.wa-privacy-hover #side [role="row"]:hover span[dir="auto"],
 body.wa-privacy-active.wa-privacy-hover #side [role="row"]:hover img,
