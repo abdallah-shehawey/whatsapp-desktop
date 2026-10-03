@@ -56,6 +56,12 @@ const DEFAULTS = {
   'behaviour.close-to-tray': true,
   'behaviour.minimize-to-tray': false,
   'behaviour.spellcheck': true,
+  /* Which languages the composer is checked in, comma separated, in Chromium's
+     own naming -- en-US, en-GB, fr, de. Only the ones Chromium actually ships a
+     dictionary for can be asked for; anything else is dropped with a line
+     saying so, rather than taken as a reason to check nothing at all. Arabic is
+     not among them, which is why it is not the default here. */
+  'behaviour.spellcheck-languages': 'en-US',
   /* How the window is brought to the user, which is not the same question on
      every desktop: 'remap' takes it down and opens it again, 'activate' simply
      asks for it. 'auto' seeds one of those from the session and corrects it

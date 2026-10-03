@@ -2016,6 +2016,46 @@ const setBadge = count => {
   console.log('badge: %d', wanted);
 };
 
+/* ------------------------------------------------------------- spellcheck */
+
+/*
+ * Which languages the composer is checked in.
+ *
+ * Asked for by name, and filtered against what Chromium will actually answer
+ * to first. This is not caution for its own sake: setSpellCheckerLanguages
+ * throws on the first name it does not know, and it throws for the whole list
+ * -- so one language Chromium has no dictionary for does not mean one language
+ * missing, it means the call fails and nothing is checked at all. Arabic is the
+ * obvious one to reach for here and is exactly that case.
+ *
+ * What was dropped is said once, because a word going unchecked is otherwise
+ * indistinguishable from a word that is spelled right.
+ */
+const applySpellcheck = ses => {
+  if (!config.get('behaviour.spellcheck')) return;
+
+  const asked = String(config.get('behaviour.spellcheck-languages') || 'en-US')
+    .split(',').map(one => one.trim()).filter(Boolean);
+  let available = [];
+  try { available = ses.availableSpellCheckerLanguages || []; } catch (e) {}
+
+  const known = asked.filter(one => available.includes(one));
+  const unknown = asked.filter(one => !available.includes(one));
+  if (unknown.length) {
+    console.warn('spellcheck: no dictionary for %s, so it is not checked', unknown.join(', '));
+  }
+  /* Something rather than nothing: an empty list turns the checker off
+     entirely, and a config file naming only languages Chromium does not have
+     should still leave the underline working for English. */
+  const wanted = known.length ? known : ['en-US'];
+  try {
+    ses.setSpellCheckerLanguages(wanted);
+    console.log('spellcheck: checking %s', wanted.join(', '));
+  } catch (err) {
+    console.warn('spellcheck: could not be set up (%s)', err.message);
+  }
+};
+
 /* ------------------------------------------------------------ global keys */
 
 /*
@@ -2905,9 +2945,7 @@ app.whenReady().then(() => {
   wirePermissions(ses);
   wireScreenSharing(ses);
 
-  if (config.get('behaviour.spellcheck')) {
-    try { ses.setSpellCheckerLanguages(['en-US']); } catch (e) {}
-  }
+  applySpellcheck(ses);
 
   const initialTheme = config.get('view.theme') || 'system';
   if (initialTheme === 'dark') {
