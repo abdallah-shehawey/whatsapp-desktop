@@ -38,6 +38,12 @@ the latest release.
   login. GNOME has no tray of its own: the icon needs the AppIndicator
   extension, and the client waits for it rather than giving up when it starts
   first at login.
+- **Covered when somebody walks up.** `Ctrl+Alt+P` blurs the messages, the
+  media and — if you want — the names and pictures in the chat list, with the
+  line under the pointer still readable so it can be left on. A passcode can
+  cover the window outright, after a quiet interval or with the desktop's own
+  lock; while it is on, a banner says a message arrived and not a word of it.
+  None of it encrypts the session on disk.
 - **A font for English and a font for Arabic** — family, size, bold and italic
   for each, chosen from what is installed, each with its own "use the system
   font" switch, in a window of their own on the tray's *Fonts…*. It costs
@@ -184,9 +190,21 @@ make screenshots # re-photographs the three windows, for the README and the site
 | | |
 |---|---|
 | `Ctrl` `+` / `-` / `0` | zoom in, out, reset |
+| `Ctrl+,` | settings |
+| `Ctrl+Alt+P` | blur the conversation, and reveal it again |
 | `Ctrl+Shift+I` | devtools |
 | `Ctrl+Q` | quit for real |
 | window close | hides to the tray, stays connected |
+
+Two more are registered with the desktop rather than with the window, so they
+reach a client that is behind something else or in the tray. A combination the
+desktop has already given away cannot be taken twice; the client says so on
+startup and carries on without it.
+
+| | |
+|---|---|
+| `Super+Alt+W` | show the window, or put it away |
+| `Super+Alt+M` | the microphone in a call |
 
 ## Configuration
 
@@ -199,6 +217,7 @@ make screenshots # re-photographs the three windows, for the README and the site
 | `[view] font-size` | `16` | root font size in pixels — WhatsApp sizes in rem |
 | `[view] zoom` | `1.0` | also set with `Ctrl` `+`/`-` |
 | `[view] force-font` | `true` | draw the page in one family |
+| `[view] custom-css` | `false` | read `custom.css` from the same directory into the page, last, so it wins over everything the client draws. Saving the file redraws it |
 | `[fonts] latin-inherit` | `true` | Latin follows the desktop font; off to choose one |
 | `[fonts] latin-family` | the desktop font | family for Latin letters, digits and punctuation |
 | `[fonts] latin-size` | `100` | its size, as a percentage of the family's own |
@@ -211,7 +230,19 @@ make screenshots # re-photographs the three windows, for the README and the site
 | `[behaviour] close-to-tray` | `true` | closing the window leaves the client running |
 | `[behaviour] minimize-to-tray` | `false` | minimise is not close |
 | `[behaviour] spellcheck` | `true` | Chromium's own, in the box you type in |
+| `[behaviour] spellcheck-languages` | `en-US` | comma separated, in Chromium's naming. Only languages it ships a dictionary for can be asked for; the rest are dropped with a line saying so. Arabic is not one of them |
+| `[behaviour] mpris` | `true` | a media card on the desktop while a voice note plays, so the headset button reaches the note rather than a music player |
 | `[behaviour] raise` | `auto` | how the window is brought to the front when a banner is clicked. `auto` picks one and corrects itself once from what the window actually did; `activate` (ask the compositor) and `remap` (take it down and open it again) are taken as given |
+| `[shortcuts] global` | `true` | off leaves both desktop-wide keys alone |
+| `[shortcuts] toggle` | `Super+Alt+W` | show the window or put it away, from anywhere |
+| `[shortcuts] mute-call` | `Super+Alt+M` | the microphone in a call, from anywhere |
+| `[privacy] stealth` | `false` | the conversation covered, which is what `Ctrl+Alt+P` holds; remembered across a restart |
+| `[privacy] auto-blur` | `false` | cover it whenever the window is not the one in front |
+| `[privacy] hover-reveal` | `true` | while covered, the line under the pointer stays readable |
+| `[privacy] blur-contacts` | `true` | the chat list and the header too, not just the messages |
+| `[lock] enabled` | `false` | written by the client when a passcode is set or cleared; it means nothing without one |
+| `[lock] timeout` | `15` | minutes of a quiet window before it locks itself, `0` to never |
+| `[lock] on-system-lock` | `true` | lock with the desktop's own lock and on suspend |
 | `[notifications] enabled` | `true` | off hands notifications back to Chromium |
 | `[notifications] sound` | `true` | a tone for the banners this client raises |
 | `[notifications] outgoing-sound` | `false` | WhatsApp's own tone for a message *you* send |
@@ -224,6 +255,11 @@ make screenshots # re-photographs the three windows, for the README and the site
 | `[media] hide-controls-when-paused` | `true` | take the desktop's media card down when a voice note is paused, rather than when it ends |
 | `[links] claim-scheme` | `true` | open `whatsapp:` links here rather than in a browser tab |
 | `[updates] check` | `true` | the daily look for a newer release; off, nothing asks by itself and *Check* in About still does |
+
+The passcode lives beside the config file in `security.json`, mode 0600, as a
+PBKDF2 hash over a random salt — never the passcode itself. It covers the window
+and stops banners carrying the message; it does **not** encrypt the session, and
+anybody with the machine can read the chats out of `~/.local/share`.
 
 State lives in `~/.local/share/whatsapp-desktop`.
 
@@ -239,12 +275,16 @@ State lives in `~/.local/share/whatsapp-desktop`.
 | `src/settings.html`, `src/fonts.html` | the two windows of switches, and `src/window.css`, which is the look of both |
 | `src/about.html` | the About window, and the update check it shows |
 | `src/update.js` | asks GitHub for the latest release, and compares |
+| `src/privacy.js` | the blur, and which of the two switches is holding it |
+| `src/lock.js`, `src/lock/` | the passcode — PBKDF2 over a salt, and the file it lives in |
+| `src/lock.html` | the window that covers the conversation until it is typed |
+| `src/mpris.js`, `src/mpris/` | the desktop's media card, over the same D-Bus the tray uses |
 | `src/fonts.js`, `src/tray.js`, `src/config.js`, `src/desktop.js`, `src/sound.js`, `src/debug.js` | |
 | `tools/make-icons.py` | regenerates `data/icons` — `make icons`, never hand-edit the PNGs |
 | `tools/make-og.py` | redraws the site's link-preview card — `make og` |
 | `tools/capture-windows.js` | photographs the three windows above — `make screenshots`, which also copies them to `docs/assets` |
 | `docs/` | the landing page, served by GitHub Pages from `main` |
-| `tools/test-inject.js`, `tools/test-style.js`, `tools/test-settings.js` | `make test` |
+| `tools/test-inject.js`, `tools/test-style.js`, `tools/test-settings.js`, `tools/test-privacy.js`, `tools/test-lock.js`, `tools/test-mpris.js` | `make test` — plain node, no browser, no account, and nothing written outside a temporary directory |
 
 ## Notifications, when they do not appear
 
@@ -276,6 +316,13 @@ only way to see what a client with a version waiting for it looks like —
 `#update off` puts the real one back.
 
 Unset by default — it is a way into a live WhatsApp session, not a feature.
+
+## Thanks
+
+- **[@coach-nooreldean](https://github.com/coach-nooreldean)** — the privacy
+  shield, the passcode, the media card, the custom stylesheet, the desktop-wide
+  keys, the spellcheck languages, CI, and the AppImage and flatpak packaging,
+  from [#4](https://github.com/abdallah-shehawey/whatsapp-desktop/pull/4).
 
 ## Licence
 
