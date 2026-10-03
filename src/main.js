@@ -1332,6 +1332,15 @@ const createWindow = () => {
         input.code === 'KeyP') {
       event.preventDefault();
       toggleShield();
+      return;
+    }
+    /* Lock now, rather than waiting out the idle timer -- which is the half of
+       a passcode that gets used, because the moment you want it is the moment
+       you are standing up. Does nothing without one set. */
+    if (input.type === 'keyDown' && input.control && input.alt && !input.shift &&
+        input.code === 'KeyL') {
+      event.preventDefault();
+      if (!lockApp('Ctrl+Alt+L')) console.log('lock: no passcode set, so nothing to lock');
     }
   });
 
@@ -2458,7 +2467,11 @@ const wireIpc = () => {
     catch (err) { return { ok: false, why: err.message }; }
   });
 
-  ipcMain.on('wa:lock-now', () => lockApp('asked for'));
+  ipcMain.on('lock:now', () => {
+    if (!lockApp('the settings window')) console.log('lock: no passcode set, so nothing to lock');
+  });
+
+  ipcMain.handle('custom-css:open', async () => { await openCustomCss(); return true; });
 
   ipcMain.handle('settings:get', () => {
     return {

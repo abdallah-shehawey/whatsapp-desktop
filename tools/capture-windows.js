@@ -51,6 +51,8 @@ ipcMain.handle('settings:get', () => ({
     .filter(([k]) => k !== 'dark' && k !== 'light')
     .map(([k, p]) => [k, { name: p.name, bg: p.bg, text: p.text, accent: p.accent }])),
   followDesktopAccent: true,
+  forceX11: false,
+  hardwareAcceleration: true,
   privacyStealth: false,
   privacyAutoBlur: false,
   privacyHoverReveal: true,

@@ -163,7 +163,10 @@
             <div class="row-title">Passcode</div>
             <div class="row-desc" id="lockDesc">Cover the window until a passcode is typed. Banners stop carrying the message too. The session on disk is not encrypted.</div>
           </div>
-          <div class="stepper"><button class="stepper-btn" id="lockBtn" style="width:auto;padding:0 14px">Set</button></div>
+          <div class="stepper" style="gap:8px">
+            <button class="stepper-btn" id="lockNowBtn" style="width:auto;padding:0 12px" hidden>Lock Now</button>
+            <button class="stepper-btn" id="lockBtn" style="width:auto;padding:0 14px">Set</button>
+          </div>
         </div>
       </div>
     </div>
@@ -177,10 +180,13 @@
             <div class="row-title">Custom Stylesheet</div>
             <div class="row-desc">Read custom.css into the page, over everything else. Saving it redraws.</div>
           </div>
-          <label class="switch">
-            <input type="checkbox" id="customCssToggle">
-            <span class="slider"></span>
-          </label>
+          <div class="stepper" style="gap:8px">
+            <button class="stepper-btn" id="editCssBtn" style="width:auto;padding:0 12px">Edit</button>
+            <label class="switch">
+              <input type="checkbox" id="customCssToggle">
+              <span class="slider"></span>
+            </label>
+          </div>
         </div>
 
         <div class="row">
@@ -320,6 +326,8 @@
     const cacheDesc = document.getElementById('cacheDesc');
     const clearCacheBtn = document.getElementById('clearCacheBtn');
     const forceX11Toggle = document.getElementById('forceX11Toggle');
+    const editCssBtn = document.getElementById('editCssBtn');
+    const lockNowBtn = document.getElementById('lockNowBtn');
     const hwAccelToggle = document.getElementById('hwAccelToggle');
     const lockDesc = document.getElementById('lockDesc');
     const zoomOutBtn = document.getElementById('zoomOut');
@@ -475,6 +483,16 @@
         });
       });
 
+    /* The file is created, with its examples, on the first ask rather than at
+       install -- so a config directory nobody has opened stays empty. */
+    editCssBtn.addEventListener('click', async () => {
+      if (window.api && window.api.openCustomCss) await window.api.openCustomCss();
+    });
+
+    lockNowBtn.addEventListener('click', () => {
+      if (window.api && window.api.lockNow) window.api.lockNow();
+    });
+
     accentToggle.addEventListener('change', async () => {
       if (window.api) await window.api.setSetting('view.follow-desktop-accent', accentToggle.checked);
     });
@@ -504,6 +522,10 @@
         const status = await window.api.lockStatus();
         hasPasscode = !!(status && status.hasPasscode);
         lockBtn.textContent = hasPasscode ? 'Remove' : 'Set';
+        /* Only offered once there is a passcode -- a button that locks a client
+           with nothing to unlock it would be a way to lock yourself out of
+           nothing, and a disabled button is just a question nobody answered. */
+        lockNowBtn.hidden = !hasPasscode;
       } catch (e) { /* an older client: leave the button saying Set */ }
     }
 

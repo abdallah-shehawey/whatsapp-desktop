@@ -381,6 +381,13 @@ input:checked + .slider:before {
   transition: all 0.15s ease;
 }
 
+/* A class that sets `display` beats the browser's own rule for the attribute,
+   so an element given `hidden` in script stays on screen. Said once, for
+   everything in these windows, rather than per control. */
+[hidden] {
+  display: none !important;
+}
+
 .stepper-btn:hover {
   background-color: var(--accent);
   color: white;
