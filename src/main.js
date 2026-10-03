@@ -202,15 +202,24 @@ if (fontConfigFile) {
  * this switch exists to prevent. WAYLAND_DISPLAY is set by the compositor
  * itself, so between the two the answer survives the trip. */
 const chromiumFeatures = ['MemoryPurgeOnFreezeLimit', 'WebRTCPipeWireCapturer'];
-const onWayland = process.env.XDG_SESSION_TYPE === 'wayland' ||
-                  !!process.env.WAYLAND_DISPLAY;
+/* The escape hatch for the compositor where native Wayland is the worse of the
+   two -- a screen share that comes out black, a window that will not come up.
+   Everything above is still the right default; this is for the machine where it
+   is not, and it has to be reachable without rebuilding anything. */
+const forceX11 = config.get('system.force-x11') === true ||
+                 process.argv.includes('--ozone-platform=x11');
+const onWayland = !forceX11 && (process.env.XDG_SESSION_TYPE === 'wayland' ||
+                                !!process.env.WAYLAND_DISPLAY);
 if (onWayland) {
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
   chromiumFeatures.push('WaylandWindowDecorations');
 }
 /* Said out loud, because the difference is one a user reports as "it looks
-   blurry" or "it scrolls in steps" and never as "it is on XWayland". */
-console.log('display server: %s', onWayland ? 'wayland, natively' : 'x11');
+   blurry" or "it scrolls in steps" and never as "it is on XWayland". The
+   reason is said too, so that "x11" on a Wayland session does not look like
+   the detection having failed. */
+console.log('display server: %s%s', onWayland ? 'wayland, natively' : 'x11',
+            forceX11 ? ' (asked for)' : '');
 /* WhatsApp Web is one page that stays open for days. Letting Chromium hand
    memory back when it is not being looked at is worth more here than the
    milliseconds it costs to fault it in again. Electron accepts one
@@ -230,9 +239,18 @@ app.commandLine.appendSwitch('enable-features', chromiumFeatures.join(','));
  * Smooth scrolling itself is a separate thing: it is what turns a wheel notch
  * into an animation instead of a jump, and Chrome ships it on by default while
  * a bare Electron does not. */
-app.commandLine.appendSwitch('ignore-gpu-blocklist');
-app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.commandLine.appendSwitch('enable-smooth-scrolling');
+/* And the other escape hatch: a driver where overriding the blocklist is how
+   the window comes up blank or the whole session locks. Off, Chromium draws in
+   software -- slower, and the scrolling this went to trouble over is gone, but
+   a client that starts beats one that does not. */
+if (config.get('system.hardware-acceleration') === false) {
+  app.disableHardwareAcceleration();
+  console.log('graphics: drawing in software, as asked');
+} else {
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+  app.commandLine.appendSwitch('enable-smooth-scrolling');
+}
 /* WebGPU on Linux/Wayland has a broken CreateExternalTexture pipeline for video
    streams, which causes WhatsApp call cameras to render black 1280x720 frames.
    Disabling WebGPU forces WhatsApp to use its reliable WebGL/direct pipeline. */
@@ -826,6 +844,9 @@ const changeSetting = (key, value) => {
      not -- there is no half of it to change in place, so this is the one switch
      here that asks for a restart. */
   if (key === 'behaviour.mpris') return { ok: true, restart: true };
+  /* Chromium reads both of these before any of this runs, so there is nothing
+     to apply until the client is started again. */
+  if (key.startsWith('system.')) return { ok: true, restart: true };
 
   /*
    * A font change, and the only honest answer to "does this need a restart".
@@ -2457,6 +2478,8 @@ const wireIpc = () => {
         .filter(([key]) => key !== 'dark' && key !== 'light')
         .map(([key, p]) => [key, { name: p.name, bg: p.bg, text: p.text, accent: p.accent }])),
       followDesktopAccent: config.get('view.follow-desktop-accent') !== false,
+      forceX11: !!config.get('system.force-x11'),
+      hardwareAcceleration: config.get('system.hardware-acceleration') !== false,
       privacyStealth: !!config.get('privacy.stealth'),
       privacyAutoBlur: config.get('privacy.auto-blur') === true,
       privacyHoverReveal: config.get('privacy.hover-reveal') !== false,
@@ -2505,6 +2528,32 @@ const wireIpc = () => {
   });
 
   ipcMain.handle('settings:set', (_, key, value) => changeSetting(key, value));
+
+  /*
+   * What the cache is holding, and a way to drop it.
+   *
+   * WhatsApp Web keeps every picture, sticker and avatar it has ever drawn, and
+   * on a busy account that is gigabytes nobody asked for and nothing offers to
+   * clear. This is the cache only -- the session, the chats and the login are
+   * in storage this does not touch, so dropping it costs a slower first scroll
+   * and nothing else.
+   */
+  ipcMain.handle('storage:size', async () => {
+    try { return await session.defaultSession.getCacheSize(); } catch (e) { return 0; }
+  });
+
+  ipcMain.handle('storage:clear', async () => {
+    const before = await session.defaultSession.getCacheSize().catch(() => 0);
+    try {
+      await session.defaultSession.clearCache();
+      await session.defaultSession.clearCodeCaches({});
+    } catch (err) {
+      console.warn('storage: could not clear the cache (%s)', err.message);
+      return { ok: false };
+    }
+    console.log('storage: dropped %d MB of cache', Math.round(before / 1048576));
+    return { ok: true, freed: before };
+  });
 
   /* Whichever window asked, rather than the settings window by name: the same
      preload is behind both of them, and a Fonts window that closed the settings

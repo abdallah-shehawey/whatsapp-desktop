@@ -185,6 +185,36 @@
 
         <div class="row">
           <div class="row-info">
+            <div class="row-title">Cached Pictures</div>
+            <div class="row-desc" id="cacheDesc">Pictures and stickers WhatsApp has drawn. Clearing keeps you logged in.</div>
+          </div>
+          <div class="stepper"><button class="stepper-btn" id="clearCacheBtn" style="width:auto;padding:0 14px">Clear</button></div>
+        </div>
+
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Draw Through XWayland</div>
+            <div class="row-desc">For a compositor where a screen share comes out black. Needs a restart.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="forceX11Toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Hardware Acceleration</div>
+            <div class="row-desc">Off draws in software, for a driver the GPU override hangs. Needs a restart.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="hwAccelToggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-info">
             <div class="row-title">Media Keys</div>
             <div class="row-desc">Put a card on the desktop while a voice note plays, so the headset button reaches it</div>
           </div>
@@ -287,6 +317,10 @@
     const lockBtn = document.getElementById('lockBtn');
     const paletteRow = document.getElementById('paletteRow');
     const accentToggle = document.getElementById('accentToggle');
+    const cacheDesc = document.getElementById('cacheDesc');
+    const clearCacheBtn = document.getElementById('clearCacheBtn');
+    const forceX11Toggle = document.getElementById('forceX11Toggle');
+    const hwAccelToggle = document.getElementById('hwAccelToggle');
     const lockDesc = document.getElementById('lockDesc');
     const zoomOutBtn = document.getElementById('zoomOut');
     const zoomVal = document.getElementById('zoomVal');
@@ -337,6 +371,9 @@
         hoverRevealToggle.checked = !!data.privacyHoverReveal;
         blurContactsToggle.checked = !!data.privacyBlurContacts;
         customCssToggle.checked = !!data.customCss;
+        forceX11Toggle.checked = !!data.forceX11;
+        hwAccelToggle.checked = !!data.hardwareAcceleration;
+        showCacheSize();
         mprisToggle.checked = !!data.mpris;
         currentZoom = data.zoom || 1.0;
         zoomVal.textContent = Math.round(currentZoom * 100) + '%';
@@ -403,6 +440,40 @@
         paletteRow.appendChild(b);
       });
     }
+
+    /* The size is asked for rather than kept: it grows while the window is
+       open, and a number from when it was opened is a number that is wrong. */
+    const CACHE_LINE = cacheDesc.textContent;
+    async function showCacheSize() {
+      if (!window.api || !window.api.cacheSize) return;
+      try {
+        const bytes = await window.api.cacheSize();
+        const mb = bytes / 1048576;
+        const size = mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : Math.round(mb) + ' MB';
+        cacheDesc.textContent = size + ' of pictures and stickers. Clearing keeps you logged in.';
+      } catch (e) { /* leave the line as written */ }
+    }
+
+    clearCacheBtn.addEventListener('click', async () => {
+      if (!window.api || !window.api.clearCache) return;
+      clearCacheBtn.disabled = true;
+      cacheDesc.textContent = 'Clearing\u2026';
+      const answer = await window.api.clearCache();
+      cacheDesc.textContent = (answer && answer.ok) ? 'Cleared.' : 'Could not clear it.';
+      clearCacheBtn.disabled = false;
+      setTimeout(showCacheSize, 1200);
+    });
+
+    [[forceX11Toggle, 'system.force-x11'], [hwAccelToggle, 'system.hardware-acceleration']]
+      .forEach(([el, key]) => {
+        el.addEventListener('change', async () => {
+          if (!window.api) return;
+          const answer = await window.api.setSetting(key, el.checked);
+          /* Chromium reads both of these before any of the client's own code
+             runs, so there is nothing to apply until it is started again. */
+          if (answer && answer.restart && window.api.restart) window.api.restart();
+        });
+      });
 
     accentToggle.addEventListener('change', async () => {
       if (window.api) await window.api.setSetting('view.follow-desktop-accent', accentToggle.checked);

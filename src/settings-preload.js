@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('api', {
   restart: () => ipcRenderer.send('settings:restart'),
   /* The passcode rows. Setting one and clearing one both go through the client,
      which is the only side that has the salt and the hash. */
+  cacheSize: () => ipcRenderer.invoke('storage:size'),
+  clearCache: () => ipcRenderer.invoke('storage:clear'),
   lockStatus: () => ipcRenderer.invoke('lock:status'),
   setPasscode: passcode => ipcRenderer.invoke('lock:set-passcode', passcode),
   removePasscode: passcode => ipcRenderer.invoke('lock:remove-passcode', passcode),

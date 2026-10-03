@@ -153,6 +153,16 @@ const DEFAULTS = {
      on the tray's own menu item if one has. Nothing is downloaded and nothing is
      installed -- the package manager does that -- and nothing pops up. Turn it
      off and nothing asks by itself; About's own Check button still does. */
+  /* Two escape hatches for the machine where the defaults above are the wrong
+     ones, reachable without rebuilding anything. force-x11 goes through
+     XWayland, for the compositor where a screen share comes out black or the
+     window will not come up; hardware-acceleration off draws in software, for
+     the driver where overriding the GPU blocklist is what hangs the session.
+     Both cost the smoothness this client goes to some trouble over, so neither
+     is a thing to turn on while something else still works. A restart is
+     needed either way: Chromium reads both before any of this code runs. */
+  'system.force-x11': false,
+  'system.hardware-acceleration': true,
   'updates.check': true,
 };
 
@@ -358,6 +368,14 @@ class Config {
       '[links]',
       '# Open whatsapp: links in this client rather than in a browser tab.',
       `claim-scheme = ${v['links.claim-scheme']}`,
+      '',
+      '[system]',
+      '# Go through XWayland instead of native Wayland, for the compositor where',
+      '# a screen share comes out black or the window will not come up.',
+      `force-x11 = ${v['system.force-x11']}`,
+      '# Off draws in software, for the driver where overriding the GPU',
+      '# blocklist hangs the session. Both need a restart.',
+      `hardware-acceleration = ${v['system.hardware-acceleration']}`,
       '',
       '[updates]',
       '# Ask GitHub once a day whether a newer version is out, and put it on the',
