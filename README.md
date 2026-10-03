@@ -38,6 +38,11 @@ the latest release.
   login. GNOME has no tray of its own: the icon needs the AppIndicator
   extension, and the client waits for it rather than giving up when it starts
   first at login.
+- **A palette of its own.** WhatsApp Web has two looks and neither is the
+  desktop's. OLED Black, Nord, Catppuccin, Dracula and Tokyo Night repaint the
+  page through WhatsApp's own custom properties — nineteen rules, nothing
+  matched per element on a scrolling list. A desktop themed from its wallpaper
+  with pywal or Hyprland lends its accent.
 - **Covered when somebody walks up.** `Ctrl+Alt+P` blurs the messages, the
   media and — if you want — the names and pictures in the chat list, with the
   line under the pointer still readable so it can be left on. A passcode can
@@ -192,6 +197,7 @@ make screenshots # re-photographs the three windows, for the README and the site
 | `Ctrl` `+` / `-` / `0` | zoom in, out, reset |
 | `Ctrl+,` | settings |
 | `Ctrl+Alt+P` | blur the conversation, and reveal it again |
+| `Ctrl+Alt+L` | lock it now, if a passcode is set |
 | `Ctrl+Shift+I` | devtools |
 | `Ctrl+Q` | quit for real |
 | window close | hides to the tray, stays connected |
@@ -212,11 +218,12 @@ startup and carries on without it.
 
 | Key | Default | What it does |
 |---|---|---|
-| `[view] theme` | `system` | `system` follows the desktop, or force `dark` / `light` |
+| `[view] theme` | `system` | `system` follows the desktop, or force `dark` / `light`. Or a palette for the page: `oled`, `nord`, `catppuccin`, `dracula`, `tokyonight` — each picks dark or light underneath it from its own background |
 | `[view] font` | the GNOME interface font | family for everything the client draws |
 | `[view] font-size` | `16` | root font size in pixels — WhatsApp sizes in rem |
 | `[view] zoom` | `1.0` | also set with `Ctrl` `+`/`-` |
 | `[view] force-font` | `true` | draw the page in one family |
+| `[view] follow-desktop-accent` | `true` | take the accent from pywal/wallust or Hyprland, if either has written one |
 | `[view] custom-css` | `false` | read `custom.css` from the same directory into the page, last, so it wins over everything the client draws. Saving the file redraws it |
 | `[fonts] latin-inherit` | `true` | Latin follows the desktop font; off to choose one |
 | `[fonts] latin-family` | the desktop font | family for Latin letters, digits and punctuation |
@@ -243,6 +250,8 @@ startup and carries on without it.
 | `[lock] enabled` | `false` | written by the client when a passcode is set or cleared; it means nothing without one |
 | `[lock] timeout` | `15` | minutes of a quiet window before it locks itself, `0` to never |
 | `[lock] on-system-lock` | `true` | lock with the desktop's own lock and on suspend |
+| `[system] force-x11` | `false` | go through XWayland, for a compositor where a screen share comes out black. Needs a restart |
+| `[system] hardware-acceleration` | `true` | off draws in software, for a driver the GPU override hangs. Needs a restart |
 | `[notifications] enabled` | `true` | off hands notifications back to Chromium |
 | `[notifications] sound` | `true` | a tone for the banners this client raises |
 | `[notifications] outgoing-sound` | `false` | WhatsApp's own tone for a message *you* send |
@@ -275,6 +284,7 @@ State lives in `~/.local/share/whatsapp-desktop`.
 | `src/settings.html`, `src/fonts.html` | the two windows of switches, and `src/window.css`, which is the look of both |
 | `src/about.html` | the About window, and the update check it shows |
 | `src/update.js` | asks GitHub for the latest release, and compares |
+| `src/themes.js`, `src/themes/` | the palettes, and the accent pywal or Hyprland wrote |
 | `src/privacy.js` | the blur, and which of the two switches is holding it |
 | `src/lock.js`, `src/lock/` | the passcode — PBKDF2 over a salt, and the file it lives in |
 | `src/lock.html` | the window that covers the conversation until it is typed |
@@ -321,8 +331,10 @@ Unset by default — it is a way into a live WhatsApp session, not a feature.
 
 - **[@coach-nooreldean](https://github.com/coach-nooreldean)** — the privacy
   shield, the passcode, the media card, the custom stylesheet, the desktop-wide
-  keys, the spellcheck languages, CI, and the AppImage and flatpak packaging,
-  from [#4](https://github.com/abdallah-shehawey/whatsapp-desktop/pull/4).
+  keys, the spellcheck languages, the palettes and pywal accent, the cache
+  controls, the X11 and software-rendering switches, CI, and the AppImage and
+  flatpak packaging, from
+  [#4](https://github.com/abdallah-shehawey/whatsapp-desktop/pull/4).
 
 ## Licence
 
