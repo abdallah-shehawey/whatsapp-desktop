@@ -33,9 +33,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in src/*.js src/page/*.js tools/*.js; do
-            node --check "$file"
-          done
+          find src tools -name '*.js' -print0 | xargs -0 -n1 node --check
 
   build-deb:
     name: Build Debian package
@@ -127,9 +125,40 @@ jobs:
           path: dist/*.pkg.tar.zst
           if-no-files-found: error
 
+  build-appimage:
+    name: Build AppImage
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Install appimagetool
+        run: |
+          sudo apt-get update && sudo apt-get install -y file
+          curl -L -o /tmp/appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool
+          cd /tmp && ./appimagetool --appimage-extract
+          sudo mv /tmp/squashfs-root /opt/appimagetool
+          sudo ln -sf /opt/appimagetool/AppRun /usr/local/bin/appimagetool
+      - name: Build package
+        run: packaging/build-appimage.sh
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage-package
+          path: dist/*.AppImage
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub Release
-    needs: [build-deb, build-rpm, build-arch]
+    needs: [build-deb, build-rpm, build-arch, build-appimage]
     runs-on: ubuntu-24.04
     steps:
       - name: Check out source
@@ -150,6 +179,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: arch-package
+          path: dist
+      - name: Download AppImage package
+        uses: actions/download-artifact@v4
+        with:
+          name: appimage-package
           path: dist
       - name: Create source archive
         shell: bash

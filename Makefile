@@ -44,11 +44,21 @@ install: $(ELECTRON)/electron
 	@install -d $(DESTDIR)$(libdir)
 	@cp -a $(ELECTRON)/. $(DESTDIR)$(libdir)/
 	@rm -f $(DESTDIR)$(libdir)/electron
+	@# Removed rather than written over: install(1) writes through an existing
+	@# file, and the binary being replaced is the one a running copy of the app
+	@# is executing from. Unlinking it first leaves that copy with its own inode
+	@# and gives the new one a fresh file, which is the difference between an
+	@# upgrade over a running client working and it dying with a bus error.
+	@rm -f $(DESTDIR)$(libdir)/$(BIN)
 	@install -m755 $(ELECTRON)/electron $(DESTDIR)$(libdir)/$(BIN)
 	@for f in $(DESTDIR)$(libdir)/locales/*.pak; do \
 	  keep=""; for l in $(LOCALES); do [ "$$(basename $$f .pak)" = "$$l" ] && keep=1; done; \
 	  [ -n "$$keep" ] || rm -f "$$f"; \
 	done
+	@# Cleared first, so a file that has been deleted from the source tree --
+	@# a module that was split up, a page that was renamed -- does not survive
+	@# in an installed tree as a stale copy that still gets required.
+	@rm -rf $(DESTDIR)$(libdir)/resources/app
 	@install -d $(DESTDIR)$(libdir)/resources/app
 	@cp -a $(APP_FILES) $(DESTDIR)$(libdir)/resources/app/
 	@# Chromium's sandbox uses unprivileged user namespaces where they are
@@ -170,15 +180,27 @@ package-arch:
 	@cd dist && makepkg --clean --cleanbuild --syncdeps --noconfirm
 	@rm -f dist/PKGBUILD
 
+# A single file that runs on a distribution this project has no package for.
+# It carries its own copy of Electron, so it is large; that is the trade.
+package-appimage:
+	@packaging/build-appimage.sh
+
+# Not built here: flatpak-builder wants a runtime and an SDK installed, which is
+# a gigabyte of download the other targets do not need. The manifest is kept
+# with them so it stays in step with what `make install` lays down -- it builds
+# through that same target.
+package-flatpak:
+	@echo "  flatpak-builder --force-clean build-dir packaging/$(APP_ID).yml"
+
 package-source:
 	@mkdir -p dist
 	@git archive --format=tar.gz --prefix=whatsapp-desktop-$(VERSION)/ -o dist/whatsapp-desktop-$(VERSION)-source.tar.gz HEAD
 	@sha256sum dist/* > dist/SHA256SUMS
 	@echo "  SOURCE  dist/whatsapp-desktop-$(VERSION)-source.tar.gz"
 
-package: package-deb package-rpm package-arch package-source
+package: package-deb package-rpm package-arch package-appimage package-source
 
 clean:
 	rm -rf node_modules
 
-.PHONY: all install autostart no-autostart uninstall icons og screenshots test run package-deb package-rpm package-arch package-source package clean
+.PHONY: all install autostart no-autostart uninstall icons og screenshots test run package-deb package-rpm package-arch package-appimage package-flatpak package-source package clean
