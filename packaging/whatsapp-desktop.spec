@@ -19,7 +19,7 @@
 %global __requires_exclude ^(libffmpeg|libEGL|libGLESv2|libvk_swiftshader|libvulkan)\.so.*$
 
 Name:           whatsapp-desktop
-Version:        %{?version}%{!?version:1.7.1}
+Version:        %{?version}%{!?version:1.8.0}
 Release:        %{?release}%{!?release:1}%{?dist}
 Summary:        WhatsApp Web desktop client for Linux
 License:        GPL-3.0-or-later
