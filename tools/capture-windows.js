@@ -47,6 +47,10 @@ ipcMain.handle('settings:get', () => ({
   outgoingSound: false,
   zoom: 1.0,
   fontSize: 16,
+  palettes: Object.fromEntries(Object.entries(require('../src/themes.js').THEMES)
+    .filter(([k]) => k !== 'dark' && k !== 'light')
+    .map(([k, p]) => [k, { name: p.name, bg: p.bg, text: p.text, accent: p.accent }])),
+  followDesktopAccent: true,
   privacyStealth: false,
   privacyAutoBlur: false,
   privacyHoverReveal: true,

@@ -30,6 +30,7 @@ const links = require('./links.js');
 const updates = require('./update.js');
 const { MprisService } = require('./mpris.js');
 const privacy = require('./privacy.js');
+const themes = require('./themes.js');
 const { LockManager } = require('./lock.js');
 /* Version, licence and author, read from the one file that already says them. */
 const manifest = require('../package.json');
@@ -723,16 +724,52 @@ const toggleWindow = () => {
   else showWindow('the tray was asked for it');
 };
 
+/*
+ * Which of dark and light a theme is underneath.
+ *
+ * 'system' follows the desktop and the other two say so themselves. A palette
+ * says neither: it is a set of colours for the page, and the client's own
+ * windows still have to be one or the other. Its background is what decides --
+ * a palette built on #000000 or #2e3440 is a dark one -- so the answer comes
+ * from the palette rather than from a second key nobody would think to set.
+ */
+const themeMode = theme => {
+  if (theme === 'dark' || theme === 'light') return theme;
+  const palette = themes.THEMES[theme];
+  if (palette) return isDarkColour(palette.bg) ? 'dark' : 'light';
+  return desktop.prefersDark() ? 'dark' : 'light';
+};
+
+/* Rec. 601 luma, which is the cheap answer and the right one for "is this
+   nearer black or white". */
+const isDarkColour = hex => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!m) return true;
+  const n = parseInt(m[1], 16);
+  const luma = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+  return luma < 128;
+};
+
+/* The desktop's own accent, from pywal or Hyprland, or nothing. Read once and
+   kept: the file is written when the wallpaper changes, which is not something
+   that happens while a style is being drawn, and reading it on every draw would
+   be a file open per redraw of the page. */
+let accentFromDesktop;
+const desktopAccent = () => {
+  if (config.get('view.follow-desktop-accent') === false) return null;
+  if (accentFromDesktop === undefined) {
+    const found = themes.detectHyprlandColors();
+    accentFromDesktop = (found && found.accent) || null;
+    if (accentFromDesktop) console.log('theme: accent %s from %s', accentFromDesktop, found.source);
+  }
+  return accentFromDesktop;
+};
+
 const setTheme = theme => {
   config.set('view.theme', theme);
   config.save();
-  if (theme === 'dark') {
-    nativeTheme.themeSource = 'dark';
-  } else if (theme === 'light') {
-    nativeTheme.themeSource = 'light';
-  } else {
-    nativeTheme.themeSource = desktop.prefersDark() ? 'dark' : 'light';
-  }
+  nativeTheme.themeSource = themeMode(theme);
+  applyStyle();
   if (win && !win.isDestroyed()) {
     win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#0b141a' : '#ffffff');
   }
@@ -770,6 +807,9 @@ const changeSetting = (key, value) => {
      window sitting over the conversation, and the conversation is where the
      answer is. */
   if (key === 'view.custom-css') applyStyle();
+  /* The accent is read from disk once and kept; turning this off has to drop
+     what was found, or the palette keeps the colour it was given. */
+  if (key === 'view.follow-desktop-accent') { accentFromDesktop = undefined; applyStyle(); }
   /* The shield reads its four switches once, into its own fields, so that
      isBlurred is a comparison and not four config lookups per focus change --
      which means a switch moved here has to be handed to it. */
@@ -1086,6 +1126,11 @@ const styleSheet = () => {
      * Now the sheet is redrawn when the shield turns on or off. The class still
      * goes on first, so the page is never left half-covered.
      */
+    /* The palette, when one has been chosen. Nineteen rules, most of them
+       writing WhatsApp's own custom properties on :root rather than restyling
+       its elements -- which is why this one can sit in the sheet permanently
+       and the blur above cannot. */
+    themes.getWebThemeCss(config.get('view.theme') || 'system', desktopAccent()),
     shield.isBlurred() ? privacy.PRIVACY_CSS : '',
     /* Last, so an owner who has written a rule gets it -- including over the
        font and the blur above. Read from disk on every draw rather than cached,
@@ -2405,6 +2450,13 @@ const wireIpc = () => {
       outgoingSound: !!config.get('notifications.outgoing-sound'),
       zoom: Number(config.get('view.zoom')) || 1.0,
       fontSize: Number(config.get('view.font-size')) || 16,
+      /* The palettes themselves, so the window can draw each swatch in the
+         colours it would apply rather than in a list of names. Adding one to
+         src/themes/palettes.js is then the whole change. */
+      palettes: Object.fromEntries(Object.entries(themes.THEMES)
+        .filter(([key]) => key !== 'dark' && key !== 'light')
+        .map(([key, p]) => [key, { name: p.name, bg: p.bg, text: p.text, accent: p.accent }])),
+      followDesktopAccent: config.get('view.follow-desktop-accent') !== false,
       privacyStealth: !!config.get('privacy.stealth'),
       privacyAutoBlur: config.get('privacy.auto-blur') === true,
       privacyHoverReveal: config.get('privacy.hover-reveal') !== false,
@@ -3150,13 +3202,9 @@ app.whenReady().then(() => {
   applySpellcheck(ses);
 
   const initialTheme = config.get('view.theme') || 'system';
-  if (initialTheme === 'dark') {
-    nativeTheme.themeSource = 'dark';
-  } else if (initialTheme === 'light') {
-    nativeTheme.themeSource = 'light';
-  } else {
-    nativeTheme.themeSource = desktop.prefersDark() ? 'dark' : 'light';
-  }
+  /* A palette answers this from its own background rather than from a second
+     key -- see themeMode. */
+  nativeTheme.themeSource = themeMode(initialTheme);
 
   banners = new Banners({
     seconds: Number(config.get('notifications.banner-seconds')) || 12,

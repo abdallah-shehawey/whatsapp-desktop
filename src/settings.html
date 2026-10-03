@@ -53,6 +53,21 @@
             <span>Light</span>
           </button>
         </div>
+        <!-- The palettes, under the three modes above rather than beside them:
+             those three decide what the client's own windows look like, and a
+             palette decides what the page does. Each swatch is drawn in its own
+             colours, because a list of names tells you nothing. -->
+        <div class="palette-row" id="paletteRow"></div>
+        <div class="row" style="border:0;padding-top:4px">
+          <div class="row-info">
+            <div class="row-title">Follow the Desktop Accent</div>
+            <div class="row-desc">Take the accent from pywal or Hyprland, if either has written one</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="accentToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -270,6 +285,8 @@
     const customCssToggle = document.getElementById('customCssToggle');
     const mprisToggle = document.getElementById('mprisToggle');
     const lockBtn = document.getElementById('lockBtn');
+    const paletteRow = document.getElementById('paletteRow');
+    const accentToggle = document.getElementById('accentToggle');
     const lockDesc = document.getElementById('lockDesc');
     const zoomOutBtn = document.getElementById('zoomOut');
     const zoomVal = document.getElementById('zoomVal');
@@ -278,13 +295,20 @@
     let currentZoom = 1.0;
 
     function applyThemeToUI(theme) {
-      document.documentElement.setAttribute('data-theme', theme || 'system');
+      const chosen = theme || 'system';
+      /* This window is drawn in one of three looks whatever is chosen: a
+         palette is for the page, and the client's own windows follow the mode
+         underneath it, which the client works out from the palette's own
+         background. Anything that is not one of the three is left to the
+         attribute the client set when the window was opened. */
+      if (chosen === 'system' || chosen === 'dark' || chosen === 'light') {
+        document.documentElement.setAttribute('data-theme', chosen);
+      }
       Object.keys(themeButtons).forEach(t => {
-        if (t === (theme || 'system')) {
-          themeButtons[t].classList.add('active');
-        } else {
-          themeButtons[t].classList.remove('active');
-        }
+        themeButtons[t].classList.toggle('active', t === chosen);
+      });
+      paletteRow.querySelectorAll('.palette-swatch').forEach(b => {
+        b.classList.toggle('active', b.dataset.theme === chosen);
       });
     }
 
@@ -306,6 +330,8 @@
         notifyToggle.checked = !!data.notifyEnabled;
         notifySoundToggle.checked = !!data.notifySound;
         outgoingSoundToggle.checked = !!data.outgoingSound;
+        drawPalettes(data.palettes || {}, data.theme);
+        accentToggle.checked = !!data.followDesktopAccent;
         stealthToggle.checked = !!data.privacyStealth;
         autoBlurToggle.checked = !!data.privacyAutoBlur;
         hoverRevealToggle.checked = !!data.privacyHoverReveal;
@@ -352,6 +378,34 @@
 
     outgoingSoundToggle.addEventListener('change', async () => {
       if (window.api) await window.api.setSetting('notifications.outgoing-sound', outgoingSoundToggle.checked);
+    });
+
+    /* The palettes. Drawn from what the client sent rather than hard-coded
+       here, so adding one to src/themes/palettes.js is the whole change. */
+    function drawPalettes(palettes, current) {
+      paletteRow.textContent = '';
+      Object.keys(palettes).forEach(key => {
+        const p = palettes[key];
+        const b = document.createElement('button');
+        b.className = 'palette-swatch' + (current === key ? ' active' : '');
+        b.dataset.theme = key;
+        b.style.backgroundColor = p.bg;
+        b.style.color = p.text;
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.backgroundColor = p.accent;
+        b.appendChild(dot);
+        b.appendChild(document.createTextNode(p.name));
+        b.addEventListener('click', async () => {
+          applyThemeToUI(key);
+          if (window.api) await window.api.setTheme(key);
+        });
+        paletteRow.appendChild(b);
+      });
+    }
+
+    accentToggle.addEventListener('change', async () => {
+      if (window.api) await window.api.setSetting('view.follow-desktop-accent', accentToggle.checked);
     });
 
     // Privacy Handlers

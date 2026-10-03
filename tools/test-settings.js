@@ -51,6 +51,10 @@ const node = id => ({
   checked: false, disabled: false, value: '', textContent: '', hidden: false,
   style: {}, dataset: {}, options: [],
   classes: new Set(),
+  /* Assigning className is how a built element gets its classes, and the row
+     below reads them back. */
+  set className(value) { this.classes = new Set(String(value).split(/\s+/).filter(Boolean)); },
+  get className() { return [...this.classes].join(' '); },
   classList: {
     toggle(name, on) { on ? this.owner.classes.add(name) : this.owner.classes.delete(name); },
     add(name) { this.owner.classes.add(name); },
@@ -60,6 +64,14 @@ const node = id => ({
   listeners: {},
   addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
   appendChild(child) { this.options.push(child); },
+  /* The palette row builds its swatches and then asks for them back to mark
+     the chosen one, so the children that were appended are what this answers
+     with -- a stub that always returned nothing would let a selector that
+     matches none of them pass. */
+  querySelectorAll(selector) {
+    const wanted = selector.replace(/^\./, '');
+    return this.options.filter(child => child.classes && child.classes.has(wanted));
+  },
   setAttribute() {}, removeAttribute() {},
   scrollIntoView() { this.scrolled = true; },
   /* Awaited, because every handler in these windows saves over IPC. */
