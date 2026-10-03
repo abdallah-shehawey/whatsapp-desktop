@@ -19,7 +19,18 @@ const CONFIG_PATH = path.join(CONFIG_DIR, 'whatsapp-desktop.conf');
 const CUSTOM_CSS_PATH = path.join(CONFIG_DIR, 'custom.css');
 
 const DEFAULTS = {
-  'view.theme': 'system',          // 'system' (follow desktop), 'dark', or 'light'
+  /* 'system' follows the desktop, 'dark' and 'light' force one of WhatsApp's
+     own two. Anything else is a palette from src/themes.js -- oled, nord,
+     catppuccin, dracula, tokyonight -- which repaints the page through
+     WhatsApp's own custom properties. A palette still picks dark or light
+     underneath it for the client's own windows. */
+  'view.theme': 'system',
+  /* Take the accent colour from pywal/wallust (~/.cache/wal/colors.json) or
+     from Hyprland's colors.conf, so a desktop themed from its wallpaper does
+     not leave this one window behind. Only the accent: a generated palette is
+     reliable about that and not about whether its background has the contrast
+     to read a message on. */
+  'view.follow-desktop-accent': true,
   'view.font': '',                 // empty: follow the desktop font
   'view.font-size': 16,            // WhatsApp sizes in rem, so this scales the client
   'view.zoom': 1.0,
@@ -202,8 +213,13 @@ class Config {
       '# whatsapp-desktop -- every key is optional; delete one to get the default back.',
       '',
       '[view]',
-      '# Theme mode: system (follow desktop), dark, or light.',
+      '# system follows the desktop; dark and light force one of WhatsApp\'s own',
+      '# two. Anything else is a palette: oled, nord, catppuccin, dracula,',
+      '# tokyonight -- which repaints the page through its own custom properties.',
       `theme = ${v['view.theme'] || 'system'}`,
+      '# Take the accent colour from pywal/wallust or Hyprland, so a desktop',
+      '# themed from its wallpaper does not leave this one window behind.',
+      `follow-desktop-accent = ${v['view.follow-desktop-accent']}`,
       '# Family for everything the client draws. Empty follows the desktop font.',
       `font = ${v['view.font']}`,
       '# Root font size in pixels. WhatsApp sizes in rem, so this scales the client.',
@@ -211,6 +227,9 @@ class Config {
       `zoom = ${Number(v['view.zoom']).toFixed(2)}`,
       '# Draw the whole page in one family, the way a browser told to ignore page fonts does.',
       `force-font = ${v['view.force-font']}`,
+      '# Read custom.css, in this directory, into the page -- last, so it wins',
+      '# over everything the client draws. Saving that file redraws the page.',
+      `custom-css = ${v['view.custom-css']}`,
       '',
       '[fonts]',
       '# One switch per script. On: that script is drawn in the desktop font,',
@@ -245,12 +264,52 @@ class Config {
       '# Minimising does the same. Off by default: minimise is not close.',
       `minimize-to-tray = ${v['behaviour.minimize-to-tray']}`,
       `spellcheck = ${v['behaviour.spellcheck']}`,
+      '# Which languages to check in, comma separated, in Chromium\'s own naming.',
+      '# Only ones it ships a dictionary for; the rest are dropped with a line',
+      '# saying so. Arabic is not among them.',
+      `spellcheck-languages = ${v['behaviour.spellcheck-languages']}`,
+      '# A media card on the desktop while a voice note plays, so the headset',
+      '# button reaches the note and not whatever music player is registered.',
+      `mpris = ${v['behaviour.mpris']}`,
       '# How the window is brought to the front when a banner is clicked, a link',
       '# is followed, or the tray is asked. auto: worked out from the session and',
       '# corrected once from what the window actually did. activate: ask the',
       '# compositor for it, which X11 always honours. remap: take the window down',
       '# and open it again, which is the only way up on some Wayland compositors.',
       `raise = ${v['behaviour.raise'] || 'auto'}`,
+      '',
+      '[shortcuts]',
+      '# Keys the desktop catches wherever the focus is, so they reach a window',
+      '# that is behind something else or in the tray. A combination the desktop',
+      '# has already given away cannot be taken twice; the client says so on',
+      '# startup and carries on. Empty value: leave that key alone.',
+      `global = ${v['shortcuts.global']}`,
+      `toggle = ${v['shortcuts.toggle']}`,
+      `mute-call = ${v['shortcuts.mute-call']}`,
+      '',
+      '[privacy]',
+      '# Ctrl+Alt+P covers the conversation against a glance over your shoulder.',
+      '# stealth is what that key holds, kept across a restart; auto-blur is the',
+      '# one that catches the window being left in the background.',
+      `stealth = ${v['privacy.stealth']}`,
+      `auto-blur = ${v['privacy.auto-blur']}`,
+      '# While it is covered, the line under the pointer stays readable, which is',
+      '# what makes leaving it on bearable.',
+      `hover-reveal = ${v['privacy.hover-reveal']}`,
+      '# Take the chat list and the header with it, not just the messages.',
+      `blur-contacts = ${v['privacy.blur-contacts']}`,
+      '',
+      '[lock]',
+      '# A passcode over the window. enabled is written by the client when one is',
+      '# set or cleared and means nothing without a passcode in security.json.',
+      '# It covers the screen and stops banners carrying the message; it does not',
+      '# encrypt the session, and anyone with the machine can read it.',
+      `enabled = ${v['lock.enabled']}`,
+      '# Minutes of a quiet window before it locks itself. 0 to never.',
+      `timeout = ${Math.round(Number(v['lock.timeout']) || 0)}`,
+      "# Lock with the desktop's own lock and on suspend, which is the moment",
+      '# somebody actually walks away.',
+      `on-system-lock = ${v['lock.on-system-lock']}`,
       '',
       '[notifications]',
       `enabled = ${v['notifications.enabled']}`,
@@ -293,6 +352,17 @@ class Config {
       `ask-where-to-save = ${v['media.ask-where-to-save']}`,
       '# The folder the last download was pointed at, so the chooser opens there.',
       `download-dir = ${v['media.download-dir'] || ''}`,
+      '',
+      /* These two were read but never written, so turning either off by hand
+         held only until the next save -- and a window resize is a save. */
+      '[links]',
+      '# Open whatsapp: links in this client rather than in a browser tab.',
+      `claim-scheme = ${v['links.claim-scheme']}`,
+      '',
+      '[updates]',
+      '# Ask GitHub once a day whether a newer version is out, and put it on the',
+      "# tray's own menu item. Nothing is downloaded and nothing pops up.",
+      `check = ${v['updates.check']}`,
       '',
     ].join('\n');
 
