@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld('api', {
   /* Only the Fonts window asks for this, and only when the client has said a
      restart would finish what it started -- see changeSetting in main.js. */
   restart: () => ipcRenderer.send('settings:restart'),
+  /* The passcode rows. Setting one and clearing one both go through the client,
+     which is the only side that has the salt and the hash. */
+  lockStatus: () => ipcRenderer.invoke('lock:status'),
+  setPasscode: passcode => ipcRenderer.invoke('lock:set-passcode', passcode),
+  removePasscode: passcode => ipcRenderer.invoke('lock:remove-passcode', passcode),
   onSettingsChanged: callback => {
     ipcRenderer.on('settings:changed', (_, data) => callback(data));
   },

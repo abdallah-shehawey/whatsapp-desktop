@@ -47,6 +47,12 @@ ipcMain.handle('settings:get', () => ({
   outgoingSound: false,
   zoom: 1.0,
   fontSize: 16,
+  privacyStealth: false,
+  privacyAutoBlur: false,
+  privacyHoverReveal: true,
+  privacyBlurContacts: true,
+  customCss: false,
+  mpris: true,
   font: desktop.interfaceFont(),
   fonts: {
     desktop: desktop.interfaceFont(),
@@ -60,6 +66,9 @@ ipcMain.handle('settings:set-theme', () => true);
 ipcMain.handle('settings:set-autostart', () => true);
 ipcMain.handle('settings:set', () => true);
 ipcMain.on('settings:close', () => {});
+/* No passcode in the picture: the button says Set, which is the state a reader
+   who has never opened this window is in. */
+ipcMain.handle('lock:status', () => ({ hasPasscode: false, timeout: 15, onSystemLock: true }));
 
 /* About, with a check that has already been answered. The window asks the
    moment it loads, and a picture taken while it says "Checking…" is a picture

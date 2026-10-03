@@ -766,6 +766,26 @@ const changeSetting = (key, value) => {
     win.webContents.setZoomFactor(Number(value) || 1.0);
   }
   if (key === 'view.font-size') applyStyle();
+  /* Redrawn rather than merely written: the owner has just moved a switch in a
+     window sitting over the conversation, and the conversation is where the
+     answer is. */
+  if (key === 'view.custom-css') applyStyle();
+  /* The shield reads its four switches once, into its own fields, so that
+     isBlurred is a comparison and not four config lookups per focus change --
+     which means a switch moved here has to be handed to it. */
+  if (key.startsWith('privacy.')) {
+    shield.manualStealth = !!config.get('privacy.stealth');
+    shield.autoBlur = config.get('privacy.auto-blur') === true;
+    shield.hoverReveal = config.get('privacy.hover-reveal') !== false;
+    shield.blurContacts = config.get('privacy.blur-contacts') !== false;
+    applyShield();
+  }
+  if (key.startsWith('shortcuts.')) wireGlobalKeys();
+  if (key.startsWith('behaviour.spellcheck')) applySpellcheck(session.defaultSession);
+  /* The media card is registered on a bus name, and a name is taken or it is
+     not -- there is no half of it to change in place, so this is the one switch
+     here that asks for a restart. */
+  if (key === 'behaviour.mpris') return { ok: true, restart: true };
 
   /*
    * A font change, and the only honest answer to "does this need a restart".
@@ -2358,6 +2378,12 @@ const wireIpc = () => {
       outgoingSound: !!config.get('notifications.outgoing-sound'),
       zoom: Number(config.get('view.zoom')) || 1.0,
       fontSize: Number(config.get('view.font-size')) || 16,
+      privacyStealth: !!config.get('privacy.stealth'),
+      privacyAutoBlur: config.get('privacy.auto-blur') === true,
+      privacyHoverReveal: config.get('privacy.hover-reveal') !== false,
+      privacyBlurContacts: config.get('privacy.blur-contacts') !== false,
+      customCss: !!config.get('view.custom-css'),
+      mpris: config.get('behaviour.mpris') !== false,
       /* The family the client draws the page in, so this window can be drawn in
          it too rather than in whatever Chromium picks for a plain page. */
       font: uiFont(),

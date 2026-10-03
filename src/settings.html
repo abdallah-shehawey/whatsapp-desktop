@@ -95,6 +95,92 @@
       </div>
     </div>
 
+    <!-- Privacy & Lock -->
+    <div class="section">
+      <div class="section-title">Privacy &amp; Lock</div>
+      <div class="card">
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Blur the Conversation</div>
+            <div class="row-desc">Ctrl+Alt+P covers messages and media against a glance over your shoulder</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="stealthToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Blur When Unfocused</div>
+            <div class="row-desc">Cover it automatically whenever the window is not the one in front</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="autoBlurToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Reveal on Hover</div>
+            <div class="row-desc">While it is covered, the line under the pointer stays readable</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="hoverRevealToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Blur Names and Pictures</div>
+            <div class="row-desc">Take the chat list and the header with it, not just the messages</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="blurContactsToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Passcode</div>
+            <div class="row-desc" id="lockDesc">Cover the window until a passcode is typed. Banners stop carrying the message too. The session on disk is not encrypted.</div>
+          </div>
+          <div class="stepper"><button class="stepper-btn" id="lockBtn" style="width:auto;padding:0 14px">Set</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Advanced -->
+    <div class="section">
+      <div class="section-title">Advanced</div>
+      <div class="card">
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Custom Stylesheet</div>
+            <div class="row-desc">Read custom.css into the page, over everything else. Saving it redraws.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="customCssToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Media Keys</div>
+            <div class="row-desc">Put a card on the desktop while a voice note plays, so the headset button reaches it</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="mprisToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
     <!-- Notifications & Sounds -->
     <div class="section">
       <div class="section-title">Notifications & Sounds</div>
@@ -177,6 +263,14 @@
     const notifySoundToggle = document.getElementById('notifySoundToggle');
     const outgoingSoundToggle = document.getElementById('outgoingSoundToggle');
     const zoomInBtn = document.getElementById('zoomIn');
+    const stealthToggle = document.getElementById('stealthToggle');
+    const autoBlurToggle = document.getElementById('autoBlurToggle');
+    const hoverRevealToggle = document.getElementById('hoverRevealToggle');
+    const blurContactsToggle = document.getElementById('blurContactsToggle');
+    const customCssToggle = document.getElementById('customCssToggle');
+    const mprisToggle = document.getElementById('mprisToggle');
+    const lockBtn = document.getElementById('lockBtn');
+    const lockDesc = document.getElementById('lockDesc');
     const zoomOutBtn = document.getElementById('zoomOut');
     const zoomVal = document.getElementById('zoomVal');
     const closeBtn = document.getElementById('closeBtn');
@@ -212,8 +306,15 @@
         notifyToggle.checked = !!data.notifyEnabled;
         notifySoundToggle.checked = !!data.notifySound;
         outgoingSoundToggle.checked = !!data.outgoingSound;
+        stealthToggle.checked = !!data.privacyStealth;
+        autoBlurToggle.checked = !!data.privacyAutoBlur;
+        hoverRevealToggle.checked = !!data.privacyHoverReveal;
+        blurContactsToggle.checked = !!data.privacyBlurContacts;
+        customCssToggle.checked = !!data.customCss;
+        mprisToggle.checked = !!data.mpris;
         currentZoom = data.zoom || 1.0;
         zoomVal.textContent = Math.round(currentZoom * 100) + '%';
+        await refreshLock();
       } catch (e) {
         console.error('Failed to load settings:', e);
       }
@@ -251,6 +352,68 @@
 
     outgoingSoundToggle.addEventListener('change', async () => {
       if (window.api) await window.api.setSetting('notifications.outgoing-sound', outgoingSoundToggle.checked);
+    });
+
+    // Privacy Handlers
+    const privacyRows = [
+      [stealthToggle, 'privacy.stealth'],
+      [autoBlurToggle, 'privacy.auto-blur'],
+      [hoverRevealToggle, 'privacy.hover-reveal'],
+      [blurContactsToggle, 'privacy.blur-contacts'],
+      [customCssToggle, 'view.custom-css'],
+      [mprisToggle, 'behaviour.mpris'],
+    ];
+    privacyRows.forEach(([el, key]) => {
+      el.addEventListener('change', async () => {
+        if (window.api) await window.api.setSetting(key, el.checked);
+      });
+    });
+
+    /* The passcode. One button, because there are only ever two things to do
+       with it and which one depends on whether there is one -- so the button
+       says which, rather than offering both and greying one out. */
+    let hasPasscode = false;
+    async function refreshLock() {
+      if (!window.api || !window.api.lockStatus) return;
+      try {
+        const status = await window.api.lockStatus();
+        hasPasscode = !!(status && status.hasPasscode);
+        lockBtn.textContent = hasPasscode ? 'Remove' : 'Set';
+      } catch (e) { /* an older client: leave the button saying Set */ }
+    }
+
+    lockBtn.addEventListener('click', async () => {
+      if (!window.api || !window.api.setPasscode) return;
+      /* prompt() is refused in this window, so the passcode is typed into the
+         description line itself -- one row, and nothing to lay out. */
+      const field = document.createElement('input');
+      field.type = 'password';
+      field.placeholder = hasPasscode ? 'Current passcode' : 'New passcode, four or more';
+      field.style.cssText = 'width:100%;margin-top:8px;padding:6px 8px;border-radius:6px;' +
+                            'border:1px solid var(--border,#3b4a54);background:transparent;' +
+                            'color:inherit;font:inherit';
+      const say = message => { lockDesc.textContent = message; };
+      const old = lockDesc.textContent;
+      lockDesc.textContent = '';
+      lockDesc.appendChild(field);
+      field.focus();
+
+      const done = async () => {
+        const typed = field.value;
+        if (!typed) { say(old); return; }
+        const answer = hasPasscode
+          ? await window.api.removePasscode(typed)
+          : await window.api.setPasscode(typed);
+        if (answer && answer.ok) {
+          await refreshLock();
+          say(hasPasscode ? old : old);
+        } else {
+          say((answer && answer.why) || 'That did not work');
+          setTimeout(() => say(old), 2500);
+        }
+      };
+      field.addEventListener('keydown', e => { if (e.key === 'Enter') done(); });
+      field.addEventListener('blur', () => { if (!field.value) say(old); });
     });
 
     // Zoom Handlers
