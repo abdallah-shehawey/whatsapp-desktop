@@ -286,15 +286,27 @@ const SAME_MESSAGE_MS = 15000;
 const SAME_ID_MS = SEEN_TTL_MS;
 
 class Banners {
-  constructor({ seconds = 12, appIcon = null, stateFile = null, hidePreview = false } = {}) {
+  constructor({ seconds = 12, appIcon = null, stateFile = null, hidePreview = false,
+                isLocked = null } = {}) {
     this.seconds = seconds;
     this.appIcon = appIcon;
     this.hidePreview = hidePreview;
+    /* Asked at the moment a banner is raised rather than read once, because
+       what it answers changes while the client is running -- see redacting
+       below. Left null, nothing is ever hidden on its account. */
+    this.isLocked = isLocked;
     this.byKey = new Map();             // chat name -> Set of live entries
     this.seen = stateFile ? new Seen(stateFile) : null;
   }
 
   get supported() { return Notification.isSupported(); }
+
+  /* Whether this banner may carry its words: the setting, or the lock being on
+     at the moment it is raised. */
+  redacting() {
+    if (this.hidePreview) return true;
+    try { return !!(this.isLocked && this.isLocked()); } catch (e) { return false; }
+  }
 
   /*
    * identity  what makes this message this message -- chat, sender and text --
@@ -320,8 +332,12 @@ class Banners {
     const entry = new Entry(this, {
       key, msgId, title,
       /* With previews hidden the banner says which chat and what kind of thing
-         arrived, and never a word of it. */
-      body: this.hidePreview ? (redacted || 'New message') : body,
+         arrived, and never a word of it. A locked client is the same question
+         answered a different way: the passcode is there to stop the screen
+         being read, and a banner that spells out who wrote and what they said
+         hands over exactly what the lock was covering -- to anyone walking
+         past, without touching the machine. */
+      body: this.redacting() ? (redacted || 'New message') : body,
       iconPath: avatarPath(icon) || this.appIcon || undefined,
       onClick,
       ongoing,

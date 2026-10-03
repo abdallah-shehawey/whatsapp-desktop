@@ -98,6 +98,20 @@ const DEFAULTS = {
   'privacy.auto-blur': false,
   'privacy.hover-reveal': true,
   'privacy.blur-contacts': true,
+  /* A passcode over the window -- see src/lock.js. `enabled` is written by the
+     client when a passcode is set or cleared and means nothing on its own:
+     without a passcode in security.json there is nothing to check, and the
+     lock stays off. `timeout` is minutes of no window activity before it locks
+     itself, 0 to never. `on-system-lock` follows the desktop's own lock and
+     suspend, which is the moment somebody walks away from the machine.
+
+     This covers the screen and the notifications, nothing else. The session on
+     disk is not encrypted and anyone with the machine can read it; what the
+     passcode buys is that the chats are not on display and a banner does not
+     read them out while the window is covered. */
+  'lock.enabled': false,
+  'lock.timeout': 15,
+  'lock.on-system-lock': true,
   'notifications.enabled': true,
   'notifications.sound': true,     // a tone for the banners this client raises itself
   'notifications.outgoing-sound': false,  // WhatsApp's own tone for a message you send

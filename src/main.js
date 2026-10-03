@@ -9,7 +9,7 @@
  */
 'use strict';
 
-const { app, BrowserWindow, Menu, clipboard, session, shell, nativeTheme, ipcMain, globalShortcut, screen: electronScreen, desktopCapturer } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, session, shell, nativeTheme, ipcMain, globalShortcut, powerMonitor, screen: electronScreen, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -30,6 +30,7 @@ const links = require('./links.js');
 const updates = require('./update.js');
 const { MprisService } = require('./mpris.js');
 const privacy = require('./privacy.js');
+const { LockManager } = require('./lock.js');
 /* Version, licence and author, read from the one file that already says them. */
 const manifest = require('../package.json');
 
@@ -259,6 +260,11 @@ let mpris = null;
    src/privacy.js. Built once, because the manual switch it holds is the one
    Ctrl+Alt+P toggles and it has to survive the page reloading. */
 const shield = new privacy.PrivacyManager(config);
+/* The passcode, if one has been set -- see src/lock.js. Built before the window
+   so `isLocked` can be asked at startup, which is when a client that was locked
+   when it was last quit comes back locked. */
+const lock = new LockManager(config);
+let lockWin = null;
 let quitting = false;
 /* Every user stylesheet this process has put into the page, newest last. One
    key was not enough: two overlapping applyStyle calls both read it, both
@@ -474,6 +480,10 @@ const traceWindowState = () => {
     /* The one answer a raise is waiting for. */
     raising.took = true;
     set({ minimized: false, focused: true });
+    /* The window being used is what the idle timeout measures, and the focus
+       coming back is the clearest sign of it. Without this, a client in the
+       foreground all afternoon locks itself anyway. */
+    lock.recordActivity();
     /* Readable again, if it was auto-blur that covered it. A manual Ctrl+Alt+P
        outlives the focus coming back; see isBlurred. */
     shield.setWindowFocus(true);
@@ -1212,6 +1222,7 @@ const createWindow = () => {
   win.loadURL(WHATSAPP_URL);
 
   win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown') lock.recordActivity();
     if (input.type === 'keyDown' && (input.control || input.meta) && input.key === ',') {
       event.preventDefault();
       openSettings();
@@ -2016,6 +2027,107 @@ const setBadge = count => {
   console.log('badge: %d', wanted);
 };
 
+/* ------------------------------------------------------------- the lock */
+
+/*
+ * A passcode over the window.
+ *
+ * What this is and is not, because it is easy to read more into a lock than it
+ * can carry: the session on disk is not encrypted, and anybody with the machine
+ * and a file manager can read the chats out of it. What the passcode buys is
+ * that the conversation is not on display and that a banner does not read it
+ * out -- see redacting() in src/notify.js, which is the half a lock over the
+ * window alone would leave wide open.
+ *
+ * The window it puts up is modal and a child of the main one, so the desktop
+ * keeps it on top and in front of its parent. It is drawn at the parent's size
+ * and follows it, because a lock screen smaller than the window it is covering
+ * is not covering it.
+ */
+const openLock = () => {
+  if (lockWin && !lockWin.isDestroyed()) { lockWin.focus(); return lockWin; }
+  if (!win || win.isDestroyed()) return null;
+
+  const bounds = win.getBounds();
+  lockWin = new BrowserWindow({
+    parent: win,
+    modal: true,
+    x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,
+    frame: false,
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    backgroundColor: '#111b21',
+    webPreferences: {
+      preload: path.join(__dirname, 'lock-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  lockWin.loadFile(path.join(__dirname, 'lock.html'));
+  lockWin.on('closed', () => { lockWin = null; });
+
+  /* The parent can still be moved and resized by the compositor -- tiled by a
+     keybinding, moved to another output -- and the cover has to go with it, or
+     it stops being a cover. */
+  const follow = () => {
+    if (!lockWin || lockWin.isDestroyed() || !win || win.isDestroyed()) return;
+    lockWin.setBounds(win.getBounds());
+  };
+  win.on('move', follow);
+  win.on('resize', follow);
+  lockWin.on('closed', () => {
+    if (win && !win.isDestroyed()) {
+      win.removeListener('move', follow);
+      win.removeListener('resize', follow);
+    }
+  });
+
+  return lockWin;
+};
+
+const lockApp = why => {
+  if (!lock.hasPasscode()) return false;
+  if (lock.isLocked) return true;
+  lock.lock();
+  openLock();
+  console.log('lock: covered (%s)', why);
+  return true;
+};
+
+const unlockApp = () => {
+  if (lockWin && !lockWin.isDestroyed()) lockWin.destroy();
+  lockWin = null;
+  lock.recordActivity();
+  console.log('lock: open');
+};
+
+/* Every half minute, which is as often as a fifteen-minute timeout needs
+   asking. The activity it measures is the window's own -- see recordActivity --
+   and not the machine's: a client left alone while its owner works in another
+   window is exactly the case this is for. */
+const startLockTimer = () => {
+  setInterval(() => {
+    if (lock.checkIdleTimeout()) {
+      openLock();
+      console.log('lock: covered (nothing has happened for %d minutes)',
+                  Number(config.get('lock.timeout')));
+    }
+  }, 30 * 1000);
+
+  /* The desktop's own lock, and the lid coming down. Both are somebody walking
+     away from the machine, which is the moment this is most worth doing and the
+     one a timeout would get to minutes late. */
+  if (config.get('lock.on-system-lock') !== false) {
+    try {
+      powerMonitor.on('lock-screen', () => lockApp('the desktop locked'));
+      powerMonitor.on('suspend', () => lockApp('the machine suspended'));
+    } catch (err) {
+      console.warn('lock: cannot follow the desktop\'s own lock (%s)', err.message);
+    }
+  }
+};
+
 /* ------------------------------------------------------------- spellcheck */
 
 /*
@@ -2197,6 +2309,43 @@ const quit = () => {
 
 const wireIpc = () => {
   ipcMain.on('wa:log', (event, message) => console.log('page: %s', message));
+
+  /* The lock screen's own window, which is the only thing that can ask. */
+  ipcMain.handle('lock:unlock', (event, passcode) => {
+    try {
+      if (!lock.verify(passcode)) return { ok: false };
+      unlockApp();
+      return { ok: true };
+    } catch (err) {
+      /* Too many wrong answers: the manager throws with how long is left, and
+         that is the one thing worth putting in front of whoever is typing. */
+      return { ok: false, wait: err.message };
+    }
+  });
+
+  ipcMain.handle('lock:get-theme', () => {
+    const asked = config.get('view.theme') || 'system';
+    if (asked === 'system') return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+    return asked === 'light' ? 'light' : 'dark';
+  });
+
+  ipcMain.handle('lock:status', () => ({
+    hasPasscode: lock.hasPasscode(),
+    timeout: Number(config.get('lock.timeout')) || 0,
+    onSystemLock: config.get('lock.on-system-lock') !== false,
+  }));
+
+  ipcMain.handle('lock:set-passcode', (event, passcode) => {
+    try { lock.setPasscode(passcode); return { ok: true }; }
+    catch (err) { return { ok: false, why: err.message }; }
+  });
+
+  ipcMain.handle('lock:remove-passcode', (event, passcode) => {
+    try { lock.removePasscode(passcode); return { ok: true }; }
+    catch (err) { return { ok: false, why: err.message }; }
+  });
+
+  ipcMain.on('wa:lock-now', () => lockApp('asked for'));
 
   ipcMain.handle('settings:get', () => {
     return {
@@ -2960,6 +3109,10 @@ app.whenReady().then(() => {
     seconds: Number(config.get('notifications.banner-seconds')) || 12,
     appIcon,
     hidePreview: !!config.get('notifications.hide-preview'),
+    /* Asked at the moment a banner is raised, not read once here: the lock goes
+       on and off while the client runs, and a banner raised while it is on must
+       not spell out who wrote or what they said. */
+    isLocked: () => lock.isLocked,
     /* Which messages have already been announced, so a restart does not put the
        whole unread backlog back on screen as though it had just arrived. */
     stateFile: path.join(app.getPath('userData'), 'announced.json'),
@@ -3008,6 +3161,10 @@ app.whenReady().then(() => {
   startMpris();
   watchCustomCss();
   wireGlobalKeys();
+  /* Covered before anything is drawn, if it was covered when this was last
+     quit: LockManager reads that from disk in its own constructor. */
+  if (lock.isLocked) openLock();
+  startLockTimer();
 
   /*
    * One quiet look for a newer version, and then one a day.
