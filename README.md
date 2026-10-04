@@ -114,8 +114,13 @@ the latest release.
   that is fine, which turns every wheel tick into a software raster of the whole
   viewport — that is overridden, the messages list is put on a layer of its own,
   and a wheel notch is animated instead of jumped. The right-hand drawer slides
-  in and out rather than appearing, and so do Settings' own panels — Profile
-  was the one WhatsApp never animated, and the nav rail's labels popped. And the reply bar and the conversation above
+  in and out rather than appearing, and so do the panels behind the nav rail and
+  in Settings — Profile was the one WhatsApp never animated at all, and the
+  rail's labels popped. Those panels keep WhatsApp's own 36ms fade rather than
+  having one imposed over it: a user-origin animation outranks the inline
+  opacity WhatsApp writes, so carrying opacity in the keyframes stretched a
+  36ms fade to 250 and left the panel see-through for a quarter of a second
+  after it had arrived. And the reply bar and the conversation above
   it now rise as one: WhatsApp animates the bar from JavaScript every frame
   while the messages follow a watcher two frames behind, so the bar grew for
   73ms and the messages then jumped 66px in a single frame — both halves are

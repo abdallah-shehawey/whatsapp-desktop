@@ -230,8 +230,23 @@ assert.match(shipped, /\[data-testid="drawer-left"\] > div > span > div \{/);
    inside the panel, which would each animate separately; the chain matches the
    panel and nothing else. */
 assert.doesNotMatch(shipped, /\[data-testid="drawer-left"\] span > div \{/);
-assert.match(settings, /animation: whatsapp-desktop-settings 250ms/);
-assert.match(settings, /@keyframes whatsapp-desktop-settings \{\n  from \{ transform: translateX\(100%\)/);
+assert.match(settings, /animation: whatsapp-desktop-settings 200ms/);
+assert.match(settings, /@keyframes whatsapp-desktop-settings \{\n  from \{ transform: translateX\(100%\); \}/);
+
+/*
+ * And NOT opacity, in either direction, which is the fix for the lag reported
+ * on the left rail.
+ *
+ * This rule reaches more than Profile -- Status and Channels mount at the same
+ * child chain -- and WhatsApp fades those in itself with Velocity, an inline
+ * opacity 0.5 -> 1 that is done in 36ms. An animation declaration at user
+ * origin outranks an inline style, so keyframes that carry opacity take that
+ * fade over and stretch it to the whole duration: measured from the mount, the
+ * panel was drawn at 0 for the first 17ms and at 0.98 still at 143ms, where
+ * WhatsApp had it solid at 36. Leaving opacity out hands the fade back.
+ */
+const settingsBlock = settings.slice(0, settings.indexOf('[role="tooltip"]'));
+assert.doesNotMatch(settingsBlock, /opacity/);
 /* A real animation and not the 1ms no-op the drawer and the reply bar use: this
    panel is replaced on every open, so a CSS animation runs every time and there
    is nothing for JavaScript to do. The other two are never unmounted. */
@@ -240,7 +255,7 @@ assert.doesNotMatch(settings.slice(0, settings.indexOf('}')), /1ms/);
    in Arabic -- where this drawer is on the other edge of the window -- the
    panel would otherwise slide in from the wrong side. */
 assert.match(shipped, /html\[dir="rtl"\] \[data-testid="drawer-left"\] > div > span > div/);
-assert.match(shipped, /@keyframes whatsapp-desktop-settings-rtl \{\n  from \{ transform: translateX\(-100%\)/);
+assert.match(shipped, /@keyframes whatsapp-desktop-settings-rtl \{\n  from \{ transform: translateX\(-100%\); \}/);
 
 /* The label beside the nav rail -- "You", "Chats" -- which WhatsApp mounts
    already opaque under a `transition: opacity` that therefore never runs. It is

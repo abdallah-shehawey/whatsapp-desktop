@@ -723,21 +723,64 @@ footer [data-testid="popup_panel"] {
  * an Arabic interface -- where this drawer is on the other edge of the window
  * -- would otherwise have the panel slide in from the wrong side, which is the
  * same glitch the right-hand drawer was fixed for.
+ *
+ *
+ * AND WHY THERE IS NO OPACITY IN THESE KEYFRAMES
+ *
+ * There was, and it is what made opening a tab on the left rail feel slow.
+ *
+ * This rule reaches more than Profile. Status, Channels and the rest of the
+ * rail mount at this very path -- measured, the same child chain -- and
+ * WhatsApp fades THOSE in itself, with Velocity, as an inline `opacity` it
+ * writes from JavaScript: 0.5 to 1, finished in 36ms. Sampled every frame from
+ * the moment the node is added to the page (2026-10-04, clicking Status):
+ *
+ *     0ms    inline 0.5     drawn 0        translateX 511
+ *     3ms    inline 0.86    drawn 0        translateX 511
+ *    13ms    inline 0.89    drawn 0        translateX 511
+ *    17ms    inline 0.96    drawn 0.14     translateX 437
+ *    36ms    inline 1       drawn 0.48     translateX 264
+ *   143ms    inline 1       drawn 0.98     translateX 10
+ *
+ * The inline column is what WhatsApp asked for; the drawn column is what was
+ * actually painted, because an animation declaration at user origin outranks an
+ * inline style. So the old keyframes took the fade off Velocity and made it
+ * nearly seven times longer: the panel was invisible for the first 17ms and
+ * still see-through at 143, where WhatsApp had it solid at 36. A quarter of a
+ * second of the chat list showing through a panel that has already arrived is
+ * exactly what was reported -- "بتفتح بانميشن فيه لاج شويه".
+ *
+ * So opacity is left to Velocity, which already does it and does it quickly,
+ * and these keyframes move the panel and nothing else. On Profile, where
+ * Velocity never runs, there is no fade to take over and the panel slides in
+ * solid -- which is the point: the ask was for Profile to open like its
+ * siblings, and its siblings are a slide.
+ *
+ * THE DURATION AND THE CURVE come down with it, and for the same reason: the
+ * animation is not the whole open. The press costs a 56ms long task in React
+ * before the node exists at all, and the slide cannot start until 72ms after it
+ * -- both measured -- so 250ms on top of that was 316ms from click to settled.
+ *
+ * The curve changes with the duration because an exponential ease-out at 200ms
+ * is nearly over before it is seen: cubic-bezier(0.16, 1, 0.3, 1) is 97% done
+ * at the halfway point, so the last 100ms would crawl the final 15px and read
+ * as the panel sticking. The quintic below is 91% at the same point -- the
+ * motion stays visible to the end and still settles without a bounce.
  */
 const SETTINGS_PANEL = `
 [data-testid="drawer-left"] > div > span > div {
-  animation: whatsapp-desktop-settings 250ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+  animation: whatsapp-desktop-settings 200ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 html[dir="rtl"] [data-testid="drawer-left"] > div > span > div {
   animation-name: whatsapp-desktop-settings-rtl !important;
 }
 @keyframes whatsapp-desktop-settings {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: none; opacity: 1; }
+  from { transform: translateX(100%); }
+  to { transform: none; }
 }
 @keyframes whatsapp-desktop-settings-rtl {
-  from { transform: translateX(-100%); opacity: 0; }
-  to { transform: none; opacity: 1; }
+  from { transform: translateX(-100%); }
+  to { transform: none; }
 }`;
 
 /*
