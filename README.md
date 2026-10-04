@@ -40,9 +40,17 @@ the latest release.
   first at login.
 - **A palette of its own.** WhatsApp Web has two looks and neither is the
   desktop's. OLED Black, Nord, Catppuccin, Dracula and Tokyo Night repaint the
-  page through WhatsApp's own custom properties — nineteen rules, nothing
-  matched per element on a scrolling list. A desktop themed from its wallpaper
-  with pywal or Hyprland lends its accent.
+  page through WhatsApp's own design-system properties — the whole window, not
+  just the chat list: the nav rail, the right-hand pane, the settings panels,
+  the bubbles and the tooltips. Three rules, nothing matched per element on a
+  scrolling list. The chat wallpaper is left to WhatsApp, doodles or an image,
+  with the doodle colour derived from the palette so it stays visible over a
+  ground WhatsApp never chose it for. A desktop themed from its wallpaper with
+  pywal or Hyprland lends its accent, and *Default* in the palette row puts
+  WhatsApp's own colours back.
+- **The chat list as cards**, optionally: WhatsApp already rounds a box behind
+  every row and already leaves the gap, and paints it the very colour of the
+  panel behind it. One switch raises it off.
 - **Covered when somebody walks up.** `Ctrl+Alt+P` blurs the messages, the
   media and — if you want — the names and pictures in the chat list, with the
   line under the pointer still readable so it can be left on. A passcode can
@@ -89,10 +97,12 @@ the latest release.
   texture path hands video frames back black, and a call camera that renders a
   black 1280×720 rectangle is what that looks like.
 - **Two windows of switches, and no text editor.** Settings (`Ctrl+,`, or the
-  tray) has the theme — system, dark or light — start-at-login, what closing
-  the window does, which sounds you want and the zoom; *Fonts…* has the two
-  scripts. Everything lands the moment you set it. The tray menu itself is four
-  items and stays that way.
+  tray) has the theme — system, dark or light, or one of the palettes, with
+  *Default* to put WhatsApp's own colours back — the chat list as cards,
+  start-at-login, what closing the window does, the privacy and passcode rows,
+  the spell checker and the languages it has dictionaries for, which sounds you
+  want and the zoom; *Fonts…* has the two scripts. Everything lands the moment
+  you set it. The tray menu itself is four items and stays that way.
 - **Says when a new version is out.** *About WhatsApp* in the tray menu has the
   version running, a check against the latest release and a link to the site;
   the client also looks once a day by itself, and the tray item names the
@@ -104,7 +114,8 @@ the latest release.
   that is fine, which turns every wheel tick into a software raster of the whole
   viewport — that is overridden, the messages list is put on a layer of its own,
   and a wheel notch is animated instead of jumped. The right-hand drawer slides
-  in and out rather than appearing. And the reply bar and the conversation above
+  in and out rather than appearing, and so do Settings' own panels — Profile
+  was the one WhatsApp never animated, and the nav rail's labels popped. And the reply bar and the conversation above
   it now rise as one: WhatsApp animates the bar from JavaScript every frame
   while the messages follow a watcher two frames behind, so the bar grew for
   73ms and the messages then jumped 66px in a single frame — both halves are
@@ -225,6 +236,7 @@ startup and carries on without it.
 | `[view] force-font` | `true` | draw the page in one family |
 | `[view] follow-desktop-accent` | `true` | take the accent from pywal/wallust or Hyprland, if either has written one |
 | `[view] custom-css` | `false` | read `custom.css` from the same directory into the page, last, so it wins over everything the client draws. Saving the file redraws it |
+| `[view] chat-cards` | `false` | draw each chat in the list as a card raised off the panel behind it. WhatsApp already rounds the box and leaves the gap; this is the colour it never gave it |
 | `[fonts] latin-inherit` | `true` | Latin follows the desktop font; off to choose one |
 | `[fonts] latin-family` | the desktop font | family for Latin letters, digits and punctuation |
 | `[fonts] latin-size` | `100` | its size, as a percentage of the family's own |

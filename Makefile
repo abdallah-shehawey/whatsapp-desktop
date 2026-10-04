@@ -156,6 +156,7 @@ test:
 	@node tools/test-bidi.js
 	@node tools/test-wording.js
 	@node tools/test-style.js
+	@node tools/test-themes.js
 	@node tools/test-fonts.js
 	@node tools/test-settings.js
 	@node tools/test-links.js

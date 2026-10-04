@@ -825,6 +825,9 @@ const changeSetting = (key, value) => {
      window sitting over the conversation, and the conversation is where the
      answer is. */
   if (key === 'view.custom-css') applyStyle();
+  /* The card rule is in the sheet only while the switch is on -- see
+     CHAT_CARDS in src/style.js -- so moving it is a redraw and not a class. */
+  if (key === 'view.chat-cards') applyStyle();
   /* The accent is read from disk once and kept; turning this off has to drop
      what was found, or the palette keeps the colour it was given. */
   if (key === 'view.follow-desktop-accent') { accentFromDesktop = undefined; applyStyle(); }
@@ -1118,6 +1121,7 @@ const openAbout = ({ checkNow = false } = {}) => {
 const styleSheet = () => {
   const wanted = {
     fontSize: config.get('view.font-size'),
+    chatCards: !!config.get('view.chat-cards'),
   };
   /* What the last sheet said, so this one can contradict it. A sheet inserted at
      user origin cannot be removed again -- see style.js -- so a switch turned
@@ -1240,6 +1244,58 @@ const openCustomCss = async () => {
   }
 };
 
+/*
+ * What the switchable rules hang off, written onto the page's root element.
+ *
+ * This exists because removeInsertedCSS does not remove a sheet inserted at
+ * user origin -- measured, and written down in src/style.js. The client builds
+ * a fresh sheet on every change and the newest declaration wins, so swapping
+ * one palette for another has always worked. Turning something OFF never did:
+ * the new sheet says nothing, and nothing cannot beat a declaration that is
+ * still in the page.
+ *
+ * Both reports were that fault. "عملت oled black بعد كده رجعت لل default
+ * مرجعش" -- the config said system while the page still answered Nord's
+ * #2e3440 -- and the cards switch, which went off in the window and left the
+ * cards exactly where they were. One cause, one fix.
+ *
+ * So every rule that can be switched off names a mark here, and taking it off
+ * is clearing an attribute: every stale copy stops matching at once, however
+ * many sheets the session has piled up. It is the privacy shield's own shape --
+ * `body.wa-privacy-active` is there for precisely this reason -- generalised to
+ * the two switches that had been written as though a sheet could be withdrawn.
+ *
+ * Unconditional rules are not marked and must not be: the Arabic clip, the bidi
+ * rules and the motion are in every build, so there is nothing to take off and
+ * a mark would only be an ancestor to match against.
+ */
+const markPage = async (onlyIfBare = false) => {
+  if (!win || win.isDestroyed()) return;
+  const theme = config.get('view.theme') || 'system';
+  const marks = {
+    ...themes.markFor(theme, desktopAccent()),
+    cards: config.get('view.chat-cards') ? 'on' : null,
+  };
+  const attributes = {
+    [themes.MARK]: marks.theme,
+    [themes.ACCENT_MARK]: marks.accent,
+    [style.CARDS_MARK]: marks.cards,
+  };
+  try {
+    await win.webContents.executeJavaScript(`(() => {
+      const want = ${JSON.stringify(attributes)};
+      const root = document.documentElement;
+      /* Marked already: this is the call that runs BEFORE the sheet, and the
+         page is mid-session. Leave it alone -- see the note below. */
+      if (${!!onlyIfBare} && Object.keys(want).some(name => root.hasAttribute(name))) return;
+      for (const [name, value] of Object.entries(want)) {
+        if (value === null) root.removeAttribute(name);
+        else root.setAttribute(name, value);
+      }
+    })();`);
+  } catch (e) { /* the page navigated; the next load marks it again */ }
+};
+
 const drawStyle = async () => {
   if (!win || win.isDestroyed()) return;
   const family = uiFont();
@@ -1248,6 +1304,23 @@ const drawStyle = async () => {
   /* Every sheet, not just the last one: a key that fails to come out is worth
      saying so about, because what it leaves behind is a rule the user cannot
      get rid of from Settings. */
+  /*
+   * Marked before the sheet as well as after it, and the two calls are not the
+   * same call twice.
+   *
+   * AFTER is what a switch needs. Moving from one palette to another, the new
+   * rules have to be in the page before the mark names them, or there is a gap
+   * where the old palette has been disowned and the new one has not arrived --
+   * a flash of WhatsApp's own grey on every change.
+   *
+   * BEFORE is what a LOAD needs, and it is the same gap the other way round: on
+   * a fresh page the sheet lands first and is inert until the mark follows it
+   * one IPC round trip later, which is a flash of WhatsApp's grey at every
+   * start. So this one runs only while the page carries no mark at all, which
+   * is true after a load and never true mid-session.
+   */
+  await markPage(true);
+
   const stale = cssKeys;
   cssKeys = [];
   for (const key of stale) {
@@ -1260,6 +1333,12 @@ const drawStyle = async () => {
      An author-level sheet loses to WhatsApp's !important rules, and that is the
      difference between the desktop font being used and being ignored. */
   if (css) cssKeys.push(await win.webContents.insertCSS(css, { cssOrigin: 'user' }));
+
+  /* And then what the switchable rules hang off, AFTER the sheet rather than
+     before it -- the same order, and for the same reason, as applyShield on
+     load: put the marks on first and there is a frame where they name a palette
+     whose rules are not in the page yet. */
+  await markPage();
   /* Kept reachable so the scroll probe can measure the page without it. */
   require('./main-css.js').track(win, () => cssKeys[cssKeys.length - 1] || null,
                                  key => { cssKeys = key ? [key] : []; });
@@ -2251,7 +2330,24 @@ const startLockTimer = () => {
  * indistinguishable from a word that is spelled right.
  */
 const applySpellcheck = ses => {
-  if (!config.get('behaviour.spellcheck')) return;
+  /* Off is a thing to DO, not a thing to skip.
+   *
+   * This used to return here, which is right exactly once -- at startup, where
+   * webPreferences.spellcheck has already been set from the same key and the
+   * checker was never started. Every other time it is reached the switch has
+   * just been moved, and returning left a checker that was already running
+   * exactly as it was: the underline stayed, the context menu went on offering
+   * suggestions, and the switch in the window did nothing until a restart. */
+  if (!config.get('behaviour.spellcheck')) {
+    try {
+      ses.setSpellCheckerEnabled(false);
+      console.log('spellcheck: off');
+    } catch (err) {
+      console.warn('spellcheck: could not be turned off (%s)', err.message);
+    }
+    return;
+  }
+  try { ses.setSpellCheckerEnabled(true); } catch (e) { /* older Electron: the languages below are the switch */ }
 
   const asked = String(config.get('behaviour.spellcheck-languages') || 'en-US')
     .split(',').map(one => one.trim()).filter(Boolean);
@@ -2498,7 +2594,21 @@ const wireIpc = () => {
       privacyHoverReveal: config.get('privacy.hover-reveal') !== false,
       privacyBlurContacts: config.get('privacy.blur-contacts') !== false,
       customCss: !!config.get('view.custom-css'),
+      chatCards: !!config.get('view.chat-cards'),
       mpris: config.get('behaviour.mpris') !== false,
+      spellcheck: config.get('behaviour.spellcheck') !== false,
+      spellcheckLanguages: String(config.get('behaviour.spellcheck-languages') || 'en-US'),
+      /* What Chromium will actually answer to on this machine, so the window
+         offers the dictionaries it has rather than a text field where a name it
+         does not know is typed, accepted, and silently dropped at startup --
+         which is what setSpellCheckerLanguages does with the whole list. Arabic
+         is the one worth naming: it is the obvious language to reach for here
+         and Chromium ships no dictionary for it, so it is simply absent from
+         this list and the window says why. */
+      spellcheckAvailable: (() => {
+        try { return session.defaultSession.availableSpellCheckerLanguages || []; }
+        catch (e) { return []; }
+      })(),
       /* The family the client draws the page in, so this window can be drawn in
          it too rather than in whatever Chromium picks for a plain page. */
       font: uiFont(),

@@ -215,4 +215,85 @@ assert.match(shipped, /span\[data-icon\] > svg \{[^}]*max-width: 100%/);
 assert.match(shipped, /span\[data-icon\] > svg \{[^}]*max-height: 100%/);
 assert.doesNotMatch(shipped, /span\[data-icon\] > svg \{[^}]*[^-]width: 100%/);
 
+/*
+ * Profile, in Settings, which is the one panel there WhatsApp never animated.
+ *
+ * Its siblings are slid in by Velocity from translateX(100%) -- sampled on the
+ * live page, 336px at 1ms down to under a pixel by 248 -- and Profile mounts
+ * into [data-testid="drawer-left"] with animation-name: none and no transform
+ * at any point. So the missing half is written here, to those numbers.
+ */
+const settings = shipped.slice(shipped.indexOf('[data-testid="drawer-left"]'));
+assert.match(shipped, /\[data-testid="drawer-left"\] > div > span > div \{/);
+/* The CHILD chain, not a descendant one. `[data-testid="drawer-left"] span >
+   div` matches four elements on the live page and three of them are furniture
+   inside the panel, which would each animate separately; the chain matches the
+   panel and nothing else. */
+assert.doesNotMatch(shipped, /\[data-testid="drawer-left"\] span > div \{/);
+assert.match(settings, /animation: whatsapp-desktop-settings 250ms/);
+assert.match(settings, /@keyframes whatsapp-desktop-settings \{\n  from \{ transform: translateX\(100%\)/);
+/* A real animation and not the 1ms no-op the drawer and the reply bar use: this
+   panel is replaced on every open, so a CSS animation runs every time and there
+   is nothing for JavaScript to do. The other two are never unmounted. */
+assert.doesNotMatch(settings.slice(0, settings.indexOf('}')), /1ms/);
+/* And the side is the interface's. transform knows nothing about direction, so
+   in Arabic -- where this drawer is on the other edge of the window -- the
+   panel would otherwise slide in from the wrong side. */
+assert.match(shipped, /html\[dir="rtl"\] \[data-testid="drawer-left"\] > div > span > div/);
+assert.match(shipped, /@keyframes whatsapp-desktop-settings-rtl \{\n  from \{ transform: translateX\(-100%\)/);
+
+/* The label beside the nav rail -- "You", "Chats" -- which WhatsApp mounts
+   already opaque under a `transition: opacity` that therefore never runs. It is
+   built on hover and taken out again on leave, so this too is plain CSS.
+
+   `[role="tooltip"]` and not the class it is drawn with: that class is
+   generated (.xpip370 today) and the role is in the HTML specification. */
+assert.match(shipped, /\[role="tooltip"\] \{\n  animation: whatsapp-desktop-tooltip 120ms/);
+assert.match(shipped, /@keyframes whatsapp-desktop-tooltip \{\n  from \{ opacity: 0; transform: scale\(0\.94\)/);
+assert.doesNotMatch(shipped, /\.xpip370/);
+/* Scale, never a slide: the box is positioned by a popper that writes its own
+   transform on the WRAPPER, and a slide here would have to know which side of
+   the rail the label came out on. */
+assert.doesNotMatch(shipped.slice(shipped.indexOf('whatsapp-desktop-tooltip')), /translateX/);
+
+/*
+ * The chat list as cards, and the fact that it is a switch rather than a rule.
+ *
+ * WhatsApp already draws a 12px-rounded 484x72 box behind every row and already
+ * leaves the 4px gap -- measured on the live list -- and paints that box from
+ * --WDS-surface-default, which is the very token #pane-side behind it is
+ * painted from. So the card is drawn every time and invisible every time, and
+ * all this does is raise it by one surface.
+ */
+const cards = style.build({ fontSize: 16, chatCards: true });
+assert.match(cards, /:root\[data-wa-cards\] #pane-side \[role="gridcell"\] > div > div \{/);
+/*
+ * And it is hung off a mark as well as left out of the sheet, which is belt as
+ * well as braces and is not redundant. Leaving it out keeps it off a page that
+ * LOADED with the switch off; the mark is what takes it off a page where the
+ * switch has just been MOVED -- a sheet inserted at user origin cannot be taken
+ * out again (measured; see the foot of src/style.js), so without the mark the
+ * cards stayed on until the next restart. That was reported, and it is the same
+ * fault that left a palette on after Default.
+ */
+assert.ok(style.CARDS_MARK, 'the mark is exported, because the client has to write it');
+assert.ok(cards.includes('[' + style.CARDS_MARK + ']'));
+assert.match(cards, /background-color: var\(--WDS-surface-elevated-default\) !important/);
+/* A token and not a colour, so the one switch is right on every palette and on
+   WhatsApp's own two without anything being kept in step. */
+assert.doesNotMatch(cards.slice(cards.indexOf('#pane-side [role="gridcell"]')), /#[0-9a-f]{6}/i);
+/* Nothing is moved: the rounding, the width and the gap are WhatsApp's. */
+const cardRule = cards.slice(cards.indexOf('#pane-side [role="gridcell"]'));
+assert.doesNotMatch(cardRule.slice(0, cardRule.indexOf('}')), /margin|border-radius|height|padding/);
+
+/* And off is OUT of the sheet, not overridden in it. The rightmost compound is
+   a bare `div`, so Chromium starts this at every div on the page and rules it
+   out on the next step -- cheap, but paid on the one list in this client that
+   redraws constantly, and not worth paying for a feature that is switched off.
+   The privacy sheet is the same lesson learnt the expensive way. */
+assert.doesNotMatch(shipped, /#pane-side \[role="gridcell"\]/);
+assert.doesNotMatch(shipped, /data-wa-cards/);
+assert.strictEqual(style.build({ fontSize: 16, chatCards: false }), shipped);
+assert.strictEqual(cards.length > shipped.length, true);
+
 console.log('style checks pass');

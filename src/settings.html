@@ -71,6 +71,26 @@
       </div>
     </div>
 
+    <!-- Chat List. One switch, and it is cosmetic in the way the palettes above
+         it are: WhatsApp already draws a rounded box behind every row and
+         already leaves a gap between them, and paints that box in the very
+         colour of the panel behind it. This lifts it off. -->
+    <div class="section">
+      <div class="section-title">Chat List</div>
+      <div class="card">
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Chats as Cards</div>
+            <div class="row-desc">Raise each chat off the panel instead of running it the full width</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="chatCardsToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
     <!-- Startup & System -->
     <div class="section">
       <div class="section-title">Startup & Tray</div>
@@ -232,6 +252,36 @@
       </div>
     </div>
 
+    <!-- Spelling. The checker has been in the config since 1.7.0 and has never
+         had a control: the only way to turn it off, or to add a language to it,
+         was to edit the file by hand. The list is what Chromium actually ships
+         a dictionary for on this machine, asked of the session rather than
+         written out here -- a name it does not know is not one language
+         missing, it is the whole call failing and nothing checked at all. -->
+    <div class="section">
+      <div class="section-title">Spelling</div>
+      <div class="card">
+        <div class="row">
+          <div class="row-info">
+            <div class="row-title">Check Spelling</div>
+            <div class="row-desc">Underline misspelt words in the message box. Right-click one for suggestions.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="spellcheckToggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="row" id="spellLangRow" style="display:block">
+          <div class="row-info" style="margin-bottom:8px">
+            <div class="row-title">Languages</div>
+            <div class="row-desc" id="spellLangDesc">Ctrl-click to check in more than one</div>
+          </div>
+          <select class="picker" id="spellLangs" multiple size="6" style="width:100%"></select>
+        </div>
+      </div>
+    </div>
+
     <!-- Notifications & Sounds -->
     <div class="section">
       <div class="section-title">Notifications & Sounds</div>
@@ -319,6 +369,7 @@
     const hoverRevealToggle = document.getElementById('hoverRevealToggle');
     const blurContactsToggle = document.getElementById('blurContactsToggle');
     const customCssToggle = document.getElementById('customCssToggle');
+    const chatCardsToggle = document.getElementById('chatCardsToggle');
     const mprisToggle = document.getElementById('mprisToggle');
     const lockBtn = document.getElementById('lockBtn');
     const paletteRow = document.getElementById('paletteRow');
@@ -333,24 +384,38 @@
     const zoomOutBtn = document.getElementById('zoomOut');
     const zoomVal = document.getElementById('zoomVal');
     const closeBtn = document.getElementById('closeBtn');
+    const spellcheckToggle = document.getElementById('spellcheckToggle');
+    const spellLangs = document.getElementById('spellLangs');
+    const spellLangRow = document.getElementById('spellLangRow');
+    const spellLangDesc = document.getElementById('spellLangDesc');
 
     let currentZoom = 1.0;
+    /* Which theme is in force, so the Default swatch can tell "already default,
+       do nothing" from "a palette is on, take it off". */
+    let currentTheme = 'system';
+
+    const MODES = ['system', 'dark', 'light'];
 
     function applyThemeToUI(theme) {
       const chosen = theme || 'system';
+      currentTheme = chosen;
       /* This window is drawn in one of three looks whatever is chosen: a
          palette is for the page, and the client's own windows follow the mode
          underneath it, which the client works out from the palette's own
          background. Anything that is not one of the three is left to the
          attribute the client set when the window was opened. */
-      if (chosen === 'system' || chosen === 'dark' || chosen === 'light') {
+      if (MODES.includes(chosen)) {
         document.documentElement.setAttribute('data-theme', chosen);
       }
       Object.keys(themeButtons).forEach(t => {
         themeButtons[t].classList.toggle('active', t === chosen);
       });
       paletteRow.querySelectorAll('.palette-swatch').forEach(b => {
-        b.classList.toggle('active', b.dataset.theme === chosen);
+        /* The Default swatch stands for all three of the modes above, so it is
+           lit by any of them rather than by a name of its own. */
+        b.classList.toggle('active', b.dataset.theme === 'default'
+          ? MODES.includes(chosen)
+          : b.dataset.theme === chosen);
       });
     }
 
@@ -379,10 +444,13 @@
         hoverRevealToggle.checked = !!data.privacyHoverReveal;
         blurContactsToggle.checked = !!data.privacyBlurContacts;
         customCssToggle.checked = !!data.customCss;
+        chatCardsToggle.checked = !!data.chatCards;
         forceX11Toggle.checked = !!data.forceX11;
         hwAccelToggle.checked = !!data.hardwareAcceleration;
         showCacheSize();
         mprisToggle.checked = !!data.mpris;
+        spellcheckToggle.checked = !!data.spellcheck;
+        drawSpellLanguages(data.spellcheckAvailable || [], data.spellcheckLanguages || '');
         currentZoom = data.zoom || 1.0;
         zoomVal.textContent = Math.round(currentZoom * 100) + '%';
         await refreshLock();
@@ -426,13 +494,28 @@
     });
 
     /* The palettes. Drawn from what the client sent rather than hard-coded
-       here, so adding one to src/themes/palettes.js is the whole change. */
+       here, so adding one to src/themes/palettes.js is the whole change.
+     *
+     * The first swatch is not a palette and is drawn like one on purpose.
+     * Choosing a palette leaves all three buttons above unlit -- which is
+     * correct, none of them is in force any more -- and that reads as "nothing
+     * is selected" rather than as "a palette has taken over", so there was no
+     * visible way back to WhatsApp's own colours. "Default" is that way back,
+     * and it sits in the row the palette was chosen from rather than in the one
+     * above it, because undoing a choice belongs beside the choice.
+     *
+     * It is only ever a way BACK: when no palette is in force it is already
+     * what is in effect, and pressing it does nothing rather than quietly
+     * moving an owner who had asked for Dark onto System.
+     */
+    const DEFAULT_SWATCH = { name: 'Default', bg: '#0b141a', text: '#e9edef', accent: '#00a884' };
+
     function drawPalettes(palettes, current) {
       paletteRow.textContent = '';
-      Object.keys(palettes).forEach(key => {
-        const p = palettes[key];
+      const onAPalette = Object.prototype.hasOwnProperty.call(palettes, current);
+      const swatch = (key, p, active, onPick) => {
         const b = document.createElement('button');
-        b.className = 'palette-swatch' + (current === key ? ' active' : '');
+        b.className = 'palette-swatch' + (active ? ' active' : '');
         b.dataset.theme = key;
         b.style.backgroundColor = p.bg;
         b.style.color = p.text;
@@ -441,13 +524,88 @@
         dot.style.backgroundColor = p.accent;
         b.appendChild(dot);
         b.appendChild(document.createTextNode(p.name));
-        b.addEventListener('click', async () => {
+        b.addEventListener('click', onPick);
+        paletteRow.appendChild(b);
+        return b;
+      };
+
+      swatch('default', DEFAULT_SWATCH, !onAPalette, async () => {
+        if (!Object.prototype.hasOwnProperty.call(palettes, currentTheme)) return;
+        applyThemeToUI('system');
+        if (window.api) await window.api.setTheme('system');
+      }).title = 'WhatsApp’s own colours, and the three above back in force';
+
+      Object.keys(palettes).forEach(key => {
+        swatch(key, palettes[key], current === key, async () => {
           applyThemeToUI(key);
           if (window.api) await window.api.setTheme(key);
         });
-        paletteRow.appendChild(b);
       });
     }
+
+    /* The dictionaries, drawn from what Chromium answered rather than from a
+       list here -- which is the whole point: the set differs by build and by
+       platform, and a language this machine has no dictionary for must not be
+       offerable. Named in words as well as in code, because "pt-BR" is not a
+       language anybody recognises at a glance; Intl does that for nothing. */
+    let languageName = code => code;
+    try {
+      const names = new Intl.DisplayNames(['en'], { type: 'language' });
+      languageName = code => { try { return names.of(code) || code; } catch (e) { return code; } };
+    } catch (e) { /* no Intl.DisplayNames: the codes stand on their own */ }
+
+    const SPELL_LINE = spellLangDesc.textContent;
+    /* What is actually checked in, so that unpicking the last language can be
+       put back without asking the client for an answer it already gave. */
+    let spellPicked = 'en-US';
+    function drawSpellLanguages(available, chosen) {
+      const wanted = new Set(String(chosen).split(',').map(one => one.trim()).filter(Boolean));
+      spellPicked = String(chosen);
+      spellLangs.textContent = '';
+      if (!available.length) {
+        /* Not an error and not worth a disabled control that explains nothing:
+           a build with no dictionaries at all cannot check anything. Hidden
+           through `display` rather than the `hidden` attribute, because the row
+           carries an inline `display: block` -- it has to stack the list under
+           its label where every other row is a flex line -- and an inline
+           declaration beats the one `hidden` relies on. */
+        spellLangRow.style.display = 'none';
+        return;
+      }
+      spellLangRow.style.display = 'block';
+      available.forEach(code => {
+        const option = document.createElement('option');
+        option.value = code;
+        option.textContent = languageName(code) + ' — ' + code;
+        option.selected = wanted.has(code);
+        spellLangs.appendChild(option);
+      });
+      /* A language in the config that this machine has no dictionary for is
+         dropped at startup with a line in the log nobody reads. Said here
+         instead, where the choice was made. */
+      const missing = [...wanted].filter(code => !available.includes(code));
+      spellLangDesc.textContent = missing.length
+        ? 'No dictionary here for ' + missing.join(', ') + ', so it is not checked'
+        : SPELL_LINE;
+    }
+
+    spellcheckToggle.addEventListener('change', async () => {
+      if (window.api) await window.api.setSetting('behaviour.spellcheck', spellcheckToggle.checked);
+    });
+
+    spellLangs.addEventListener('change', async () => {
+      const picked = [...spellLangs.selectedOptions].map(option => option.value);
+      /* Never an empty list: it turns the checker off entirely, which is what
+         the switch above is for, and leaves this control looking broken. The
+         last language cannot be unpicked -- it is put straight back. */
+      if (!picked.length) {
+        drawSpellLanguages([...spellLangs.options].map(option => option.value), spellPicked);
+        return;
+      }
+      spellPicked = picked.join(',');
+      spellLangDesc.textContent = SPELL_LINE;
+      if (window.api) await window.api.setSetting('behaviour.spellcheck-languages', spellPicked);
+    });
 
     /* The size is asked for rather than kept: it grows while the window is
        open, and a number from when it was opened is a number that is wrong. */
@@ -504,6 +662,7 @@
       [hoverRevealToggle, 'privacy.hover-reveal'],
       [blurContactsToggle, 'privacy.blur-contacts'],
       [customCssToggle, 'view.custom-css'],
+      [chatCardsToggle, 'view.chat-cards'],
       [mprisToggle, 'behaviour.mpris'],
     ];
     privacyRows.forEach(([el, key]) => {

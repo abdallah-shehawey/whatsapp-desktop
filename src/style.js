@@ -678,6 +678,157 @@ footer [data-testid="popup_panel"] {
 @keyframes whatsapp-desktop-panel { from { opacity: 1; } to { opacity: 1; } }`;
 
 /*
+ * Profile, in Settings, and the one panel there that arrives with no motion.
+ *
+ * "لما اجي افتح ال profile في السيتنج مش بتفتح بانميشن مع ان باقي الحجات بتفتح
+ * بانميشن عادي" -- and that is exactly what it is. Measured on the live page,
+ * watching what each row of Settings mounts:
+ *
+ *   Chats, Notifications, Privacy   a <div> carrying the class
+ *                                   `velocity-animating` and an inline
+ *                                   transform: WhatsApp slides them with
+ *                                   Velocity, from translateX(100%) to 0.
+ *                                   Sampled every frame: 336px at 1ms, 104 at
+ *                                   54, 20 at 145, under a pixel by 248 -- an
+ *                                   exponential ease-out over about 250ms.
+ *
+ *   Profile                         a <div>[tabindex="-1"] inside
+ *                                   [data-testid="drawer-left"], with
+ *                                   animation-name: none and no transform at
+ *                                   any point. It is simply there.
+ *
+ * Two different code paths inside WhatsApp, and only one of them was given the
+ * slide. So the missing half is written here, to the numbers above, and the
+ * panel ends up indistinguishable from its own siblings.
+ *
+ * This one CAN be a CSS animation, which is what makes it four lines instead of
+ * the Web Animations machinery the right-hand drawer needs next door. The
+ * difference is the lifetime: that drawer is never unmounted, so an animation
+ * on it plays once and never again -- measured -- whereas this panel is
+ * replaced on every open. Each open is a new element, and a new element gets a
+ * fresh animation for nothing.
+ *
+ * The selector is the child chain and not a descendant one, deliberately:
+ * `[data-testid="drawer-left"] span > div` matches four elements on the page
+ * and three of them are furniture INSIDE the panel, which would animate each
+ * part of it separately. The chain below matches exactly one -- measured, 1 of
+ * 1, the panel itself -- and its rightmost compound is still cheap because a
+ * div whose parent is a span is rare.
+ *
+ * translateX is a percentage here and that is safe, which it is not in the
+ * drawer next door: this panel is mounted at its full 511px in the frame the
+ * observer sees it, so there is no width for the percentage to grow against.
+ *
+ * And the side is the interface's. transform knows nothing about direction, so
+ * an Arabic interface -- where this drawer is on the other edge of the window
+ * -- would otherwise have the panel slide in from the wrong side, which is the
+ * same glitch the right-hand drawer was fixed for.
+ */
+const SETTINGS_PANEL = `
+[data-testid="drawer-left"] > div > span > div {
+  animation: whatsapp-desktop-settings 250ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+html[dir="rtl"] [data-testid="drawer-left"] > div > span > div {
+  animation-name: whatsapp-desktop-settings-rtl !important;
+}
+@keyframes whatsapp-desktop-settings {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes whatsapp-desktop-settings-rtl {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}`;
+
+/*
+ * The label that comes up beside the nav rail -- "You", "Chats", "Status".
+ *
+ * It pops. There is no motion on it at all: WhatsApp declares `transition:
+ * opacity` on the box and then mounts it already opaque, so the transition has
+ * no starting value to run from and the label simply appears, which is what
+ * "بتفتح بتعليقه" describes.
+ *
+ * Same reasoning as the settings panel above -- the tooltip is built on hover
+ * and taken out again on leave (measured: 11 elements added to the page when
+ * the pointer arrives, and gone when it goes), so every appearance is a fresh
+ * element and a plain CSS animation runs every time.
+ *
+ * `[role="tooltip"]` rather than the class WhatsApp draws it with. The class is
+ * generated -- `.xpip370` today -- and the role is in the HTML specification
+ * and on the element already. One attribute selector, matching the one tooltip
+ * that is up at a time.
+ *
+ * The transform is scale and not a slide: the box is positioned by a popper
+ * that writes its own `transform: translate(...)` on the WRAPPER, and this
+ * animates the tooltip INSIDE that wrapper, so the two compose instead of
+ * fighting. A slide here would have to know which side of the rail the label
+ * came out on; growing from 94% does not.
+ */
+const TOOLTIP = `
+[role="tooltip"] {
+  animation: whatsapp-desktop-tooltip 120ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+@keyframes whatsapp-desktop-tooltip {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: none; }
+}`;
+
+/*
+ * The chat list as cards, which is one declaration because WhatsApp has already
+ * done the work.
+ *
+ * Measured on the live list: every row is a [role="row"] 76px tall holding a
+ * [role="gridcell"], and inside that a div 484x72 that ALREADY has
+ * `border-radius: 12px`. The gap is there too -- 76 against 72. What there is
+ * not is any contrast: that rounded box is painted
+ *
+ *   .x1280gxy { background-color: var(--WDS-surface-default); }
+ *
+ * and #pane-side behind it is painted from the very same token, so the card is
+ * drawn every time and is invisible every time. So this does not build a card.
+ * It paints the one WhatsApp draws with the surface one step up, and the
+ * rounding, the width and the gap are all WhatsApp's own -- which is why
+ * nothing here touches a margin, a radius or a height, and why the list goes on
+ * scrolling exactly as it did.
+ *
+ * `--WDS-surface-elevated-default` and not a colour: on a palette that is the
+ * palette's card (src/themes.js writes it), and with no palette it is
+ * WhatsApp's own #1D1F1F in dark and its own light grey in light. One switch,
+ * right in every theme, with nothing to keep in step.
+ *
+ * AND IT IS ONLY IN THE SHEET WHEN THE SWITCH IS ON, which is the one thing
+ * about this rule that is not cosmetic. The rightmost compound is a bare `div`,
+ * so Chromium -- which matches right to left -- starts this at every div on the
+ * page and rules it out on the next step, where the parent must also be a div
+ * under a [role="gridcell"]. That is cheap but it is not nothing, and it is
+ * being paid on the one list in this client that redraws constantly. The
+ * privacy sheet next door is the same lesson learnt the expensive way (see
+ * src/privacy.js): a rule for a feature that is switched off should not be in
+ * the page at all. The sheet is rebuilt when the switch moves, so it is not.
+ *
+ * There is no selector that would let this be unconditional, which is worth
+ * writing down so nobody goes looking: the card carries no attribute of its own
+ * and its classes are generated -- x1280gxy is "has a surface-default
+ * background", and #pane-side itself wears it.
+ *
+ * AND IT IS ALSO HUNG OFF AN ATTRIBUTE, which is belt as well as braces and is
+ * not redundant. Leaving it out of the sheet is what keeps it off a page that
+ * was loaded with the switch off; the attribute is what takes it off a page
+ * where the switch has just been MOVED. Those are two different moments,
+ * because a sheet inserted at user origin cannot be taken out of the page
+ * again -- measured, and written down at the foot of this file. Without the
+ * attribute, turning the cards off left them on until the next restart, which
+ * is exactly what was reported, and it is the same fault that left a palette
+ * on after Default. See the note in src/themes.js.
+ */
+const CARDS_MARK = 'data-wa-cards';
+
+const CHAT_CARDS = `
+:root[${CARDS_MARK}] #pane-side [role="gridcell"] > div > div {
+  background-color: var(--WDS-surface-elevated-default) !important;
+}`;
+
+/*
  * Aliasing, which is how the desktop font is imposed now.
  *
  * Three mechanisms were measured against each other on a live session:
@@ -826,8 +977,16 @@ html {
  * That was the whole shape of the conversation-text size that lived here until
  * 2026-09-03, when it came out of the settings for good.
  */
-const build = ({ fontSize }, before) => {
-  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION, PANEL_MOUNT, ARABIC_CLIP, MESSAGE_BIDI, BUBBLE_MIN, ICON_FIT];
+const build = ({ fontSize, chatCards }, before) => {
+  const rules = [CONVERSATION_SCROLL, DRAWER_MOTION, PANEL_MOUNT, SETTINGS_PANEL, TOOLTIP,
+    ARABIC_CLIP, MESSAGE_BIDI, BUBBLE_MIN, ICON_FIT];
+
+  /* Switched off is switched OUT, not overridden: see the note on CHAT_CARDS.
+     This is also why the sheet still takes what the last one said -- turning
+     the cards off has to leave a page with no rule rather than a page carrying
+     a rule that undoes one, and that only works because the whole sheet is
+     rebuilt and re-inserted rather than patched. */
+  if (chatCards) rules.push(CHAT_CARDS);
 
   /* There is no font rule here any more, and that is the point. Forcing the
      desktop font with `* { font-family: X !important }` at user origin works and
@@ -848,4 +1007,4 @@ const build = ({ fontSize }, before) => {
   return rules.join('\n');
 };
 
-module.exports = { build, stack, fontFaces };
+module.exports = { build, stack, fontFaces, CARDS_MARK };

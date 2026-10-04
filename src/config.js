@@ -41,6 +41,7 @@ const DEFAULTS = {
      know why, and it should be a thing somebody turned on. Saving the file
      redraws the page -- see watchCustomCss in src/main.js. */
   'view.custom-css': false,
+  'view.chat-cards': false,        // draw each chat in the list as a raised card
   /* A font per script, and a switch per script to say whether the desktop's own
      is being followed. Two switches and not one, because the two questions are
      genuinely separate: an owner who wants a different Arabic face has no
@@ -240,6 +241,9 @@ class Config {
       '# Read custom.css, in this directory, into the page -- last, so it wins',
       '# over everything the client draws. Saving that file redraws the page.',
       `custom-css = ${v['view.custom-css']}`,
+      '# Draw each chat in the list as a card of its own, raised off the panel',
+      '# behind it, rather than as a row running the full width of it.',
+      `chat-cards = ${v['view.chat-cards']}`,
       '',
       '[fonts]',
       '# One switch per script. On: that script is drawn in the desktop font,',

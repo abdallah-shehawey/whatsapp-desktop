@@ -30,6 +30,20 @@ const settings = () => ({
   theme: 'dark', autostart: true, closeToTray: true, minimizeToTray: false,
   notifyEnabled: true, notifySound: true, outgoingSound: false,
   zoom: 1.0, fontSize: 16, font: 'PoetsenOne',
+  chatCards: false,
+  /* The client sends the palettes themselves so the window can draw each swatch
+     in the colours it would apply. dark and light are deliberately NOT among
+     them -- they are two of the three modes above the row. */
+  palettes: {
+    oled: { name: 'OLED Black', bg: '#000000', text: '#f5f5f5', accent: '#00a884' },
+    nord: { name: 'Nord', bg: '#2e3440', text: '#eceff4', accent: '#88c0d0' },
+  },
+  spellcheck: true,
+  spellcheckLanguages: 'en-US',
+  /* What Chromium answers with on the machine this is read from -- three of
+     its own, and deliberately no ar: it ships no Arabic dictionary, and the
+     window has to say so rather than offer one. */
+  spellcheckAvailable: ['en-US', 'en-GB', 'fr'],
   fonts: {
     desktop: 'PoetsenOne',
     systemArabic: 'Noto Naskh Arabic',
@@ -51,6 +65,11 @@ const node = id => ({
   checked: false, disabled: false, value: '', textContent: '', hidden: false,
   style: {}, dataset: {}, options: [],
   classes: new Set(),
+  selected: false,
+  /* A <select multiple> answers with the options that are picked, and the
+     spelling list reads exactly that -- so the stub has to have it, or a
+     control that is wired to nothing would still pass. */
+  get selectedOptions() { return this.options.filter(option => option.selected); },
   /* Assigning className is how a built element gets its classes, and the row
      below reads them back. */
   set className(value) { this.classes = new Set(String(value).split(/\s+/).filter(Boolean)); },
@@ -104,7 +123,19 @@ const open = async (file, answer) => {
 
   global.document = {
     getElementById: id => nodes.get(id) || null,
-    createElement: () => node('created'),
+    /* Built elements get their classList wired up like the ones above, because
+       the palette row builds its swatches and then has them marked active --
+       a stub that left `owner` off would throw the moment a theme was picked. */
+    createElement: () => {
+      const el = node('created');
+      el.classList.owner = el;
+      return el;
+    },
+    /* The swatches carry their name as a text node. Nothing reads it back, but
+       a document without this throws inside drawPalettes, and that throw is
+       swallowed by the window's own try/catch -- so the symptom is every
+       control BELOW the palettes silently never being set up. */
+    createTextNode: text => ({ text }),
     documentElement: { setAttribute() {}, style: { setProperty() {} } },
   };
   global.window = {
@@ -172,6 +203,101 @@ const open = async (file, answer) => {
     w.el('autostartToggle').checked = false;
     await w.el('autostartToggle').fire('change');
     assert.deepStrictEqual(w.called.pop(), ['autostart', false]);
+
+    /*
+     * The way back from a palette.
+     *
+     * Choosing a palette leaves all three buttons above unlit -- correctly,
+     * none of them is in force -- and that reads as "nothing is selected"
+     * rather than "a palette has taken over", so there was no visible way back
+     * to WhatsApp's own colours at all. The first swatch in the row is it.
+     */
+    const swatches = () => w.el('paletteRow').options;
+    const swatch = key => swatches().find(b => b.dataset.theme === key);
+    const lit = () => swatches().filter(b => b.classes.has('active')).map(b => b.dataset.theme);
+
+    assert.deepStrictEqual(swatches().map(b => b.dataset.theme), ['default', 'oled', 'nord'],
+                           'Default leads the row, then the palettes the client sent');
+    /* The window opened on `dark`, which is a mode and not a palette. */
+    assert.deepStrictEqual(lit(), ['default'], 'with no palette on, Default is what is lit');
+
+    await swatch('oled').fire('click');
+    assert.deepStrictEqual(w.called.pop(), ['theme', 'oled']);
+    assert.deepStrictEqual(lit(), ['oled'], 'and Default goes out when a palette comes on');
+    for (const id of ['themeSystem', 'themeDark', 'themeLight']) {
+      assert.ok(!w.el(id).classList.contains('active'),
+                id + ' is not in force while a palette is -- which is what Default is for');
+    }
+
+    await swatch('default').fire('click');
+    assert.deepStrictEqual(w.called.pop(), ['theme', 'system'], 'Default takes the palette off');
+    assert.deepStrictEqual(lit(), ['default']);
+    assert.ok(w.el('themeSystem').classList.contains('active'), 'and the modes are back in force');
+
+    /* Pressing it again does nothing. It is a way BACK and not a fourth mode:
+       an owner sitting on Dark who presses it should not be moved to System. */
+    await w.el('themeDark').fire('click');
+    assert.deepStrictEqual(w.called.pop(), ['theme', 'dark']);
+    const quiet = w.called.length;
+    await swatch('default').fire('click');
+    assert.strictEqual(w.called.length, quiet, 'already default: nothing was asked of the client');
+    assert.ok(w.el('themeDark').classList.contains('active'), 'and Dark is left exactly as it was');
+
+    /* The chat list as cards. The rule is only in the sheet while this is on --
+       see CHAT_CARDS in src/style.js -- so the switch has to reach the client
+       rather than toggle a class in the page. */
+    w.el('chatCardsToggle').checked = true;
+    await w.el('chatCardsToggle').fire('change');
+    assert.strictEqual(w.last('view.chat-cards'), true);
+
+    /* The spell checker, which had a config key from 1.7.0 and no control at
+       all until now -- the only way to turn it off was to edit the file. */
+    w.el('spellcheckToggle').checked = false;
+    await w.el('spellcheckToggle').fire('change');
+    assert.strictEqual(w.last('behaviour.spellcheck'), false);
+
+    /* The list is Chromium's, not one written into the window: three offered,
+       the one in the config picked. */
+    const offered = w.el('spellLangs').options;
+    assert.deepStrictEqual(offered.map(o => o.value), ['en-US', 'en-GB', 'fr'],
+                           'every dictionary the client was told about, and no others');
+    assert.deepStrictEqual(offered.filter(o => o.selected).map(o => o.value), ['en-US'],
+                           'and the one being checked in is the one that is picked');
+    assert.match(offered[0].textContent, /en-US/, 'named by its code');
+    assert.match(offered[0].textContent, /English/, 'and in words, because a code is not a language');
+
+    offered.find(o => o.value === 'fr').selected = true;
+    await w.el('spellLangs').fire('change');
+    assert.strictEqual(w.last('behaviour.spellcheck-languages'), 'en-US,fr');
+
+    /* Unpicking the last one is refused rather than saved: an empty list turns
+       the checker off entirely, which is what the switch above is for, and
+       would leave this control looking as though it had broken. */
+    const before = w.saved.length;
+    offered.forEach(o => { o.selected = false; });
+    await w.el('spellLangs').fire('change');
+    assert.strictEqual(w.saved.length, before, 'nothing was saved');
+    assert.deepStrictEqual(w.el('spellLangs').options.filter(o => o.selected).map(o => o.value),
+                           ['en-US', 'fr'], 'and the languages are put back');
+  }
+
+  /* A machine with no dictionaries at all: the list is not drawn, rather than
+     drawn empty beside a description of how to use it. */
+  {
+    const w = await open('settings.html', { ...settings(), spellcheckAvailable: [] });
+    assert.strictEqual(w.el('spellLangs').options.length, 0);
+    assert.strictEqual(w.el('spellLangRow').style.display, 'none');
+  }
+
+  /* And a language in the config that this machine has no dictionary for is
+     said here, in the window, rather than only in a log nobody reads --
+     setSpellCheckerLanguages drops the whole list over one name it does not
+     know, so "ar" silently means nothing is checked at all. */
+  {
+    const w = await open('settings.html', { ...settings(), spellcheckLanguages: 'en-US,ar' });
+    assert.match(w.el('spellLangDesc').textContent, /No dictionary here for ar/);
+    assert.deepStrictEqual(w.el('spellLangs').options.filter(o => o.selected).map(o => o.value),
+                           ['en-US'], 'and what it can check in is still picked');
   }
 
   /* Nothing in this window sizes a conversation any more. `view.chat-font-size`
