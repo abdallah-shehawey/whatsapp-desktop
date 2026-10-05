@@ -2528,6 +2528,24 @@ const quit = () => {
 const wireIpc = () => {
   ipcMain.on('wa:log', (event, message) => console.log('page: %s', message));
 
+  /* What the page is actually playing, which is the only thing that should put
+     a card in the notification centre. Anything that is not a note the user
+     chose to listen to never gets here -- the page settles that, where the
+     element is (see watchCard in src/page/inject.js). */
+  ipcMain.on('wa:media', (event, info) => {
+    if (!mpris) return;
+    const state = info && info.state;
+    if (state === 'playing' || state === 'paused') {
+      mpris.present({
+        state: state === 'playing' ? 'Playing' : 'Paused',
+        durationSec: info.durationSec,
+        positionSec: info.positionSec,
+      });
+      return;
+    }
+    mpris.withdraw();
+  });
+
   /* The lock screen's own window, which is the only thing that can ask. */
   ipcMain.handle('lock:unlock', (event, passcode) => {
     try {

@@ -93,6 +93,46 @@ sent.length = 0;
 service.setPlaybackStatus('Playing');
 check('a status that has not changed is not announced again', sent.length, 0);
 
+/*
+ * Whether there is a card at all, which is CanPlay and not the status.
+ *
+ * gnome-shell builds the list it draws with
+ * `filter(player => player.canPlay)` and reads PlaybackStatus only to pick the
+ * button -- so a player that answers CanPlay true from the moment it registers
+ * is a card in the notification centre for the life of the process. That was
+ * the bug: a WhatsApp card sitting there after a call that was answered on the
+ * phone, reading the placeholder title, with nothing ever having played.
+ */
+const canPlayNow = () =>
+  service.playerProperties().find(p => p[0] === 'CanPlay')[1][1];
+check('nothing is loaded, so there is no card', canPlayNow(), false);
+
+sent.length = 0;
+service.present({ state: 'Playing', durationSec: 12, positionSec: 0 });
+check('a note that plays raises one', canPlayNow(), true);
+check('and the desktop is told', sent.length, 1);
+check('with CanPlay in the message, which is what adds the card',
+      !!(sent[0].body && sent[0].body[1].find(p => p[0] === 'CanPlay')), true);
+check('and the metadata beside it, which is read when the card is built',
+      !!(sent[0].body && sent[0].body[1].find(p => p[0] === 'Metadata')), true);
+
+/* Paused is still loaded: there is something for a media key to reach and
+   something worth drawing a Play button on. */
+service.present({ state: 'Paused', positionSec: 4 });
+check('a note that is only paused keeps its card', canPlayNow(), true);
+check('and the card says so', service.playbackStatus, 'Paused');
+
+sent.length = 0;
+service.withdraw();
+check('the note ends and the card goes', canPlayNow(), false);
+check('the status goes with it', service.playbackStatus, 'Stopped');
+check('and the desktop is told once', sent.length, 1);
+check('nothing is left reading a position', service.positionSec, 0);
+
+sent.length = 0;
+service.withdraw();
+check('withdrawing what is already gone is not news', sent.length, 0);
+
 /* Raise and Quit, which are what the card's own buttons are. */
 const root = exported.interfaces['org.mpris.MediaPlayer2'];
 root.Raise([], () => {});

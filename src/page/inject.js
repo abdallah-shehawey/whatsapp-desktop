@@ -2197,6 +2197,51 @@ const start = ({ send, on }) => {
     });
   };
 
+  /*
+   * And the client's OWN card, which none of the above touches.
+   *
+   * Everything up to here is about the player CHROMIUM registers. This process
+   * registers one too (src/mpris.js), it is what a media key is routed to, and
+   * it answered CanPlay true from the moment it took its name -- so the shell
+   * drew a card for it from launch and never had a reason to take it down. The
+   * report was a call: the phone was answered, and a WhatsApp card was still
+   * sitting in the notification centre reading "WhatsApp Voice Message", which
+   * is the placeholder it was constructed with. Nothing had played. It had been
+   * there all along.
+   *
+   * So the card is told what is actually happening, from the one place that
+   * knows: the element. conversationAudio() is what keeps a CALL out of it --
+   * it refuses a looping element and a stream, which is a ring and a call
+   * respectively -- so a call raises no card and the ring that woke this report
+   * never could have.
+   *
+   * The element is asked ONCE, here, and not again in the handlers: `emptied`
+   * fires with the src already taken off, so a test made inside it would call
+   * the note it is reporting the end of something else and say nothing.
+   */
+  const watchCard = el => {
+    if (el.__waCard || !conversationAudio(el)) return;
+    el.__waCard = true;
+    const tell = state => {
+      const length = Number(el.duration), at = Number(el.currentTime);
+      send('media', {
+        state,
+        durationSec: isFinite(length) ? length : 0,
+        positionSec: isFinite(at) ? at : 0,
+      });
+    };
+    el.addEventListener('play', () => tell('playing'));
+    /* A note played out arrives as a pause before it arrives as `ended` -- the
+       same measurement the recycle above rests on -- so the end is read off the
+       element rather than waited for, and the card goes at the end instead of
+       sitting there offering to resume something that has finished. */
+    el.addEventListener('pause', () => tell(atEnd(el) ? 'stopped' : 'paused'));
+    el.addEventListener('ended', () => tell('stopped'));
+    /* The resource going away, which is how a paused note ends when the recycle
+       above runs: the card follows Chromium's out rather than outliving it. */
+    el.addEventListener('emptied', () => tell('stopped'));
+  };
+
   /* Both ways a page can make a sound, because which one WhatsApp uses is not
      worth depending on: it has played its tones through an <audio> element for
      years, and the tone this client raises for its own banners goes through
@@ -2213,6 +2258,15 @@ const start = ({ send, on }) => {
         const back = restoring.get(this);
         if (back) return back.then(() => play.apply(this, args));
         if (muted(this)) return Promise.resolve();
+        /* The card goes on FIRST, and the order is load-bearing rather than
+           tidy. Listeners for one event on one element run in the order they
+           were added, and watchPlayback's `pause` handler RECYCLES the element
+           -- which empties it, which is the card's own cue that the note is
+           gone. Added the other way round, the card hears the teardown and then
+           the pause, and settles on "paused": the resource is gone, nothing can
+           resume, and the card sits in the notification centre anyway. Which is
+           the bug this pair was written to answer. */
+        watchCard(this);
         watchPlayback(this);
         return play.apply(this, args);
       };

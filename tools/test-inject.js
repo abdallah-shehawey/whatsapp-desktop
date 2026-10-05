@@ -201,6 +201,7 @@ const document = {
 const handlers = new Map();                 // channel -> what the page listens with
 
 let inviteFallbacks = [];                   // invites it gave up on and handed back
+let cardReports = [];                       // what it told the desktop's media card
 let openReports = [];                       // what the page said was on screen
 let unreadReports = [];                     // and which chats it said were unread
 let countReports = [];                      // and how many messages, for the badge
@@ -214,6 +215,7 @@ const send = (channel, payload) => {
   else if (channel === 'unread-chats') unreadReports.push(payload);
   else if (channel === 'unread-count') countReports.push(payload);
   else if (channel === 'invite-unresolved') inviteFallbacks.push(payload);
+  else if (channel === 'media') cardReports.push(payload);
 };
 const on = (channel, fn) => handlers.set(channel, fn);
 const push = (channel, payload) => {
@@ -247,7 +249,13 @@ class HTMLMediaElement {
     this.loads = 0;
     this.handlers = {};
   }
-  play() { played.push('audio'); this.paused = false; this.ended = false; return Promise.resolve(); }
+  play() {
+    played.push('audio');
+    this.paused = false;
+    this.ended = false;
+    this.fire('play');
+    return Promise.resolve();
+  }
   pause() { this.paused = true; this.fire('pause'); }
   /* Playing out to the end, in the order Chromium really does it -- measured
      in Electron: the position is on the duration and `ended` already answers
@@ -265,7 +273,11 @@ class HTMLMediaElement {
   getAttribute(name) { return name === 'src' ? (this.src || null) : null; }
   setAttribute(name, value) { if (name === 'src') this.src = value; }
   removeAttribute(name) { if (name === 'src') this.src = ''; }
-  load() { this.loads++; }
+  /* The load algorithm on an element with no resource empties it, and `emptied`
+     is what says so. That is the event the media card leaves on when a paused
+     note is recycled -- measured in Chromium, and missing here until the card
+     needed it. */
+  load() { this.loads++; if (!this.src) this.fire('emptied'); }
   addEventListener(type, fn) { (this.handlers[type] = this.handlers[type] || []).push(fn); }
   removeEventListener(type, fn) {
     const list = this.handlers[type];
@@ -882,6 +894,60 @@ const check = (label, got, want) => {
   ring.play();
   ring.pause();
   check('and so is a call ringing', ring.loads, 0);
+
+  /*
+   * And what the CLIENT'S OWN card is told, which is a different player from
+   * the one every check above is about.
+   *
+   * That one is Chromium's. This process registers an MPRIS player of its own
+   * and it answered CanPlay true from the moment it took its name -- and
+   * gnome-shell draws a card for every player whose canPlay is true, reading
+   * PlaybackStatus only to pick the button. So the client put a card in the
+   * notification centre at launch and left it there, carrying the placeholder
+   * title it was constructed with. The report was a call answered on the phone
+   * with a WhatsApp card still sitting there; measured on the live bus,
+   * PlaybackStatus "Paused", CanPlay true, title "WhatsApp Voice Message",
+   * Position 0, and nothing had ever played.
+   */
+  cardReports = [];
+  const ringAgain = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/ringing-2');
+  ringAgain.loop = true;
+  ringAgain.play();
+  ringAgain.pause();
+  check('a call ringing raises no card at all', cardReports.length, 0);
+
+  cardReports = [];
+  const streamed = new sandbox.HTMLMediaElement('');
+  streamed.srcObject = {};
+  streamed.play();
+  check('and neither does the call itself', cardReports.length, 0);
+
+  cardReports = [];
+  const carded = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/carded');
+  carded.duration = 8.4;
+  carded.play();
+  check('a voice note raises one', cardReports.map(r => r.state).join(','), 'playing');
+  check('and it carries how long the note is', cardReports[0].durationSec, 8.4);
+
+  /* Paused, and then the resource taken away by the recycle above -- so the
+     client's card leaves at the same moment Chromium's does, which is what the
+     "hide the controls when it is paused" setting already meant. */
+  cardReports = [];
+  carded.currentTime = 2.5;
+  carded.pause();
+  check('pausing it reports the pause and then the end of the resource',
+        cardReports.map(r => r.state).join(','), 'paused,stopped');
+
+  cardReports = [];
+  const played2 = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/played-out');
+  played2.duration = 4;
+  played2.play();
+  cardReports = [];
+  played2.playOut();
+  /* The end arrives as a pause before it arrives as `ended`, so the card is
+     taken down by reading the element rather than by waiting for the event --
+     otherwise it would sit there offering to resume a note that has finished. */
+  check('a note played out takes its card down', cardReports[0].state, 'stopped');
 
   /* ------------------------------------------ opening a chat from a banner */
 
