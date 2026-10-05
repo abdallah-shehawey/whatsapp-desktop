@@ -25,13 +25,12 @@ if (process.argv.includes('--wa-popup')) {
   const on = (channel, handler) =>
     ipcRenderer.on('wa:' + channel, (event, payload) => handler(payload));
 
-  /* WhatsApp calls window.focus() when a notification is clicked, and on a window
-     sitting hidden in the tray that does nothing at all -- the window has to be
-     shown again first, which only the app can do. */
-  const nativeFocus = window.focus.bind(window);
+  /* The app owns top-level focus, including restoring a hidden window and
+     waiting for the notification centre's grab to close. Calling native focus
+     here as well bypasses that coordination: Wayland can reject it and post
+     "WhatsApp is ready" before the app gets a chance to show the window. */
   window.focus = function () {
     send('focus-request', null);
-    return nativeFocus();
   };
 
   page.start({ send, on });

@@ -188,30 +188,27 @@ if (fontConfigFile) {
 
 /* -------------------------------------------------------------- switches */
 
-/* Wayland natively rather than through XWayland: it is the difference between
-   crisp text on a fractional scale and a blurry upscale, and between smooth
-   trackpad scrolling and stepped wheel events.
- *
- * Asked of the socket as well as of the session type, and this matters on
- * somebody else's machine rather than on the one it was written on.
- * XDG_SESSION_TYPE is set by the login session and inherited; a client started
- * from anything that does not pass the whole environment on -- a launcher, a
- * systemd unit, a terminal opened inside something else -- sees it missing,
- * falls through to X11, and lands on XWayland. Nothing announces that: the
- * client simply looks softer and scrolls in steps, which is exactly the report
- * this switch exists to prevent. WAYLAND_DISPLAY is set by the compositor
- * itself, so between the two the answer survives the trip. */
+/* Electron selects its display backend before loading this file and records
+   the result in ozone-platform. Read that choice, not the session environment:
+   a Wayland session can still be running this window through XWayland. */
 const chromiumFeatures = ['MemoryPurgeOnFreezeLimit', 'WebRTCPipeWireCapturer'];
-/* The escape hatch for the compositor where native Wayland is the worse of the
-   two -- a screen share that comes out black, a window that will not come up.
-   Everything above is still the right default; this is for the machine where it
-   is not, and it has to be reachable without rebuilding anything. */
-const forceX11 = config.get('system.force-x11') === true ||
-                 process.argv.includes('--ozone-platform=x11');
-const onWayland = !forceX11 && (process.env.XDG_SESSION_TYPE === 'wayland' ||
-                                !!process.env.WAYLAND_DISPLAY);
+const ozonePlatform = app.commandLine.getSwitchValue('ozone-platform');
+/* process.argv retains the user's arguments, whereas commandLine also has
+   Electron's automatically selected backend. An explicit launch option wins
+   over the saved preference. */
+const explicitOzonePlatform = process.argv.some(arg => arg.startsWith('--ozone-platform='));
+const forceX11 = explicitOzonePlatform ? ozonePlatform === 'x11' :
+                 config.get('system.force-x11') === true;
+if (forceX11 && ozonePlatform !== 'x11') {
+  /* Appending a switch here is too late: the browser would keep Wayland while
+     its child processes were told X11. Pass it to a fresh process instead. The
+     new process sees the explicit flag and cannot enter this branch again. */
+  console.log('restarting once to apply system.force-x11');
+  app.relaunch({ args: process.argv.slice(1).concat('--ozone-platform=x11') });
+  app.exit(0);
+}
+const onWayland = ozonePlatform === 'wayland';
 if (onWayland) {
-  app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
   chromiumFeatures.push('WaylandWindowDecorations');
 }
 /* Said out loud, because the difference is one a user reports as "it looks
@@ -490,7 +487,11 @@ const traceWindowState = () => {
      right, one open too late. */
   win.on('show', () => set({ visible: true, minimized: false }));
   win.on('hide', () => set({ visible: false, focused: false }));
-  win.on('minimize', () => set({ minimized: true }));
+  win.on('minimize', () => {
+    raising.gen++;
+    cancelShellRaise();
+    set({ minimized: true });
+  });
   win.on('restore', () => set(win.isFocused() ? { minimized: false } : {}));
   /* Having the focus settles the dock: a window in it does not hold the
      keyboard, whatever a `restore` that never arrived implies. */
@@ -499,6 +500,9 @@ const traceWindowState = () => {
     /* The one answer a raise is waiting for. */
     raising.took = true;
     set({ minimized: false, focused: true });
+    /* Finish on the event itself: the owner may Alt-Tab away again before the
+       polling timer runs, and that must not fetch the window back later. */
+    if (win.isFocused() && shellRaiseDone) shellRaiseDone();
     /* The window being used is what the idle timeout measures, and the focus
        coming back is the clearest sign of it. Without this, a client in the
        foreground all afternoon locks itself anyway. */
@@ -725,100 +729,85 @@ const showWindow = (why, measure = true) => {
   raiseWindow(raiseStrategy, why, raiseMeasured && measure);
 };
 
-/*
- * The same window, when the shell is already fetching it.
+/* A notification click belongs to the shell until its modal grab closes.
+ * Give an already mapped window time to arrive without remapping it. Hidden
+ * and minimized windows need an immediate raise, but they get the same long
+ * check: the ordinary 250ms measurement would mistake the grab for a failed
+ * strategy and remember the wrong answer for the rest of the session.
  *
- * Clicking a notification on GNOME activates the application it came from. The
- * shell matches the banner to this client by the desktop-entry hint that goes
- * out with every one of them -- read off the wire, see src/sound.js -- and
- * brings the window forward itself, with an authority no client has. So by the
- * time a click reaches this process the window is already on its way, and
- * raising it again is the re-map: taken down and put back up for nothing. That
- * is the whole of "the client closes and reopens itself when I open a message
- * out of the notification centre".
- *
- * Which is also why it did not happen with the banner still on the screen, and
- * why the report sounds like two bugs. A banner is clicked straight and the
- * window still holds the keyboard, so showWindow finds it in front and stops.
- * Opening the notification centre is a modal grab -- the same grab that made the
- * tray read wrong, see FOCUS_GRACE_MS -- and it takes the focus before the click
- * is ever made. From in here, a window that has lost the focus to the shell and
- * a window standing behind the editor are the same window.
- *
- * They cannot be told apart, so the shell is given its moment rather than
- * second-guessed: nothing is asked for, the window is watched, and it is raised
- * the usual way only if it has not arrived by then. Nothing is asked for because
- * an ask that is refused is what posts "WhatsApp is ready" and withdraws it a
- * frame later (see remapWindow), and this is the one path where what is being
- * waited for is what usually happens.
- *
- * The waiting costs nothing, which is the part that is worth saying plainly
- * because it does not read that way. Measured here on GNOME 50, from the click
- * reaching this process to the window holding the keyboard: 905ms and 1206ms
- * with nothing asked for at all, against 1.0s and 2.1s for the same two clicks
- * raised the old way -- and those two flickered. Nothing the client does brings
- * the window sooner, because nothing can take the focus while the shell's grab
- * is up; the second is the notification centre closing and the shell handing
- * the window over, and it is the shell's to spend. The conversation does not
- * wait on any of it: the click goes to the page the moment it lands, so the
- * chat has changed under the window before the window arrives.
- *
- * Nor is the ceiling a wait anyone sits through. A desktop that fetches the
- * window is answered by the window arriving, and one that does not is measured
- * once and then asked quickly for the rest of the session -- the same bargain
- * raiseStrategy strikes, and for the same reason: there is more than one shell
- * and they do not agree.
- *
- * A window in the tray or the dock does not wait at all. There is no surface
- * there for a shell to activate, the re-map is the only thing that has ever
- * brought that one back, and it is the case the owner is asking about when
- * they click.
+ * Only actual focus completes this request. The tray's windowInFront() includes
+ * a grace period after blur and a pending remap; neither proves that a clicked
+ * notification brought the window forward. The page's follow-up window.focus()
+ * joins the existing request instead of restarting its deadline.
  */
-/* Long enough for the slowest hand-over measured here plus most of it again. */
 const SHELL_RAISE_MS = 2000;
-/* And what a desktop that has already failed to fetch the window gets: long
-   enough not to race a shell that is merely slow once, short enough that the
-   owner is not left looking at nothing. */
 const SHELL_RAISE_QUICK_MS = 500;
 const SHELL_RAISE_STEP_MS = 100;
 let shellRaiseTimer = null;
-/* Whether this desktop fetches the window itself. Null until the first click
-   answers it, and the last answer stands -- so a shell that stops doing it, or
-   starts, is followed rather than remembered wrong for ever. */
+let shellRaiseDone = null;
 let shellRaises = null;
+const cancelShellRaise = () => {
+  clearTimeout(shellRaiseTimer);
+  shellRaiseTimer = null;
+  shellRaiseDone = null;
+};
 
 const showWindowForClick = why => {
   if (!win || win.isDestroyed()) return;
-  if (!windowOnScreen()) { showWindow(why); return; }
-  if (windowInFront()) { win.focus(); return; }
+  const focused = () => win.isVisible() && !win.isMinimized() && win.isFocused();
+  if (focused()) { cancelShellRaise(); return; }
+  if (shellRaiseDone !== null) return;
 
-  const asked = Date.now();
-  const ceiling = shellRaises === false ? SHELL_RAISE_QUICK_MS : SHELL_RAISE_MS;
-  debug.trace('raise: %s -- on the screen already; the shell gets its moment first',
-              why || 'no reason given');
-  clearTimeout(shellRaiseTimer);
+  const requested = String(config.get('behaviour.raise') || 'auto').toLowerCase();
+  const automatic = requested !== 'activate' && requested !== 'remap';
+  /* Keep notification recovery independent of the short measurement used by
+     tray/shortcut raises. A grab on either path must not poison the other. */
+  let strategy = automatic ? (onWayland ? 'remap' : 'activate') : requested;
+  let phase = 'shell';
+  let generation = raising.gen;
+  let deadline = Date.now() + (shellRaises === false ? SHELL_RAISE_QUICK_MS : SHELL_RAISE_MS);
+
+  shellRaiseDone = () => {
+    if (phase === 'shell') shellRaises = true;
+    debug.trace('raise: notification window has the focus (%s)', phase);
+    cancelShellRaise();
+  };
+  const raise = nextPhase => {
+    phase = nextPhase;
+    raiseWindow(strategy, why, false);
+    generation = raising.gen;
+    deadline = Date.now() + SHELL_RAISE_MS;
+  };
   const look = () => {
     shellRaiseTimer = null;
-    if (!win || win.isDestroyed()) return;
-    /* Put away in the meantime -- a window the owner hid while this was
-       waiting is not one to fetch back, and not an answer about the shell
-       either. */
-    if (!windowOnScreen()) return;
-    if (windowInFront()) {
-      shellRaises = true;
-      debug.trace('raise: the shell brought it forward in %dms; nothing asked for',
-                  Date.now() - asked);
+    /* A later explicit raise/hide/minimize supersedes this click. */
+    if (!win || win.isDestroyed() || generation !== raising.gen) {
+      cancelShellRaise();
       return;
     }
-    if (Date.now() - asked < ceiling) {
-      shellRaiseTimer = setTimeout(look, SHELL_RAISE_STEP_MS);
-      return;
+    if (focused()) { shellRaiseDone(); return; }
+    if (Date.now() >= deadline) {
+      if (phase === 'shell') {
+        shellRaises = false;
+        raise('primary');
+      } else if (phase === 'primary' && automatic) {
+        /* The shell has had time to release its grab. Recover once if the
+           first method still did not bring the window forward, without
+           changing the strategy used by unrelated tray/shortcut requests. */
+        strategy = strategy === 'remap' ? 'activate' : 'remap';
+        raise('recovery');
+      } else {
+        debug.trace('raise: notification window did not gain focus after %s', strategy);
+        cancelShellRaise();
+        return;
+      }
     }
-    shellRaises = false;
-    debug.trace('raise: %dms and still away; asking for it', Date.now() - asked);
-    showWindow(why, false);
+    if (shellRaiseDone) shellRaiseTimer = setTimeout(look, SHELL_RAISE_STEP_MS);
   };
-  shellRaiseTimer = setTimeout(look, SHELL_RAISE_STEP_MS);
+
+  if (!windowOnScreen()) raise('primary');
+  else debug.trace('raise: %s -- waiting for the shell to hand over focus', why);
+  if (shellRaiseDone) shellRaiseTimer = setTimeout(look, SHELL_RAISE_STEP_MS);
 };
 
 const hideWindow = () => {
@@ -827,6 +816,7 @@ const hideWindow = () => {
      owner has just put away is not one to fetch back a quarter of a second
      later. */
   raising.gen++;
+  cancelShellRaise();
   win.hide();
 };
 

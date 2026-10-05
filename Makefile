@@ -149,8 +149,8 @@ screenshots:
 	@for s in $(SHOTS); do cp screenshots/$$s.png docs/assets/$$s.png; done
 	@echo "  SHOTS  screenshots/ and docs/assets/"
 
-# Replays a chat list past src/page/inject.js in plain node -- no browser, no
-# account. Every notification bug this client has had lived in that file.
+# Replays page, notification and desktop behavior in plain node -- no browser,
+# account or live desktop session.
 test:
 	@node tools/test-inject.js
 	@node tools/test-bidi.js
@@ -161,6 +161,8 @@ test:
 	@node tools/test-settings.js
 	@node tools/test-links.js
 	@node tools/test-tray.js
+	@node tools/test-window.js
+	@node tools/test-display.js
 	@node tools/test-mpris.js
 	@node tools/test-config.js
 	@node tools/test-privacy.js
