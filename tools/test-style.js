@@ -39,6 +39,27 @@ assert.match(lines, /unicode-bidi: plaintext !important/);
 /* text-align: start, never `right` -- an English line inside an Arabic message
    belongs on the left, which is the whole point of doing this per line. */
 assert.match(lines, /text-align: start !important/);
+
+/* The LAST line of a message, which WhatsApp leaves inline -- so text-align
+   says nothing about it and it takes the body's direction, which is the one
+   worked out for the whole message. An Arabic opening put every following
+   English line on the left correctly and the last one on the right. It is made
+   a block like its siblings so the rule above reaches it too. */
+const last = shipped.slice(shipped.indexOf('> span:last-child'));
+assert.match(shipped, /span\.selectable-text\.copyable-text:not\(\.quoted-mention\) > span:last-child:not\(\.selectable-text\) \{/);
+assert.match(last.slice(0, last.indexOf('}')), /display: block !important/);
+/* Both guards, and each one is a measured regression if it goes. Without the
+   first, a quoted voice note grows a storey -- its preview is inline on purpose
+   and a block cannot share that line (24px -> 38px, measured). Without the
+   second, a one-line message ending in a mention drops the mention onto a line
+   of its own: a piece is a plain span, a mention wears selectable-text. */
+assert.match(shipped, /:not\(\.quoted-mention\) > span:last-child/);
+assert.match(shipped, /> span:last-child:not\(\.selectable-text\)/);
+/* And it stays a `display` rule: the body keeps `isolate`, which is what places
+   a one-line Arabic message. plaintext there hides the only Arabic in the box
+   behind an isolate and the whole fix undoes itself -- measured, twice. */
+assert.doesNotMatch(last.slice(0, last.indexOf('}')), /unicode-bidi/);
+
 /* User origin: a normal declaration there loses to the page's own, and
    WhatsApp writes `text-align: end` on exactly the lines this has to correct. */
 assert.doesNotMatch(shipped.slice(shipped.indexOf('span.selectable-text')),

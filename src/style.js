@@ -106,7 +106,9 @@ const ARABIC_CLIP = `
  * one -- a link, a mention, a bold run -- which the child combinator excludes,
  * and the composer, which is a <p> under [contenteditable].
  *
- * Three separate faults, and each needs a different half of the rules below.
+ * Four separate faults, and each needs a different part of the rules below.
+ * The fourth is the last line of a message and its note sits with its rule,
+ * because it is the one that turns on the last piece being INLINE.
  *
  * ONE. WhatsApp marks a line dir="rtl" when it runs the other way from the
  * message -- and then puts `text-align: end` on that very span. On a
@@ -181,6 +183,62 @@ ${BODY} ul,
 ${BODY} li {
   unicode-bidi: plaintext !important;
   text-align: start !important;
+}
+/*
+ * FOUR, and it is the last line of every message: the piece WhatsApp leaves
+ * INLINE, which is the one line above that cannot place itself.
+ *
+ * text-align does nothing on an inline box. Every other piece is a block of
+ * its own and the rule above lands on it, but the last piece is laid out in the
+ * line box of the body around it -- so it takes the body's base direction, and
+ * the body's is the one WhatsApp worked out for the WHOLE MESSAGE from its
+ * first line. A message that opens in Arabic is dir="rtl", and its last line is
+ * pushed to the right margin whatever its own words are. That is the report:
+ * an Arabic greeting, English after it, every English line correct except the
+ * last one. Measured in Electron on the shape written above, body 420px wide,
+ * text extents against the body's own box:
+ *
+ *     line                  shipped          with the rule below
+ *     "مرحبا بالعالم"       0px off RIGHT    0px off RIGHT   (block, unchanged)
+ *     "Hello world here"    0px off LEFT     0px off LEFT    (block, unchanged)
+ *     "and english again"   0px off RIGHT    0px off LEFT    <- the last line,
+ *                           295px of empty box beside it        inline until now
+ *
+ * The other way round is the same fault and the reporter did not see it: an
+ * English message ending in Arabic put that Arabic line 0px off the LEFT, which
+ * is where the eye expects a left-to-right message to start, so nothing looked
+ * wrong. Both are the body deciding for a line that has a direction of its own.
+ *
+ * So the last piece is made a block like its siblings, and then the rule above
+ * reaches it: its own direction, its own margin, and the body's direction stops
+ * mattering to it. Measured: no case grows -- every height is what it was,
+ * because the piece carries no trailing newline and takes no line of its own.
+ *
+ * TWO GUARDS, and neither is tidiness.
+ *
+ * :not(.quoted-mention) keeps this out of the preview above a reply. That
+ * preview is a body too, it is INLINE on purpose when an icon shares its line
+ * (see the note below), and a block inside it cannot share that line: measured
+ * without the guard, a quoted voice note went from 24px to 38px -- the storey
+ * that rule was written to take back.
+ *
+ * :not(.selectable-text) is the line pieces against everything else a body
+ * can hold directly. A piece is a plain span; a link, a mention and a bold run
+ * wear selectable-text copyable-text themselves -- 54 of them against 21 bodies
+ * on the page this was counted on. A message that is one line ending in a
+ * mention has that run as its last child, and without the guard the mention
+ * would drop onto a line of its own. Measured with it: untouched.
+ *
+ * What it costs, and it is the cost already written down above: a last line
+ * with no strong character in it -- one that is nothing but emoji -- has no
+ * direction to take, rules P2/P3 end at left-to-right, and it goes to the LEFT
+ * margin under an Arabic message where it used to borrow the body's right. That
+ * is the emoji line in the MIDDLE of a message behaving the same way today, so
+ * this makes the two agree rather than inventing a new rule; the alternative is
+ * the fault this whole block exists to answer.
+ */
+${BODY}:not(.quoted-mention) > span:last-child:not(.selectable-text) {
+  display: block !important;
 }
 /* A bulleted list, and the side its bullets need room on.
  *
