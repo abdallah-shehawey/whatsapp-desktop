@@ -690,7 +690,11 @@ const raiseWindow = (strategy, why, verify) => {
  * at all. `behaviour.raise` in the config settles it by hand for a desktop that
  * wants neither answer measured.
  */
-const showWindow = why => {
+/* `measure` is the second question this answers and the only caller that says
+   no is the one below: a raise made while the shell holds a grab cannot take
+   until the grab is released, so what it measures is the grab and not the
+   desktop -- and the answer is written down for the rest of the session. */
+const showWindow = (why, measure = true) => {
   if (!win || win.isDestroyed()) return;
 
   /* Already up, and already the owner's. There is nothing to raise, and raising
@@ -718,7 +722,103 @@ const showWindow = why => {
     console.log('raising the window by %s%s', raiseStrategy,
                 raiseMeasured ? '' : ', as the config asks');
   }
-  raiseWindow(raiseStrategy, why, raiseMeasured);
+  raiseWindow(raiseStrategy, why, raiseMeasured && measure);
+};
+
+/*
+ * The same window, when the shell is already fetching it.
+ *
+ * Clicking a notification on GNOME activates the application it came from. The
+ * shell matches the banner to this client by the desktop-entry hint that goes
+ * out with every one of them -- read off the wire, see src/sound.js -- and
+ * brings the window forward itself, with an authority no client has. So by the
+ * time a click reaches this process the window is already on its way, and
+ * raising it again is the re-map: taken down and put back up for nothing. That
+ * is the whole of "the client closes and reopens itself when I open a message
+ * out of the notification centre".
+ *
+ * Which is also why it did not happen with the banner still on the screen, and
+ * why the report sounds like two bugs. A banner is clicked straight and the
+ * window still holds the keyboard, so showWindow finds it in front and stops.
+ * Opening the notification centre is a modal grab -- the same grab that made the
+ * tray read wrong, see FOCUS_GRACE_MS -- and it takes the focus before the click
+ * is ever made. From in here, a window that has lost the focus to the shell and
+ * a window standing behind the editor are the same window.
+ *
+ * They cannot be told apart, so the shell is given its moment rather than
+ * second-guessed: nothing is asked for, the window is watched, and it is raised
+ * the usual way only if it has not arrived by then. Nothing is asked for because
+ * an ask that is refused is what posts "WhatsApp is ready" and withdraws it a
+ * frame later (see remapWindow), and this is the one path where what is being
+ * waited for is what usually happens.
+ *
+ * The waiting costs nothing, which is the part that is worth saying plainly
+ * because it does not read that way. Measured here on GNOME 50, from the click
+ * reaching this process to the window holding the keyboard: 905ms and 1206ms
+ * with nothing asked for at all, against 1.0s and 2.1s for the same two clicks
+ * raised the old way -- and those two flickered. Nothing the client does brings
+ * the window sooner, because nothing can take the focus while the shell's grab
+ * is up; the second is the notification centre closing and the shell handing
+ * the window over, and it is the shell's to spend. The conversation does not
+ * wait on any of it: the click goes to the page the moment it lands, so the
+ * chat has changed under the window before the window arrives.
+ *
+ * Nor is the ceiling a wait anyone sits through. A desktop that fetches the
+ * window is answered by the window arriving, and one that does not is measured
+ * once and then asked quickly for the rest of the session -- the same bargain
+ * raiseStrategy strikes, and for the same reason: there is more than one shell
+ * and they do not agree.
+ *
+ * A window in the tray or the dock does not wait at all. There is no surface
+ * there for a shell to activate, the re-map is the only thing that has ever
+ * brought that one back, and it is the case the owner is asking about when
+ * they click.
+ */
+/* Long enough for the slowest hand-over measured here plus most of it again. */
+const SHELL_RAISE_MS = 2000;
+/* And what a desktop that has already failed to fetch the window gets: long
+   enough not to race a shell that is merely slow once, short enough that the
+   owner is not left looking at nothing. */
+const SHELL_RAISE_QUICK_MS = 500;
+const SHELL_RAISE_STEP_MS = 100;
+let shellRaiseTimer = null;
+/* Whether this desktop fetches the window itself. Null until the first click
+   answers it, and the last answer stands -- so a shell that stops doing it, or
+   starts, is followed rather than remembered wrong for ever. */
+let shellRaises = null;
+
+const showWindowForClick = why => {
+  if (!win || win.isDestroyed()) return;
+  if (!windowOnScreen()) { showWindow(why); return; }
+  if (windowInFront()) { win.focus(); return; }
+
+  const asked = Date.now();
+  const ceiling = shellRaises === false ? SHELL_RAISE_QUICK_MS : SHELL_RAISE_MS;
+  debug.trace('raise: %s -- on the screen already; the shell gets its moment first',
+              why || 'no reason given');
+  clearTimeout(shellRaiseTimer);
+  const look = () => {
+    shellRaiseTimer = null;
+    if (!win || win.isDestroyed()) return;
+    /* Put away in the meantime -- a window the owner hid while this was
+       waiting is not one to fetch back, and not an answer about the shell
+       either. */
+    if (!windowOnScreen()) return;
+    if (windowInFront()) {
+      shellRaises = true;
+      debug.trace('raise: the shell brought it forward in %dms; nothing asked for',
+                  Date.now() - asked);
+      return;
+    }
+    if (Date.now() - asked < ceiling) {
+      shellRaiseTimer = setTimeout(look, SHELL_RAISE_STEP_MS);
+      return;
+    }
+    shellRaises = false;
+    debug.trace('raise: %dms and still away; asking for it', Date.now() - asked);
+    showWindow(why, false);
+  };
+  shellRaiseTimer = setTimeout(look, SHELL_RAISE_STEP_MS);
 };
 
 const hideWindow = () => {
@@ -2126,7 +2226,7 @@ const describeThenNotify = () => setTimeout(async () => {
        wherever they already were. The page has no handler to hand this one back
        to, so it is asked for the chat by name. */
     onClick: () => {
-      showWindow('a banner was clicked');
+      showWindowForClick('a banner was clicked');
       /* The row this banner was made from travels back with the click, because a
          chat cannot always be found again by its name: two of them can share one,
          and this account has such a pair. The name and the message go too, for
@@ -2494,7 +2594,11 @@ const startMpris = () => {
   if (config.get('behaviour.mpris') === false) return;
   try {
     mpris = new MprisService({
-      onRaise: () => showWindow('the media card'),
+      /* By the same door as a banner click, and for the same reason: the card
+         lives inside a shell popup, the popup holds the keyboard while it is
+         open, and a window that has lost the focus to the shell is not a
+         window to take down and put back up. See showWindowForClick. */
+      onRaise: () => showWindowForClick('the media card'),
       onQuit: quit,
       onPlayPause: () => pressMediaKey('playPause'),
       onPlay: () => pressMediaKey('play'),
@@ -2769,9 +2873,17 @@ const wireIpc = () => {
   });
 
   /* Wrapped rather than passed: ipcMain hands the event in as the first
-     argument, and showWindow's first argument is what the log says the raise
-     was for. */
-  ipcMain.on('wa:focus-request', () => showWindow('the page asked for the focus'));
+     argument, and the first argument here is what the log says the raise was
+     for.
+   *
+   * And by the same door as the click itself, because this is that click: the
+   * page is handed the notification back, WhatsApp's own handler opens the
+   * conversation and calls window.focus() on the way (see src/preload.js), so
+   * this arrives a beat behind every banner click. Sent through showWindow it
+   * would do the very re-map the click had just been spared -- which is what
+   * RAISE_COALESCE_MS was holding off, and holds off no longer now that the
+   * click itself asks for nothing to coalesce with. */
+  ipcMain.on('wa:focus-request', () => showWindowForClick('the page asked for the focus'));
 
   /* The page could not find WhatsApp's own modules for opening a chat, so it is
      asked for the page WhatsApp serves for the purpose. A reload, and the last
@@ -2857,7 +2969,7 @@ const wireIpc = () => {
       redacted: bidi.words(mark, kindOf(message)),
       icon: note.avatar,
       onClick: () => {
-        showWindow('a banner was clicked');
+        showWindowForClick('a banner was clicked');
         if (win && !win.isDestroyed()) win.webContents.send('wa:notification-clicked', note.id);
       },
     });
@@ -2991,7 +3103,7 @@ const wireIpc = () => {
       redacted: bidi.words(aimed, note.redacted || mark || 'New message'),
       icon: note.avatar,
       onClick: () => {
-        showWindow('a banner was clicked');
+        showWindowForClick('a banner was clicked');
         /* The message travels with the click, and a story travels with a flag
            saying so: a story mention landed in `status@broadcast` along with
            everybody else's updates, and opening that chat is not what the user
@@ -3051,7 +3163,7 @@ const wireIpc = () => {
       redacted: note.mark,
       icon: note.avatar,
       onClick: () => {
-        showWindow('a ringing banner was clicked');
+        showWindowForClick('a ringing banner was clicked');
         if (win && !win.isDestroyed())
           win.webContents.send('wa:store-open', { chat: note.chat, name: note.title });
       },
