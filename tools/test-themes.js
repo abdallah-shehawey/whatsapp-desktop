@@ -113,17 +113,19 @@ assert.doesNotMatch(oled, /\.message-in|\.message-out/,
 assert.doesNotMatch(oled, /\.copyable-text/);
 ok('nothing in the sheet is matched per message');
 
-/* One element rule is left, and it is body -- the ground behind whatever the
-   page leaves transparent, and what is on screen before the page has drawn. */
+/* The element rules name body, the chat ground and the startup logo only;
+   nothing is matched against the scrolling chat list. */
 const selectors = oled.split('\n')
   .filter(line => /^\s{2}\S.*\{\s*$/.test(line))
   .map(line => line.trim().replace(/\s*\{$/, ''));
 assert.deepStrictEqual(selectors,
                        [':root[data-wa-theme="oled"]',
                         ':root[data-wa-theme="oled"] #main',
-                        ':root[data-wa-theme="oled"] body'],
-                       'three rules, each on one element');
-ok('and the whole sheet is three rules: :root, #main and body');
+                        ':root[data-wa-theme="oled"] body',
+                        ':root[data-wa-theme="oled"] :is(#wa_web_initial_startup, [data-testid="wa-web-loading-screen"]) > div:first-child',
+                        ':root[data-wa-theme="oled"] :is(#wa_web_initial_startup, [data-testid="wa-web-loading-screen"]) > div:first-child::after'],
+                       'five rules, each on one element');
+ok('the sheet only targets the root, chat ground, body and startup logo');
 
 /*
  * And every one of them is hung off the mark, which is what makes Default work.

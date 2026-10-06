@@ -272,7 +272,7 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
     process: { argv: [] },
     require(name) {
       if (name === 'electron') return {
-        ipcRenderer: { send: channel => calls.push(channel), on() {} },
+        ipcRenderer: { send: channel => calls.push(channel), sendSync: () => null, on() {} },
       };
       if (name === './page/inject.js') return { start() {} };
       throw new Error('Unexpected preload dependency: ' + name);

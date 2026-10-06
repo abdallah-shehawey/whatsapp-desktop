@@ -21,6 +21,31 @@ const page = require('./page/inject.js');
 if (process.argv.includes('--wa-popup')) {
   page.fixVideo();
 } else {
+  /* Install the palette while the document is being created. The main process
+     still draws its user-origin sheet after load and on setting changes; this
+     early author sheet uses the same marks so it switches off with Default. */
+  const initialTheme = ipcRenderer.sendSync('wa:initial-theme');
+  if (initialTheme && initialTheme.css) {
+    const applyTheme = () => {
+      const root = document.documentElement;
+      if (!root) return false;
+      const sheet = document.createElement('style');
+      sheet.id = 'wa-initial-theme';
+      sheet.textContent = initialTheme.css;
+      for (const [name, value] of Object.entries(initialTheme.attributes)) {
+        if (value !== null) root.setAttribute(name, value);
+      }
+      root.appendChild(sheet);
+      return true;
+    };
+    if (!applyTheme()) {
+      const observer = new MutationObserver(() => {
+        if (applyTheme()) observer.disconnect();
+      });
+      observer.observe(document, { childList: true, subtree: true });
+    }
+  }
+
   const send = (channel, payload) => ipcRenderer.send('wa:' + channel, payload);
   const on = (channel, handler) =>
     ipcRenderer.on('wa:' + channel, (event, payload) => handler(payload));

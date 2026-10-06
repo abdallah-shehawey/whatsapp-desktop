@@ -2602,6 +2602,24 @@ const quit = () => {
 const wireIpc = () => {
   ipcMain.on('wa:log', (event, message) => console.log('page: %s', message));
 
+  /* One small response at document-start, before either loading screen paints.
+     The preload installs the current palette; waiting for did-finish-load lets
+     the startup shimmer show through first. Read it again on every navigation
+     so a reload uses the theme most recently chosen in Settings. */
+  ipcMain.on('wa:initial-theme', event => {
+    if (!win || event.sender !== win.webContents) {
+      event.returnValue = null;
+      return;
+    }
+    const theme = config.get('view.theme') || 'system';
+    const accent = desktopAccent();
+    const marks = themes.markFor(theme, accent);
+    event.returnValue = {
+      css: themes.getWebThemeCss(theme, accent),
+      attributes: { [themes.MARK]: marks.theme, [themes.ACCENT_MARK]: marks.accent },
+    };
+  });
+
   /* What the page is actually playing, which is the only thing that should put
      a card in the notification centre. Anything that is not a note the user
      chose to listen to never gets here -- the page settles that, where the

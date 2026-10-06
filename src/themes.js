@@ -9,8 +9,8 @@
  * These are the same idea with the maintenance done once: a palette is eight
  * colours, and the sheet built from it writes WhatsApp's own custom properties
  * rather than restyling its elements. That is the whole reason this costs
- * nothing to leave on -- the rules are :root, #main and body, no descendant
- * matching and nothing evaluated per element on a scrolling list. (The privacy
+ * nothing to leave on -- the rules name :root, #main, body and the startup logo,
+ * with nothing evaluated per element on a scrolling list. (The privacy
  * sheet next door is the cautionary tale; see src/privacy.js.)
  *
  * `system`, `dark` and `light` are not palettes and never were: they are what
@@ -288,6 +288,20 @@ function getWebThemeCss(themeKey, hyprAccent = null) {
     --WDS-content-external-link: ${accent} !important;
     --WDS-persistent-always-branded: ${accent} !important;
 
+    /* Startup uses its own tokens, including the RGB ground of the logo's
+       shimmer. Leaving those at WhatsApp's grey draws rectangles over OLED
+       black and leaves the logo almost invisible. */
+    --splashscreen-startup-background: ${ground} !important;
+    --splashscreen-startup-background-plain: ${ground} !important;
+    --splashscreen-startup-background-rgb: ${hex(ground).join(', ')} !important;
+    --splashscreen-startup-icon: ${accent} !important;
+    --startup-icon: ${accent} !important;
+    --splashscreen-primary-title: ${theme.text} !important;
+    --splashscreen-secondary-lighter: ${theme.textMuted} !important;
+    --splashscreen-startup-content-deemphasized: ${theme.textMuted} !important;
+    --splashscreen-progress-primary: ${accent} !important;
+    --splashscreen-progress-background: ${theme.border} !important;
+
     /* The bubbles, which used to be two descendant selectors matching nothing. */
     --WDS-systems-bubble-surface-incoming: ${raised} !important;
     --WDS-systems-bubble-surface-outgoing: ${theme.outgoingBubble} !important;
@@ -334,11 +348,21 @@ function getWebThemeCss(themeKey, hyprAccent = null) {
   }
 
   /* The ground behind everything, for the moment before the page has drawn and
-     for whatever it leaves transparent. One element, and the only element rule
-     left in this sheet. */
+     for whatever it leaves transparent. */
   ${at} body {
     background-color: ${ground} !important;
     color: ${theme.text} !important;
+  }
+
+  /* React replaces the initial splash with a second loading screen. Both
+     logos have a hardcoded dim colour and a gradient of WhatsApp's own grey,
+     so theme the logo itself and remove its decorative overlay in both. */
+  ${at} :is(#wa_web_initial_startup, [data-testid="wa-web-loading-screen"]) > div:first-child {
+    color: ${accent} !important;
+  }
+  ${at} :is(#wa_web_initial_startup, [data-testid="wa-web-loading-screen"]) > div:first-child::after {
+    content: none !important;
+    display: none !important;
   }
   `;
 }
