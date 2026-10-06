@@ -116,6 +116,12 @@ check('with CanPlay in the message, which is what adds the card',
 check('and the metadata beside it, which is read when the card is built',
       !!(sent[0].body && sent[0].body[1].find(p => p[0] === 'Metadata')), true);
 
+sent.length = 0;
+for (const method of ['Pause', 'PlayPause', 'Stop', 'Play']) player[method]([], () => {});
+check('a request cannot claim the audio changed before the page reports it',
+      service.playbackStatus, 'Playing');
+check('and no guessed playback state is sent to the desktop', sent.length, 0);
+
 /* Paused is still loaded: there is something for a media key to reach and
    something worth drawing a Play button on. */
 service.present({ state: 'Paused', positionSec: 4 });

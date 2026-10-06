@@ -155,6 +155,8 @@ class MprisService {
         },
       },
       [PLAYER_IFACE]: {
+        /* The page reports the actual playback state. A transport request
+           alone must not change the card before the audio responds. */
         Next: (args, reply) => {
           if (this.handlers.onNext) this.handlers.onNext();
           reply();
@@ -165,22 +167,18 @@ class MprisService {
         },
         Pause: (args, reply) => {
           if (this.handlers.onPause) this.handlers.onPause();
-          this.setPlaybackStatus('Paused');
           reply();
         },
         PlayPause: (args, reply) => {
           if (this.handlers.onPlayPause) this.handlers.onPlayPause();
-          this.setPlaybackStatus(this.playbackStatus === 'Playing' ? 'Paused' : 'Playing');
           reply();
         },
         Stop: (args, reply) => {
           if (this.handlers.onStop) this.handlers.onStop();
-          this.setPlaybackStatus('Stopped');
           reply();
         },
         Play: (args, reply) => {
           if (this.handlers.onPlay) this.handlers.onPlay();
-          this.setPlaybackStatus('Playing');
           reply();
         },
         Seek: ([offsetMicro], reply) => {

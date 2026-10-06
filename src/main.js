@@ -251,7 +251,12 @@ if (config.get('system.hardware-acceleration') === false) {
 /* WebGPU on Linux/Wayland has a broken CreateExternalTexture pipeline for video
    streams, which causes WhatsApp call cameras to render black 1280x720 frames.
    Disabling WebGPU forces WhatsApp to use its reliable WebGL/direct pipeline. */
-app.commandLine.appendSwitch('disable-features', 'WebGPU');
+/* The client exports its own MPRIS player. Chromium's hardware media key
+   handling exports a second one for the same audio, so GNOME draws two cards
+   for every voice note. Keep the client's player as the single owner of the
+   desktop controls. Audio playback and the page's Media Session API still work.
+   Keep both disabled features in one switch: a later append replaces it. */
+app.commandLine.appendSwitch('disable-features', 'WebGPU,HardwareMediaKeyHandling');
 app.commandLine.appendSwitch('disable-webgpu');
 
 /* ------------------------------------------------------------ single copy */
@@ -2545,41 +2550,11 @@ const toggleShield = () => {
 
 /* ----------------------------------------------------------- the media card */
 
-/*
- * What a media key has to reach, which is a button in a page rather than a
- * player this process owns.
- *
- * WhatsApp draws its own transport for a voice note, and that button is what
- * knows which note is loaded; clicking it is therefore the reliable half. The
- * <audio> elements underneath are the other half, because a note that WhatsApp
- * started playing on its own -- autoplay down a run of notes -- is not always
- * one whose button is in the state the DOM says. Doing both leaves the page in
- * the state the key asked for either way.
- */
-const MEDIA_KEYS = {
-  playPause: `(() => {
-    const btn = document.querySelector('#main div[role="button"]:has(span[data-icon="audio-play"]), #main div[role="button"]:has(span[data-icon="audio-pause"])');
-    if (btn) btn.click();
-    document.querySelectorAll('audio').forEach(a => { if (a.paused) a.play().catch(() => {}); else a.pause(); });
-  })()`,
-  play: `(() => {
-    const btn = document.querySelector('#main div[role="button"]:has(span[data-icon="audio-play"])');
-    if (btn) btn.click();
-    document.querySelectorAll('audio').forEach(a => { if (a.paused) a.play().catch(() => {}); });
-  })()`,
-  pause: `(() => {
-    const btn = document.querySelector('#main div[role="button"]:has(span[data-icon="audio-pause"])');
-    if (btn) btn.click();
-    document.querySelectorAll('audio').forEach(a => { if (!a.paused) a.pause(); });
-  })()`,
-  stop: `(() => {
-    document.querySelectorAll('audio').forEach(a => { a.pause(); a.currentTime = 0; });
-  })()`,
-};
-
+/* Voice notes use detached audio elements, so DOM queries cannot find them.
+   The page keeps the element that reported playback and controls that note. */
 const pressMediaKey = which => {
   if (!win || win.isDestroyed()) return;
-  win.webContents.executeJavaScript(MEDIA_KEYS[which]).catch(() => {});
+  win.webContents.send('wa:media-control', which);
 };
 
 /* Registered once the window exists, because every handler here needs somewhere

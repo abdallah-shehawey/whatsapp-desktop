@@ -952,6 +952,60 @@ const check = (label, got, want) => {
      otherwise it would sit there offering to resume a note that has finished. */
   check('a note played out takes its card down', cardReports[0].state, 'stopped');
 
+  /* The note is detached from the DOM, just as WhatsApp's real player is.
+     Desktop controls must reach the element that raised the card, even when
+     older notes and call audio exist beside it. */
+  const controlled = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/controlled');
+  controlled.duration = 12;
+  controlled.play();
+  controlled.currentTime = 3;
+  push('media-control', 'pause');
+  check('desktop Pause reaches the detached voice note', controlled.paused, true);
+  controlled.fire('loadedmetadata');
+  check('and keeps its playback position', controlled.currentTime, 3);
+  push('media-control', 'play');
+  check('desktop Play resumes that same note', controlled.paused, false);
+  played = [];
+  push('media-control', 'play');
+  check('Play does not restart an already playing note', played.length, 0);
+  push('media-control', 'playPause');
+  check('desktop PlayPause pauses the current note', controlled.paused, true);
+  push('media-control', 'playPause');
+  controlled.fire('loadedmetadata');
+  await Promise.resolve();
+  check('and resumes it while its resource is being restored', controlled.paused, false);
+
+  const successor = new sandbox.HTMLMediaElement('', 'blob:https://web.whatsapp.com/successor');
+  successor.duration = 12;
+  successor.play();
+  cardReports = [];
+  controlled.pause();
+  controlled.fire('loadedmetadata');
+  check('a late pause from the previous note cannot hide the current card', cardReports.length, 0);
+  push('media-control', 'pause');
+  check('the desktop now controls the successor', successor.paused, true);
+  check('and leaves the older note paused', controlled.paused, true);
+  successor.fire('loadedmetadata');
+  push('media-control', 'play');
+  successor.currentTime = 5;
+  push('media-control', 'pause');
+  push('media-control', 'stop');
+  successor.fire('loadedmetadata');
+  await Promise.resolve();
+  check('Stop during restoration still rewinds the note', successor.currentTime, 0);
+  check('and reports it stopped', cardReports[cardReports.length - 1].state, 'stopped');
+
+  /* A ringtone or call that starts after a note must never replace the note
+     being controlled or get resumed by a desktop Play request. */
+  ringAgain.play();
+  streamed.play();
+  push('media-control', 'play');
+  check('Play selects the voice note rather than a call or ringtone', successor.paused, false);
+  push('media-control', 'pause');
+  check('desktop Pause leaves the ringtone alone', ringAgain.paused, false);
+  check('and leaves the call stream alone', streamed.paused, false);
+  successor.fire('loadedmetadata');
+
   /* ------------------------------------------ opening a chat from a banner */
 
   /* A banner is a message, and clicking one is asking to read it. The page is

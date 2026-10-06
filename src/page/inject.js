@@ -2243,10 +2243,15 @@ const start = ({ send, on }) => {
    * fires with the src already taken off, so a test made inside it would call
    * the note it is reporting the end of something else and say nothing.
    */
+  let currentVoiceNote = null;
+
   const watchCard = el => {
     if (el.__waCard || !conversationAudio(el)) return;
     el.__waCard = true;
     const tell = state => {
+      /* A previous note can pause or empty after its successor starts. Only
+         the note being controlled may update the desktop's card. */
+      if (currentVoiceNote !== el) return;
       const length = Number(el.duration), at = Number(el.currentTime);
       send('media', {
         state,
@@ -2254,7 +2259,11 @@ const start = ({ send, on }) => {
         positionSec: isFinite(at) ? at : 0,
       });
     };
-    el.addEventListener('play', () => tell('playing'));
+    el.addEventListener('play', () => {
+      if (!conversationAudio(el)) return;
+      currentVoiceNote = el;
+      tell('playing');
+    });
     /* A note played out arrives as a pause before it arrives as `ended` -- the
        same measurement the recycle above rests on -- so the end is read off the
        element rather than waited for, and the card goes at the end instead of
@@ -2265,6 +2274,31 @@ const start = ({ send, on }) => {
        above runs: the card follows Chromium's out rather than outliving it. */
     el.addEventListener('emptied', () => tell('stopped'));
   };
+
+  /* WhatsApp's audio elements are detached from the document. Keep the one
+     that raised the card, including while its paused resource is restored, so
+     a desktop control always reaches the same note without clicking a bubble
+     or accidentally playing a ringtone or an older note. */
+  on('media-control', command => {
+    const el = currentVoiceNote;
+    if (!el || !conversationAudio(el)) return;
+    if (command === 'pause' || (command === 'playPause' && !el.paused)) {
+      if (!el.paused) el.pause();
+    } else if (command === 'play' || command === 'playPause') {
+      if (el.paused) el.play().catch(err => log('could not resume voice note: ' + err.message));
+    } else if (command === 'stop') {
+      const stop = () => {
+        /* Rewind before pause: recycling saves the position at pause time. */
+        el.currentTime = 0;
+        if (!el.paused) el.pause();
+        if (currentVoiceNote === el)
+          send('media', { state: 'stopped', durationSec: 0, positionSec: 0 });
+      };
+      const back = restoring.get(el);
+      if (back) back.then(stop);
+      else stop();
+    }
+  });
 
   /* Both ways a page can make a sound, because which one WhatsApp uses is not
      worth depending on: it has played its tones through an <audio> element for
