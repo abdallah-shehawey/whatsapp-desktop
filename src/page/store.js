@@ -487,6 +487,14 @@ const start = ({ send, log, fetchAvatar, faceFor }) => {
     try {
       for (const wid of (msg.mentionedJidList || [])) if (isMe(wid)) return wording.MENTION_MARK;
     } catch (e) {}
+    /* WhatsApp marks @all separately from named people. On the live group
+       messages its mentionedJidList is empty while nonJidMentions is 1.
+       The server flag, not the literal text, distinguishes a real group
+       mention from someone merely typing "@all". */
+    try {
+      if (msg.id && msg.id.remote && msg.id.remote.server === 'g.us' &&
+          (Number(msg.nonJidMentions) & 1)) return wording.MENTION_MARK;
+    } catch (e) {}
     /* A reply to something the user wrote. The phone treats it the same way a
        mention is treated, and so does WhatsApp Web's own muting. */
     try {

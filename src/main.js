@@ -730,10 +730,11 @@ const showWindow = (why, measure = true) => {
 };
 
 /* A notification click belongs to the shell until its modal grab closes.
- * Give an already mapped window time to arrive without remapping it. Hidden
- * and minimized windows need an immediate raise, but they get the same long
- * check: the ordinary 250ms measurement would mistake the grab for a failed
- * strategy and remember the wrong answer for the rest of the session.
+ * On Wayland give an already mapped window time to arrive without remapping
+ * it. X11 can request focus immediately, as can hidden and minimized windows.
+ * Every path gets the same long verification window: the ordinary 250ms
+ * measurement would mistake the grab for a failed strategy and remember the
+ * wrong answer for the rest of the session.
  *
  * Only actual focus completes this request. The tray's windowInFront() includes
  * a grace period after blur and a pending remap; neither proves that a clicked
@@ -805,7 +806,11 @@ const showWindowForClick = why => {
     if (shellRaiseDone) shellRaiseTimer = setTimeout(look, SHELL_RAISE_STEP_MS);
   };
 
-  if (!windowOnScreen()) raise('primary');
+  /* On X11 a focus request can raise an already mapped window immediately.
+     Waiting for the shell's full two-second grace made every notification
+     center click feel delayed there. Wayland still needs that grace: its shell
+     may supply an activation token only after dismissing the notification. */
+  if (!onWayland || !windowOnScreen()) raise('primary');
   else debug.trace('raise: %s -- waiting for the shell to hand over focus', why);
   if (shellRaiseDone) shellRaiseTimer = setTimeout(look, SHELL_RAISE_STEP_MS);
 };

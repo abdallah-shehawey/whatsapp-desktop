@@ -26,6 +26,7 @@ const wording = require('../wording.js');
 const store = require('./store.js');
 const media = require('./media.js');
 const pictures = require('./pictures.js');
+const arabicDigits = require('./arabic-digits.js');
 
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
@@ -51,6 +52,7 @@ const start = ({ send, on }) => {
   const log = message => send('log', String(message));
 
   fixVideo();
+  arabicDigits.start();
 
   /* ------------------------------------------------------------------ focus */
 
@@ -1323,13 +1325,35 @@ const start = ({ send, on }) => {
 
     let wid;
     try { wid = wf.createUserWidOrThrow(phone); }
-    catch (err) { log('cannot open +' + phone + ': ' + err.message); return; }
+    catch (err) {
+      log('cannot make a chat id for +' + phone + ': ' + err.message);
+      send('link-unresolved', { phone: phone });
+      return;
+    }
 
-    Promise.resolve(action.openChatWithContact(wid)).then(() => {
-      log('opened a chat with +' + phone);
-      setTimeout(refreshOpen, 400);
-      if (wantsText) setTimeout(() => focusComposer(0), 400);
-    }).catch(err => log('cannot open +' + phone + ': ' + err.message));
+    /* The current WhatsApp action accepts one options object. It also catches
+       its own errors, so resolving its promise alone does not prove a chat
+       opened. onOpened is called only after Cmd.openChatFromUnread succeeds. */
+    const point = grab('WAWebChatEntryPoint')?.ChatEntryPoint?.Link || 'Link';
+    let opened = false;
+    const unresolved = () => {
+      if (opened) return;
+      log('could not open +' + phone + ' in place; asking for its own page');
+      send('link-unresolved', { phone: phone });
+    };
+    try {
+      Promise.resolve(action.openChatWithContact({
+        targetId: wid,
+        chatEntryPoint: point,
+        findChatOrigin: point,
+        opts: { onOpened: () => {
+          opened = true;
+          log('opened a chat with +' + phone);
+          setTimeout(refreshOpen, 400);
+          if (wantsText) setTimeout(() => focusComposer(0), 400);
+        } },
+      })).then(unresolved, unresolved);
+    } catch (err) { unresolved(); }
   };
 
   /*

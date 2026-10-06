@@ -184,6 +184,15 @@ ${BODY} li {
   unicode-bidi: plaintext !important;
   text-align: start !important;
 }
+/* Digits have no strong direction. The page marks lines containing Arabic-
+   Indic numerals but no letters, so they sit with Arabic text while English
+   and emoji-only lines retain their existing alignment. */
+${BODY}[data-wa-arabic-numeric],
+${BODY} > span[data-wa-arabic-numeric] {
+  direction: rtl !important;
+  unicode-bidi: isolate !important;
+  text-align: right !important;
+}
 /*
  * FOUR, and it is the last line of every message: the piece WhatsApp leaves
  * INLINE, which is the one line above that cannot place itself.

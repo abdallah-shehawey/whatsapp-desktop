@@ -232,7 +232,9 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
   const t = build({ wayland: false });
   t.showEvent();
   t.click('notification under X11');
-  t.tick(2100);
+  check('X11 requests focus immediately on a notification click',
+        t.calls.slice(0, 2), ['show', 'focus']);
+  t.tick(900);
   check('X11 first asks for activation without hiding the window',
         t.calls.includes('hide'), false);
   t.focus();

@@ -201,6 +201,7 @@ const document = {
 const handlers = new Map();                 // channel -> what the page listens with
 
 let inviteFallbacks = [];                   // invites it gave up on and handed back
+let linkFallbacks = [];                     // chat links it gave back to WhatsApp
 let cardReports = [];                       // what it told the desktop's media card
 let openReports = [];                       // what the page said was on screen
 let unreadReports = [];                     // and which chats it said were unread
@@ -215,6 +216,7 @@ const send = (channel, payload) => {
   else if (channel === 'unread-chats') unreadReports.push(payload);
   else if (channel === 'unread-count') countReports.push(payload);
   else if (channel === 'invite-unresolved') inviteFallbacks.push(payload);
+  else if (channel === 'link-unresolved') linkFallbacks.push(payload);
   else if (channel === 'media') cardReports.push(payload);
 };
 const on = (channel, fn) => handlers.set(channel, fn);
@@ -349,6 +351,7 @@ const sandbox = {
        is the shape of the day WhatsApp renames one of those names, and it must
        be quiet rather than fatal. */
     if (name === './pictures.js') return require('../src/page/pictures.js');
+    if (name === './arabic-digits.js') return require('../src/page/arabic-digits.js');
     /* Anything else is a name out of WhatsApp's own registry, which the page
        reaches for through this same require -- contextIsolation is off, so
        window.require IS Meta's. The rig answers for a name only once a check has
@@ -1011,6 +1014,33 @@ const check = (label, got, want) => {
         dispatched.length ? dispatched[0].on.parentNode : null, twinB);
 
   twinA.remove(); twinB.remove();
+
+  /* A WhatsApp Web update changed this action from a WID argument to an
+     options object. Its own catch resolves even on failure, so onOpened is
+     the success signal and /send is the fallback. */
+  const linkRequests = [];
+  let linkOpens = true;
+  waModules['WAWebWidFactory'] = {
+    createUserWidOrThrow: phone => ({ user: phone }),
+  };
+  waModules['WAWebChatEntryPoint'] = { ChatEntryPoint: { Link: 'Link' } };
+  waModules['WAWebOpenChatWithContactAction'] = {
+    openChatWithContact: request => {
+      linkRequests.push(request);
+      if (linkOpens) request.opts.onOpened();
+      return Promise.resolve();
+    },
+  };
+  push('open-link', { phone: '201234567890', wantsText: false });
+  await sleep(10);
+  check('a chat link passes the contact in the current action object',
+        linkRequests[0].targetId.user, '201234567890');
+  check('a confirmed chat opening needs no page reload', linkFallbacks.length, 0);
+  linkOpens = false;
+  push('open-link', { phone: '201234567891', wantsText: false });
+  await sleep(10);
+  check('an action that silently fails uses WhatsApp\'s own send page',
+        linkFallbacks[0]?.phone, '201234567891');
 
   /* ---------------------------------------------------------- group invites */
 
