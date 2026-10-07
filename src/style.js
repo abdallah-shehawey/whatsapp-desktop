@@ -744,109 +744,51 @@ footer [data-testid="popup_panel"] {
 }
 @keyframes whatsapp-desktop-panel { from { opacity: 1; } to { opacity: 1; } }`;
 
-/*
- * Profile, in Settings, and the one panel there that arrives with no motion.
- *
- * "لما اجي افتح ال profile في السيتنج مش بتفتح بانميشن مع ان باقي الحجات بتفتح
- * بانميشن عادي" -- and that is exactly what it is. Measured on the live page,
- * watching what each row of Settings mounts:
- *
- *   Chats, Notifications, Privacy   a <div> carrying the class
- *                                   `velocity-animating` and an inline
- *                                   transform: WhatsApp slides them with
- *                                   Velocity, from translateX(100%) to 0.
- *                                   Sampled every frame: 336px at 1ms, 104 at
- *                                   54, 20 at 145, under a pixel by 248 -- an
- *                                   exponential ease-out over about 250ms.
- *
- *   Profile                         a <div>[tabindex="-1"] inside
- *                                   [data-testid="drawer-left"], with
- *                                   animation-name: none and no transform at
- *                                   any point. It is simply there.
- *
- * Two different code paths inside WhatsApp, and only one of them was given the
- * slide. So the missing half is written here, to the numbers above, and the
- * panel ends up indistinguishable from its own siblings.
- *
- * This one CAN be a CSS animation, which is what makes it four lines instead of
- * the Web Animations machinery the right-hand drawer needs next door. The
- * difference is the lifetime: that drawer is never unmounted, so an animation
- * on it plays once and never again -- measured -- whereas this panel is
- * replaced on every open. Each open is a new element, and a new element gets a
- * fresh animation for nothing.
- *
- * The selector is the child chain and not a descendant one, deliberately:
- * `[data-testid="drawer-left"] span > div` matches four elements on the page
- * and three of them are furniture INSIDE the panel, which would animate each
- * part of it separately. The chain below matches exactly one -- measured, 1 of
- * 1, the panel itself -- and its rightmost compound is still cheap because a
- * div whose parent is a span is rare.
- *
- * translateX is a percentage here and that is safe, which it is not in the
- * drawer next door: this panel is mounted at its full 511px in the frame the
- * observer sees it, so there is no width for the percentage to grow against.
- *
- * And the side is the interface's. transform knows nothing about direction, so
- * an Arabic interface -- where this drawer is on the other edge of the window
- * -- would otherwise have the panel slide in from the wrong side, which is the
- * same glitch the right-hand drawer was fixed for.
- *
- *
- * AND WHY THERE IS NO OPACITY IN THESE KEYFRAMES
- *
- * There was, and it is what made opening a tab on the left rail feel slow.
- *
- * This rule reaches more than Profile. Status, Channels and the rest of the
- * rail mount at this very path -- measured, the same child chain -- and
- * WhatsApp fades THOSE in itself, with Velocity, as an inline `opacity` it
- * writes from JavaScript: 0.5 to 1, finished in 36ms. Sampled every frame from
- * the moment the node is added to the page (2026-10-04, clicking Status):
- *
- *     0ms    inline 0.5     drawn 0        translateX 511
- *     3ms    inline 0.86    drawn 0        translateX 511
- *    13ms    inline 0.89    drawn 0        translateX 511
- *    17ms    inline 0.96    drawn 0.14     translateX 437
- *    36ms    inline 1       drawn 0.48     translateX 264
- *   143ms    inline 1       drawn 0.98     translateX 10
- *
- * The inline column is what WhatsApp asked for; the drawn column is what was
- * actually painted, because an animation declaration at user origin outranks an
- * inline style. So the old keyframes took the fade off Velocity and made it
- * nearly seven times longer: the panel was invisible for the first 17ms and
- * still see-through at 143, where WhatsApp had it solid at 36. A quarter of a
- * second of the chat list showing through a panel that has already arrived is
- * exactly what was reported -- "بتفتح بانميشن فيه لاج شويه".
- *
- * So opacity is left to Velocity, which already does it and does it quickly,
- * and these keyframes move the panel and nothing else. On Profile, where
- * Velocity never runs, there is no fade to take over and the panel slides in
- * solid -- which is the point: the ask was for Profile to open like its
- * siblings, and its siblings are a slide.
- *
- * THE DURATION AND THE CURVE come down with it, and for the same reason: the
- * animation is not the whole open. The press costs a 56ms long task in React
- * before the node exists at all, and the slide cannot start until 72ms after it
- * -- both measured -- so 250ms on top of that was 316ms from click to settled.
- *
- * The curve changes with the duration because an exponential ease-out at 200ms
- * is nearly over before it is seen: cubic-bezier(0.16, 1, 0.3, 1) is 97% done
- * at the halfway point, so the last 100ms would crawl the final 15px and read
- * as the panel sticking. The quintic below is 91% at the same point -- the
- * motion stays visible to the end and still settles without a bounce.
- */
+/* navigation.js owns the reveal of rail sections on the compositor. Native
+ * Velocity keeps fading old wrappers for a while after the selection changes;
+ * hold managed wrappers opaque and hide the retiring one so two sections never
+ * overlap. The opaque surface also keeps the underlying chat list from bleeding
+ * through. Nested drawers retain their native lifecycle and the short slide. */
 const SETTINGS_PANEL = `
-[data-testid="drawer-left"] > div > span > div {
-  animation: whatsapp-desktop-settings 200ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+[data-wa-navigation-panel] {
+  opacity: 1 !important;
+  transform: none !important;
+  background-color: var(--WDS-surface-default, var(--background-default));
 }
-html[dir="rtl"] [data-testid="drawer-left"] > div > span > div {
-  animation-name: whatsapp-desktop-settings-rtl !important;
+[data-wa-navigation-panel="inactive"] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-testid="drawer-left"] > div > span > div {
+    animation: whatsapp-desktop-settings 160ms cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  }
+  [data-testid="drawer-middle"] > div > span > div {
+    animation: whatsapp-desktop-settings 160ms cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  }
+  [data-wa-navigation-panel] {
+    animation-duration: 1ms !important;
+  }
+  html[dir="rtl"] [data-testid="drawer-left"] > div > span > div {
+    animation-name: whatsapp-desktop-settings-rtl !important;
+  }
+  html[dir="rtl"] [data-testid="drawer-middle"] > div > span > div {
+    animation-name: whatsapp-desktop-settings-rtl !important;
+  }
+  [data-testid="media-hub-modal"] {
+    animation: whatsapp-desktop-media 160ms cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  }
 }
 @keyframes whatsapp-desktop-settings {
-  from { transform: translateX(100%); }
+  from { transform: translate3d(18px, 0, 0); }
   to { transform: none; }
 }
 @keyframes whatsapp-desktop-settings-rtl {
-  from { transform: translateX(-100%); }
+  from { transform: translate3d(-18px, 0, 0); }
+  to { transform: none; }
+}
+@keyframes whatsapp-desktop-media {
+  from { transform: translate3d(0, 12px, 0); }
   to { transform: none; }
 }`;
 

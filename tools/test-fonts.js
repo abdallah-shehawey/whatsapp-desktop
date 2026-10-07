@@ -13,6 +13,29 @@
 const assert = require('assert');
 const fonts = require('../src/fonts.js');
 const style = require('../src/style.js');
+const fontFaces = require('../src/page/font-faces.js');
+
+/* Hot changes replace the author aliases, and disabling forcing removes them
+   so a stale desktop choice cannot survive the switch. */
+const nodes = [];
+const document = {
+  documentElement: { appendChild: node => {
+    const i = nodes.indexOf(node);
+    if (i >= 0) nodes.splice(i, 1);
+    nodes.push(node);
+  } },
+  getElementById: id => nodes.find(node => node.id === id),
+  createElement: () => ({ remove() { nodes.splice(nodes.indexOf(this), 1); } }),
+};
+fontFaces.apply(document, '@font-face { src: local("PoetsenOne"); }');
+nodes.push({ id: 'page-downloaded-font' });
+fontFaces.apply(document, '@font-face { src: local("DejaVu Sans"); }');
+assert.equal(nodes.filter(node => node.id === 'wa-font-faces').length, 1);
+assert.match(nodes.at(-1).textContent, /DejaVu Sans/);
+fontFaces.apply(document, '');
+assert.equal(nodes.length, 1, 'turning font forcing off leaves only the page font');
+assert.equal(fontFaces.apply({ documentElement: null }, 'css'), false,
+  'document-start installation waits until the root exists');
 
 const STACK = 'Roboto Variable, Segoe UI, Helvetica, sans-serif';
 

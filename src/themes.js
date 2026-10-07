@@ -304,7 +304,9 @@ function getWebThemeCss(themeKey, hyprAccent = null) {
 
     /* The bubbles, which used to be two descendant selectors matching nothing. */
     --WDS-systems-bubble-surface-incoming: ${raised} !important;
+    --WDS-systems-bubble-surface-incoming-RGB: ${hex(raised).join(', ')} !important;
     --WDS-systems-bubble-surface-outgoing: ${theme.outgoingBubble} !important;
+    --WDS-systems-bubble-surface-outgoing-RGB: ${hex(theme.outgoingBubble).join(', ')} !important;
     --WDS-systems-bubble-surface-system: ${panel} !important;
     --WDS-systems-bubble-surface-e2e: ${panel} !important;
     --WDS-systems-bubble-surface-business: ${panel} !important;
@@ -343,6 +345,21 @@ function getWebThemeCss(themeKey, hyprAccent = null) {
    * draws it: the doodles, or an image, whichever is switched on.
    */
   ${at} #main {
+    /* WhatsApp attaches per-chat colour classes after the first render. Set
+       these at the same scope so opening/switching chats cannot change palette. */
+    --WDS-accent: ${accent} !important;
+    --WDS-content-action-emphasized: ${accent} !important;
+    --WDS-content-external-link: ${accent} !important;
+    --WDS-content-read: ${accent} !important;
+    --WDS-systems-bubble-surface-incoming: ${raised} !important;
+    --WDS-systems-bubble-surface-incoming-RGB: ${hex(raised).join(', ')} !important;
+    --WDS-systems-bubble-surface-outgoing: ${theme.outgoingBubble} !important;
+    --WDS-systems-bubble-surface-outgoing-RGB: ${hex(theme.outgoingBubble).join(', ')} !important;
+    --WDS-systems-bubble-surface-system: ${panel} !important;
+    --WDS-systems-bubble-surface-e2e: ${panel} !important;
+    --WDS-systems-bubble-surface-business: ${panel} !important;
+    --incoming-background: ${raised} !important;
+    --outgoing-background: ${theme.outgoingBubble} !important;
     --WDS-systems-chat-background-wallpaper: ${ground} !important;
     --WDS-systems-chat-foreground-wallpaper: ${doodle(ground)} !important;
   }

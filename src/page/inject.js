@@ -27,6 +27,7 @@ const store = require('./store.js');
 const media = require('./media.js');
 const pictures = require('./pictures.js');
 const arabicDigits = require('./arabic-digits.js');
+const navigation = require('./navigation.js');
 
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
@@ -1887,6 +1888,8 @@ const start = ({ send, on }) => {
   }, true);
 
   /* ------------------------------------------------------------ the question */
+
+  navigation.start({ press, log, window });
 
   /* Answers the app's one question at notification time: what just arrived, and
      was it the conversation already on screen? The reply is the chat, the sender,

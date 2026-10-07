@@ -84,6 +84,9 @@ ok('and each of them beats the page, which at user origin needs saying');
 const mainRule = oled.slice(oled.indexOf('#main {'), oled.indexOf('}', oled.indexOf('#main {')));
 assert.match(mainRule, /--WDS-systems-chat-background-wallpaper/);
 assert.match(mainRule, /--WDS-systems-chat-foreground-wallpaper/);
+assert.match(mainRule, /--WDS-systems-bubble-surface-incoming: #121212 !important/);
+assert.match(mainRule, /--WDS-systems-bubble-surface-outgoing: #003e33 !important/);
+assert.match(mainRule, /--WDS-content-action-emphasized: #00a884 !important/);
 const rootRule = oled.slice(oled.indexOf(':root {'), oled.indexOf('}', oled.indexOf(':root {')));
 assert.doesNotMatch(rootRule, /chat-background-wallpaper/,
                     'on :root it would be overridden by the chat theme on #main');

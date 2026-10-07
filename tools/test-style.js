@@ -251,8 +251,9 @@ assert.match(shipped, /\[data-testid="drawer-left"\] > div > span > div \{/);
    inside the panel, which would each animate separately; the chain matches the
    panel and nothing else. */
 assert.doesNotMatch(shipped, /\[data-testid="drawer-left"\] span > div \{/);
-assert.match(settings, /animation: whatsapp-desktop-settings 200ms/);
-assert.match(settings, /@keyframes whatsapp-desktop-settings \{\n  from \{ transform: translateX\(100%\); \}/);
+assert.match(settings, /animation: whatsapp-desktop-settings 160ms/);
+assert.match(shipped, /@media \(prefers-reduced-motion: no-preference\) \{\n  \[data-testid="drawer-left"\]/);
+assert.match(settings, /@keyframes whatsapp-desktop-settings \{\n  from \{ transform: translate3d\(18px, 0, 0\); \}/);
 
 /*
  * And NOT opacity, in either direction, which is the fix for the lag reported
@@ -276,7 +277,7 @@ assert.doesNotMatch(settings.slice(0, settings.indexOf('}')), /1ms/);
    in Arabic -- where this drawer is on the other edge of the window -- the
    panel would otherwise slide in from the wrong side. */
 assert.match(shipped, /html\[dir="rtl"\] \[data-testid="drawer-left"\] > div > span > div/);
-assert.match(shipped, /@keyframes whatsapp-desktop-settings-rtl \{\n  from \{ transform: translateX\(-100%\); \}/);
+assert.match(shipped, /@keyframes whatsapp-desktop-settings-rtl \{\n  from \{ transform: translate3d\(-18px, 0, 0\); \}/);
 
 /* The label beside the nav rail -- "You", "Chats" -- which WhatsApp mounts
    already opaque under a `transition: opacity` that therefore never runs. It is

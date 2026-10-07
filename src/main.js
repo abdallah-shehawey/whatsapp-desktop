@@ -1215,6 +1215,9 @@ const openAbout = ({ checkNow = false } = {}) => {
   return aboutWin;
 };
 
+const fontFaceCss = () => forcingFont()
+  ? style.fontFaces(pageFontStack || fonts.REPLACED.join(','), chosenFonts()) : '';
+
 /* What the page is drawn with. Lifted out of applyStyle because a call moved
    into a window of its own is a second page of WhatsApp's, and it is this
    client's font it should be drawn in too. */
@@ -1230,11 +1233,6 @@ const styleSheet = () => {
   drawnWith = wanted;
   return [
     sheet,
-    /* The faces themselves: one family name, the Latin font, and -- when the
-       two scripts have been chosen apart -- the Arabic one over the range that
-       is Arabic. No selector, so no per-element cost, which is the whole
-       reason the font lives in @font-face and not in a rule. */
-    forcingFont() ? style.fontFaces(pageFontStack, chosenFonts()) : '',
     /*
      * The blur rules, and only while something is actually blurred.
      *
@@ -1429,10 +1427,11 @@ const drawStyle = async () => {
     } catch (e) { /* the page navigated; the old sheet went with it */ }
   }
 
-  /* USER origin, which is the one level whose !important beats the page's own.
-     An author-level sheet loses to WhatsApp's !important rules, and that is the
-     difference between the desktop font being used and being ignored. */
+  /* User !important beats the page's property declarations. Font-face aliases
+     have a separate author sheet because downloaded author faces win over
+     user-origin faces, irrespective of !important on ordinary properties. */
   if (css) cssKeys.push(await win.webContents.insertCSS(css, { cssOrigin: 'user' }));
+  win.webContents.send('wa:font-faces', fontFaceCss());
 
   /* And then what the switchable rules hang off, AFTER the sheet rather than
      before it -- the same order, and for the same reason, as applyShield on
@@ -1908,6 +1907,7 @@ const adoptPopup = popup => {
     contents.setZoomFactor(Number(config.get('view.zoom')) || 1);
     const css = styleSheet();
     if (css) await contents.insertCSS(css, { cssOrigin: 'user' }).catch(() => {});
+    contents.send('wa:font-faces', fontFaceCss());
   });
 
   /* Whatever this window opens in turn is a link, not a call. */
@@ -2616,6 +2616,7 @@ const wireIpc = () => {
     const marks = themes.markFor(theme, accent);
     event.returnValue = {
       css: themes.getWebThemeCss(theme, accent),
+      fontFaces: fontFaceCss(),
       attributes: { [themes.MARK]: marks.theme, [themes.ACCENT_MARK]: marks.accent },
     };
   });

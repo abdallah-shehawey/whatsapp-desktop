@@ -11,6 +11,9 @@
 
 const { ipcRenderer } = require('electron');
 const page = require('./page/inject.js');
+const fontFaces = require('./page/font-faces.js');
+
+ipcRenderer.on('wa:font-faces', (_, css) => fontFaces.apply(document, css));
 
 /* Two kinds of window load this. The client, with the chat list in it, and the
    call WhatsApp has moved out into a window of its own -- which the app marks
@@ -25,17 +28,20 @@ if (process.argv.includes('--wa-popup')) {
      still draws its user-origin sheet after load and on setting changes; this
      early author sheet uses the same marks so it switches off with Default. */
   const initialTheme = ipcRenderer.sendSync('wa:initial-theme');
-  if (initialTheme && initialTheme.css) {
+  if (initialTheme && (initialTheme.css || initialTheme.fontFaces)) {
     const applyTheme = () => {
       const root = document.documentElement;
       if (!root) return false;
-      const sheet = document.createElement('style');
-      sheet.id = 'wa-initial-theme';
-      sheet.textContent = initialTheme.css;
+      fontFaces.apply(document, initialTheme.fontFaces);
+      if (initialTheme.css) {
+        const sheet = document.createElement('style');
+        sheet.id = 'wa-initial-theme';
+        sheet.textContent = initialTheme.css;
+        root.appendChild(sheet);
+      }
       for (const [name, value] of Object.entries(initialTheme.attributes)) {
         if (value !== null) root.setAttribute(name, value);
       }
-      root.appendChild(sheet);
       return true;
     };
     if (!applyTheme()) {

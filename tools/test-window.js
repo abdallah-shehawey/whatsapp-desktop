@@ -275,6 +275,7 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
         ipcRenderer: { send: channel => calls.push(channel), sendSync: () => null, on() {} },
       };
       if (name === './page/inject.js') return { start() {} };
+      if (name === './page/font-faces.js') return require('../src/page/font-faces.js');
       throw new Error('Unexpected preload dependency: ' + name);
     },
   }, { filename: 'preload.js' });
