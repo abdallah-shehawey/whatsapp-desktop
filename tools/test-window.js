@@ -269,8 +269,11 @@ const build = ({ wayland = true, strategy = 'auto' } = {}) => {
   const preload = fs.readFileSync(path.join(__dirname, '../src/preload.js'), 'utf8');
   vm.runInNewContext(preload, {
     window,
+    location: { href: 'https://web.whatsapp.com/' },
+    __dirname: path.join(__dirname, '../src'),
     process: { argv: [] },
     require(name) {
+      if (name === 'url' || name === 'path') return require(name);
       if (name === 'electron') return {
         ipcRenderer: { send: channel => calls.push(channel), sendSync: () => null, on() {} },
       };

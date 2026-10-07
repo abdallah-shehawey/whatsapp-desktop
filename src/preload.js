@@ -12,6 +12,8 @@
 const { ipcRenderer } = require('electron');
 const page = require('./page/inject.js');
 const fontFaces = require('./page/font-faces.js');
+const { pathToFileURL } = require('url');
+const path = require('path');
 
 ipcRenderer.on('wa:font-faces', (_, css) => fontFaces.apply(document, css));
 
@@ -64,5 +66,33 @@ if (process.argv.includes('--wa-popup')) {
     send('focus-request', null);
   };
 
-  page.start({ send, on });
+  if (location.href.split('?')[0] === pathToFileURL(path.join(__dirname, 'connection.html')).href) {
+    document.addEventListener('DOMContentLoaded', async () => {
+      const button = document.getElementById('connection-retry');
+      if (new URLSearchParams(location.search).has('connecting')) {
+        document.getElementById('connection-title').textContent = 'Connecting to WhatsApp';
+        document.getElementById('connection-message').textContent = 'Your chats will appear when the connection is ready.';
+        button.disabled = true;
+      }
+      button.addEventListener('click', () => send('connection-retry'));
+      window.addEventListener('online', () => send('connection-retry'));
+      on('connection-check', busy => {
+        button.disabled = busy;
+        button.textContent = busy ? 'Checking connection…' : 'Try again';
+      });
+      const settings = await ipcRenderer.invoke('settings:get');
+      const root = document.documentElement;
+      root.dataset.theme = settings.theme;
+      root.style.setProperty('--font-family', settings.font);
+      const palette = settings.palettes[settings.theme];
+      if (palette) {
+        root.dataset.theme = 'dark';
+        root.style.setProperty('--bg-primary', palette.bg);
+        root.style.setProperty('--text-primary', palette.text);
+        root.style.setProperty('--accent', palette.accent);
+      }
+    });
+  } else {
+    page.start({ send, on });
+  }
 }

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="system">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; script-src 'none'">
+  <title>WhatsApp</title>
+  <link rel="stylesheet" href="window.css">
+  <style>
+    body { overflow: hidden; }
+    main { flex: 1; display: grid; place-items: center; padding: 32px; }
+    section { max-width: 440px; text-align: center; }
+    img { width: 72px; height: 72px; margin-bottom: 20px; }
+    h1 { font-size: 28px; margin-bottom: 12px; }
+    h2 { font-size: 20px; font-weight: 500; margin-bottom: 12px; }
+    p { color: var(--text-secondary); margin-bottom: 24px; }
+    button { font: inherit; color: #072e26; background: var(--accent); border: 0;
+      border-radius: 8px; padding: 12px 24px; cursor: pointer; }
+    button:hover { background: var(--accent-hover); }
+    button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 4px; }
+    button:disabled { opacity: .65; cursor: default; }
+  </style>
+</head>
+<body>
+  <main>
+    <section aria-labelledby="app-name">
+      <img src="../data/icons/128/apps/io.github.shehawey.whatsapp-desktop.png" alt="">
+      <h1 id="app-name">WhatsApp</h1>
+      <h2 id="connection-title">Can't connect to WhatsApp</h2>
+      <p id="connection-message" role="status">Check your internet connection. We'll try again automatically.</p>
+      <button id="connection-retry" type="button">Try again</button>
+    </section>
+  </main>
+</body>
+</html>

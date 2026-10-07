@@ -31,6 +31,7 @@ const updates = require('./update.js');
 const { MprisService } = require('./mpris.js');
 const privacy = require('./privacy.js');
 const themes = require('./themes.js');
+const connectionPage = require('./connection.js');
 const { LockManager } = require('./lock.js');
 /* Version, licence and author, read from the one file that already says them. */
 const manifest = require('../package.json');
@@ -1495,7 +1496,18 @@ const createWindow = () => {
   });
 
   Menu.setApplicationMenu(null);
-  win.loadURL(WHATSAPP_URL);
+  const connection = connectionPage.attach(win, {
+    url: WHATSAPP_URL,
+    file: path.join(__dirname, 'connection.html'),
+    ipcMain,
+    probe: async signal => {
+      const response = await session.defaultSession.fetch(WHATSAPP_URL, {
+        method: 'HEAD', cache: 'no-store',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+      });
+      return response.ok;
+    },
+  });
 
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown') lock.recordActivity();
@@ -1562,6 +1574,7 @@ const createWindow = () => {
   /* ------------------------------------------------------------- the page */
 
   win.webContents.on('did-finish-load', async () => {
+    if (connection.isLocal()) return; // preserve pending chats/invites until WhatsApp loads
     loadedAt = Date.now();
     if (pendingChat) {
       win.webContents.send('wa:open-link', { phone: pendingChat.phone, wantsText: !!pendingChat.text });
@@ -1596,12 +1609,6 @@ const createWindow = () => {
       if (tone) win.webContents.send('wa:tone', tone);
     }
     pushFocus();
-  });
-
-  win.webContents.on('did-fail-load', (event, code, description, url, isMainFrame) => {
-    if (!isMainFrame || code === -3) return;                  // -3 is an aborted load
-    console.warn('load failed (%d %s); trying again in 5s', code, description);
-    setTimeout(() => win && !win.isDestroyed() && win.loadURL(WHATSAPP_URL), 5000);
   });
 
   win.webContents.on('render-process-gone', (event, details) => {
@@ -1654,6 +1661,7 @@ const createWindow = () => {
   });
 
   win.webContents.on('before-input-event', onKey);
+  connection.start();
 };
 
 const isWhatsApp = url => {
