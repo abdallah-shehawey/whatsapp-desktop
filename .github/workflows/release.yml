@@ -139,9 +139,9 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: Install appimagetool
+      - name: Install AppImage build tools
         run: |
-          sudo apt-get update && sudo apt-get install -y file
+          sudo apt-get update && sudo apt-get install -y file desktop-file-utils
           curl -L -o /tmp/appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x /tmp/appimagetool
           cd /tmp && ./appimagetool --appimage-extract

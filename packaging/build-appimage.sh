@@ -16,6 +16,17 @@ mkdir -p "$APPDIR" "$OUTDIR"
 # Stage via Makefile
 make -C "$DIR" install DESTDIR="$APPDIR" PREFIX=/usr
 
+# The native launcher uses /usr/lib; an AppImage must run its bundled copy
+# wherever it is mounted, while retaining the font and environment setup.
+sed -i 's|^exec /usr/lib/whatsapp-desktop/whatsapp-desktop |exec "$(dirname "$(readlink -f "$0")")/../lib/whatsapp-desktop/whatsapp-desktop" |' \
+  "$APPDIR/usr/bin/whatsapp-desktop"
+
+# The catalog's desktop-file-utils 0.26 predates SingleMainWindow. Keep that
+# hint for native packages and omit it here; Electron enforces one instance.
+# Use PATH for Exec so desktop integration resolves the bundled launcher.
+DESKTOP_FILE="$APPDIR/usr/share/applications/io.github.shehawey.whatsapp-desktop.desktop"
+sed -i '/^SingleMainWindow=/d; s|^Exec=/usr/bin/whatsapp-desktop|Exec=whatsapp-desktop|' "$DESKTOP_FILE"
+
 # AppRun entrypoint
 cat << 'EOF' > "$APPDIR/AppRun"
 #!/bin/sh
@@ -28,9 +39,13 @@ EOF
 chmod +x "$APPDIR/AppRun"
 
 # Desktop file and icon at root of AppDir
-cp "$APPDIR/usr/share/applications/io.github.shehawey.whatsapp-desktop.desktop" "$APPDIR/"
+cp "$DESKTOP_FILE" "$APPDIR/"
 cp "$DIR/data/icons/256/apps/io.github.shehawey.whatsapp-desktop.png" "$APPDIR/io.github.shehawey.whatsapp-desktop.png"
 ln -sf io.github.shehawey.whatsapp-desktop.png "$APPDIR/.DirIcon"
+
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  desktop-file-validate "$DESKTOP_FILE" "$APPDIR/io.github.shehawey.whatsapp-desktop.desktop"
+fi
 
 echo "AppDir staged at: $APPDIR"
 if command -v appimagetool >/dev/null 2>&1; then
