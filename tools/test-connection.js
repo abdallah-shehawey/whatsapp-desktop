@@ -32,10 +32,12 @@ const build = () => {
   let destroyed = false;
   let probe = async () => false;
   const calls = [];
+  const throttling = [];
   Object.assign(contents, {
     getURL: () => current,
     isDestroyed: () => destroyed,
     send: (channel, value) => calls.push(['send', channel, value]),
+    setBackgroundThrottling: enabled => throttling.push(enabled),
   });
   const win = {
     webContents: contents,
@@ -47,7 +49,7 @@ const build = () => {
   };
   const controller = module.exports.attach(win, { url: remote, file, ipcMain, probe: signal => probe(signal) });
   return {
-    controller, calls, timers, contents, ipcMain,
+    controller, calls, timers, contents, ipcMain, throttling,
     setProbe: value => { probe = value; },
     fail: (code = -106, mainFrame = true, url = remote) => contents.emit('did-fail-load', {}, code, 'offline', url, mainFrame),
     retry: (sender = contents, url = local) => ipcMain.emit('wa:connection-retry', { sender, senderFrame: { url } }),
@@ -73,6 +75,7 @@ const build = () => {
     t.fail();
     check('a failed main navigation shows the connection page and schedules recovery', () => {
       assert.strictEqual(t.controller.isLocal(), true); assert.strictEqual(t.timers.size, 1);
+      assert.deepStrictEqual(t.throttling, [true], 'the offline page can paint after failed navigation');
     });
     await t.tick();
     check('an unsuccessful background check keeps the local page visible', () => {

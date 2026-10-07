@@ -35,6 +35,7 @@ const run = ({ platform = 'wayland', forceX11 = false, args = [], env = {} } = {
       exit(code) { assert.strictEqual(code, 0); throw stopped; },
     },
   };
+  context.relaunch = options => context.app.relaunch(options);
   let result;
   try { result = vm.runInNewContext(startup + '\n({ onWayland, forceX11 });', context); }
   catch (error) { if (error !== stopped) throw error; }

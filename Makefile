@@ -152,6 +152,7 @@ screenshots:
 # Replays page, notification and desktop behavior in plain node -- no browser,
 # account or live desktop session.
 test:
+	@node tools/test-relaunch.js
 	@node tools/test-connection.js
 	@node tools/test-inject.js
 	@node tools/test-navigation.js

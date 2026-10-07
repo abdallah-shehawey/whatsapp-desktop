@@ -32,6 +32,7 @@ const { MprisService } = require('./mpris.js');
 const privacy = require('./privacy.js');
 const themes = require('./themes.js');
 const connectionPage = require('./connection.js');
+const restart = require('./relaunch.js');
 const { LockManager } = require('./lock.js');
 /* Version, licence and author, read from the one file that already says them. */
 const manifest = require('../package.json');
@@ -66,6 +67,11 @@ const ARRIVAL_SETTLE_MS = 4000;
 
 const hidden = process.argv.includes('--hidden');
 const config = new Config();
+const relaunch = options => {
+  debug.trace('relaunch: executable=%s image=%s appdir=%s', process.execPath,
+              process.env.APPIMAGE, process.env.APPDIR);
+  restart.relaunch(app, options);
+};
 
 if (process.argv.includes('--version') || process.argv.includes('-v')) {
   const pkg = require('../package.json');
@@ -182,7 +188,7 @@ if (fontConfigFile) {
   process.env.FONTCONFIG_FILE = fontConfigFile;
   if (INHERITED_FONTCONFIG !== fontConfigFile && !process.argv.includes('--font-retry')) {
     console.log('restarting once so Chromium reads %s', fontConfigFile);
-    app.relaunch({ args: process.argv.slice(1).concat('--font-retry') });
+    relaunch({ args: process.argv.slice(1).concat('--font-retry') });
     app.exit(0);
   }
 }
@@ -205,7 +211,7 @@ if (forceX11 && ozonePlatform !== 'x11') {
      its child processes were told X11. Pass it to a fresh process instead. The
      new process sees the explicit flag and cannot enter this branch again. */
   console.log('restarting once to apply system.force-x11');
-  app.relaunch({ args: process.argv.slice(1).concat('--ozone-platform=x11') });
+  relaunch({ args: process.argv.slice(1).concat('--ozone-platform=x11') });
   app.exit(0);
 }
 const onWayland = ozonePlatform === 'wayland';
@@ -1488,10 +1494,11 @@ const createWindow = () => {
          anything the sheet does not reach falls back to. */
       defaultFontFamily: { standard: family, sansSerif: family, serif: family },
       defaultFontSize: config.get('view.font-size'),
-      /* A window in the tray is a hidden window, and Chromium freezes the timers
-         of those. The chat-list watcher and WhatsApp's own keepalive both live on
-         timers, so this stays on. */
-      backgroundThrottling: false,
+      /* Keep normal visibility handling while the local connection page paints.
+         Disabling throttling before its failed-navigation round trip can leave
+         its surface blank under Xvfb. The loaded web client opts out below so
+         WhatsApp and the chat watcher keep running in the tray. */
+      backgroundThrottling: true,
     },
   });
 
@@ -1575,6 +1582,7 @@ const createWindow = () => {
 
   win.webContents.on('did-finish-load', async () => {
     if (connection.isLocal()) return; // preserve pending chats/invites until WhatsApp loads
+    win.webContents.setBackgroundThrottling(false);
     loadedAt = Date.now();
     if (pendingChat) {
       win.webContents.send('wa:open-link', { phone: pendingChat.phone, wantsText: !!pendingChat.text });
@@ -2813,7 +2821,7 @@ const wireIpc = () => {
   ipcMain.on('settings:restart', () => {
     console.log('restarting at the settings window\'s request');
     quitting = true;
-    app.relaunch();
+    relaunch();
     app.quit();
   });
 

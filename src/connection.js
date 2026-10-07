@@ -57,6 +57,7 @@ const attach = (win, { url, file, ipcMain, probe, retryMs = 5000 }) => {
     console.warn('load failed (%d %s); showing the connection page', code, description);
     stop();
     offline = true;
+    contents.setBackgroundThrottling(true);
     win.loadFile(file).catch(err => console.warn('connection page: %s', err.message));
     schedule();
   };
