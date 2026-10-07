@@ -13,6 +13,13 @@ check('a bundled runtime restarts through the AppImage with its arguments intact
 check('a restart from Settings also remounts the AppImage', () => {
   assert.deepStrictEqual(options(undefined, env, env.APPDIR + '/usr/lib/whatsapp-desktop/whatsapp-desktop'), { execPath: env.APPIMAGE });
 });
+check('a non-executable image restarts within its persistent sandbox mount', () => {
+  const sandbox = { APPIMAGE: '/work/BeingTested.AppImage', APPDIR: '/run/firejail/appimage' };
+  const result = options(asked, sandbox, sandbox.APPDIR + '/usr/lib/whatsapp-desktop/whatsapp-desktop', false);
+  assert.strictEqual(result.execPath, sandbox.APPDIR + '/AppRun');
+  assert.strictEqual(result.args, args);
+  assert.deepStrictEqual(options(undefined, sandbox, sandbox.APPDIR + '/usr/lib/whatsapp-desktop/whatsapp-desktop', false), { execPath: sandbox.APPDIR + '/AppRun' });
+});
 check('native installs retain Electron default restart behavior', () => {
   assert.strictEqual(options(asked, {}, '/usr/lib/whatsapp-desktop/whatsapp-desktop'), asked);
   assert.strictEqual(options(undefined, {}, '/usr/lib/whatsapp-desktop/whatsapp-desktop'), undefined);

@@ -1,18 +1,27 @@
 'use strict';
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 
 /* The AppImage runtime unmounts its temporary tree when this process exits.
  * Restart through the image itself so the next copy gets a fresh mount. */
-const options = (asked, env, executable) => {
+const options = (asked, env, executable, imageExecutable = true) => {
   const bundled = env.APPIMAGE && env.APPDIR &&
     executable.startsWith(path.resolve(env.APPDIR) + path.sep);
-  return bundled ? { ...asked, execPath: env.APPIMAGE } : asked;
+  /* Firejail can mount an image without permission to execute the image file.
+   * Its AppDir remains mounted for the sandbox's lifetime, so use AppRun there. */
+  return bundled ? { ...asked, execPath: imageExecutable ? env.APPIMAGE :
+    path.join(env.APPDIR, 'AppRun') } : asked;
 };
 
 const relaunch = (app, asked) => {
-  const resolved = options(asked, process.env, process.execPath);
-  if (!resolved?.execPath || resolved.execPath !== process.env.APPIMAGE) {
+  let imageExecutable = false;
+  try {
+    fs.accessSync(process.env.APPIMAGE, fs.constants.X_OK);
+    imageExecutable = true;
+  } catch (err) { /* A sandbox may mount a non-executable image. */ }
+  const resolved = options(asked, process.env, process.execPath, imageExecutable);
+  if (resolved === asked) {
     app.relaunch(asked);
     return;
   }
