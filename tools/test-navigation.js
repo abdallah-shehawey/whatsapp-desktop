@@ -3,13 +3,14 @@
 const assert = require('assert');
 const { start } = require('../src/page/navigation.js');
 
-const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false, deferRestore = false } = {}) => {
+const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false, deferRestore = false, scheduled = false, preparation = false } = {}) => {
   const handlers = {};
   let update, selected, main = null, active = '', last = 'old', cancelled = 0;
   let layers = [], covered = false, back = false;
   let media = false, mediaSearch = false;
   let meList = null;
   let panelNodes = [], bodyReady = true;
+  let messageKey = '';
   let animations = [], presses = 0, timers = [], frames = [], restores = 0;
   const restore = { cancelPendingLastActiveChatRestore: () => cancelled++,
     openLastActiveChatIfNotLocked: () => { restores++; return Promise.resolve(); } };
@@ -17,7 +18,12 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
     name, isConnected: true, attributes: {},
     setAttribute(key, value) { this.attributes[key] = value; },
     animate(frames, options) {
-      const a = { target: this, frames, options, cancel() { this.cancelled = true; } };
+      const a = { target: this, frames, options, cancel() { this.cancelled = true; this.playState = 'idle'; } };
+      if (preparation) {
+        a.playState = 'running';
+        a.pause = () => { a.playState = 'paused'; };
+        a.play = () => { a.playState = 'running'; a.played = true; };
+      }
       animations.push(a); return a;
     },
   });
@@ -63,7 +69,7 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
     matchMedia: () => ({ matches: reduced }),
     addEventListener: (type, cb) => { handlers[type] = cb; },
     setTimeout: cb => timers.push(cb),
-    ...(deferRestore ? { requestAnimationFrame: cb => frames.push(cb) } : {}),
+    ...(deferRestore || scheduled ? { requestAnimationFrame: cb => frames.push(cb) } : {}),
     MutationObserver: class {
       constructor(cb) { update = cb; }
       observe(target) { assert.equal(target, document, 'startup observes the document before html exists'); }
@@ -90,11 +96,13 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
   };
   return {
     key, update,
-    open: (id, replace = false) => {
+    open: (id, replace = false, commit = true) => {
       document.documentElement ||= { getAttribute: () => rtl ? 'rtl' : 'ltr' };
       active = id;
+      if (commit) messageKey = id;
       if (!main || replace) {
         const body = animatedElement('body'), messages = animatedElement('messages'), header = animatedElement('header'), footer = animatedElement('footer');
+        messages.querySelector = () => ({ getAttribute: () => messageKey });
         main = animatedElement('frame');
         main.querySelector = selector => selector.includes('conversation-panel-body') ? (bodyReady ? body : null)
           : selector.includes('conversation-panel-messages') ? (bodyReady ? messages : null)
@@ -102,7 +110,11 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
       }
       update();
     },
-    close: () => { main = null; active = ''; update(); },
+    commitMessages: id => { messageKey = id; update(); },
+    close: () => {
+      const removed = main; main = null; active = '';
+      update([{ type: 'childList', removedNodes: removed ? [removed] : [] }]);
+    },
     leave: () => {
       handlers.click({ target: section });
       last = active; main = null; active = '';
@@ -116,12 +128,14 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
     },
     nativeRestore: () => restore.openLastActiveChatIfNotLocked(),
     paint: () => { const pending = frames; frames = []; pending.forEach(cb => cb()); },
+    hide: () => { document.visibilityState = 'hidden'; handlers.visibilitychange(); },
     mutate: target => update([{ type: 'childList', target }]),
     selectSection: () => { selected = section; update(); },
-    addPanel: () => {
+    addPanel: (placeholder = false) => {
       const panel = animatedElement('panel');
       panel.closest = () => sectionContainer;
       panel.firstElementChild = animatedElement('panel-content');
+      if (placeholder) panel.querySelector = () => ({ matches: () => true });
       panelNodes.unshift(panel); update(); return panel;
     },
     removePanel: panel => { panel.isConnected = false; panelNodes = panelNodes.filter(p => p !== panel); update(); },
@@ -147,7 +161,7 @@ assert.deepEqual(r.state.animations.map(a => a.target.name), ['messages', 'heade
 r.update();
 assert.equal(r.state.animations.length, 3, 'messages and timestamps do not replay entrance motion');
 r.open('b');
-assert.deepEqual(r.state.animations.slice(3).map(a => a.target.name), ['body', 'header'], 'switching animates the messages and identity, keeping the frame and composer fixed');
+assert.deepEqual(r.state.animations.slice(3).map(a => a.target.name), ['messages', 'header'], 'switching reuses the scroll layer and identity, keeping the body, frame and composer fixed');
 assert.ok(r.state.animations.slice(0, 3).every(a => a.cancelled), 'rapid switches cancel the first entrance');
 r.open('b');
 assert.equal(r.state.animations.length, 5, 'clicking the current chat does not replay its animation');
@@ -232,16 +246,17 @@ sections.removePanel(secondPanel);
 assert.ok(secondAnimation.cancelled, 'removing an animated section cancels its motion');
 assert.equal(profilePanel.attributes['data-wa-navigation-panel'], 'active', 'a retained page becomes visible again when returning from a nested page');
 const returning = rig({ deferRestore: true });
-returning.open('a'); returning.leave();
+returning.open('a'); returning.paint(); returning.leave(); returning.paint();
 returning.returnByClick(true);
 assert.equal(returning.state.restores, 0, 'conversation rebuilding waits for the tab to paint');
+returning.paint();
 assert.equal(returning.state.animations.at(-1).options.duration, 220, 'Chats uses the same duration as the other sections');
 assert.equal(returning.state.animations.at(-1).frames[0].opacity, 0, 'Chats gets the full section reveal');
 returning.paint();
 assert.equal(returning.state.restores, 0, 'restore runs in a task after the first paint');
 returning.drain();
 assert.equal(returning.state.restores, 1, 'native lock and restore checks run once after painting');
-returning.leave(); returning.returnByClick(true); returning.leave(); returning.paint(); returning.drain();
+returning.leave(); returning.paint(); returning.returnByClick(true); returning.leave(); returning.paint(); returning.drain();
 assert.equal(returning.state.restores, 1, 'a rapid departure cancels a deferred restore');
 const lateList = rig();
 lateList.setListReady(false); lateList.selectSection(); lateList.returnByClick();
@@ -250,4 +265,39 @@ lateList.setListReady(true);
 assert.equal(lateList.state.animations.length, 1, 'Chats reveals when its content is ready');
 lateList.mutate({ closest: () => ({}) });
 assert.equal(lateList.state.animations.length, 1, 'a preview update does not restart navigation');
+const batched = rig({ scheduled: true });
+batched.open('a'); batched.open('b'); batched.update();
+assert.equal(batched.state.animations.length, 0, 'separate commits wait for a single paint');
+batched.paint();
+assert.equal(batched.state.animations.length, 3, 'only the final conversation gets an entrance');
+batched.open('c'); batched.close(); batched.paint();
+assert.equal(batched.state.animations.length, 3, 'closing before paint cancels a pending entrance');
+batched.selectSection(); batched.addPanel(); batched.returnByClick(); batched.paint();
+assert.equal(batched.state.animations.filter(a => a.target.name === 'panel-content').length, 0,
+  'a section abandoned before paint never animates over Chats');
+const prepared = rig({ scheduled: true, preparation: true });
+prepared.open('a'); prepared.paint();
+assert.ok(prepared.state.animations.every(a => a.playState === 'paused'), 'the first layout prepares the scroll layer before starting the reveal');
+prepared.paint();
+assert.ok(prepared.state.animations.every(a => a.played), 'the reveal starts after its prepared frame');
+prepared.open('b'); prepared.paint(); prepared.hide(); prepared.paint();
+assert.ok(prepared.state.animations.slice(3).every(a => a.cancelled && !a.played),
+  'hiding during preparation settles content instead of replaying a stale reveal on return');
+const staged = rig();
+staged.open('a'); staged.open('b', false, false);
+assert.equal(staged.state.animations.length, 3, 'an early active-model change cannot animate the old messages');
+staged.commitMessages('b');
+assert.equal(staged.state.animations.length, 5, 'the newly committed conversation gets exactly one reveal');
+staged.open('b', true);
+assert.equal(staged.state.animations.length, 5, 'a second DOM mount for the same chat does not replay the reveal');
+staged.open('c', false, false); staged.close(); staged.commitMessages('c');
+assert.equal(staged.state.animations.length, 5, 'closing between model selection and message commit cancels the reveal');
+const background = rig();
+background.selectSection(); background.addPanel(true);
+assert.equal(background.state.animations.length, 0, 'a full-size welcome background is never promoted for a tab reveal');
+const rapidClose = rig({ scheduled: true });
+rapidClose.open('a'); rapidClose.paint(); rapidClose.close();
+assert.equal(rapidClose.state.last, null, 'a closed chat is forgotten before visual reconciliation paints');
+rapidClose.leave(); rapidClose.returnByClick(); rapidClose.paint();
+assert.ok(!rapidClose.state.last, 'closing then changing tabs before paint cannot revive the conversation');
 console.log('navigation checks pass');

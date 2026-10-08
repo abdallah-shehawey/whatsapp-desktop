@@ -28,6 +28,7 @@ const media = require('./media.js');
 const pictures = require('./pictures.js');
 const arabicDigits = require('./arabic-digits.js');
 const navigation = require('./navigation.js');
+const motion = require('./motion.js');
 
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
@@ -1889,7 +1890,8 @@ const start = ({ send, on }) => {
 
   /* ------------------------------------------------------------ the question */
 
-  navigation.start({ press, log, window });
+  let adoptConversation = () => {};
+  navigation.start({ press, log, window, prepareChat: () => adoptConversation() });
 
   /* Answers the app's one question at notification time: what just arrived, and
      was it the conversation already on screen? The reply is the chat, the sender,
@@ -2634,54 +2636,7 @@ const start = ({ send, on }) => {
     return null;
   };
 
-  /* Which motion on an element is the current one.
-   *
-   * A transition is tidied away once it has run, and "is this still mine" used
-   * to be asked of the declaration itself. Two glides of the same length and
-   * easing on the same element write the same string, so the first one's
-   * tidy-up would answer yes to the second and clear it mid-flight, which snaps
-   * whatever it was moving. They are not hypothetical: followTheRoom folds a
-   * late change into the glide already running with whatever time is left, and
-   * once that has hit its floor every fold is the same length. */
-  let moves = 0;
-  const claim = element => (element.__waMove = ++moves);
-
-  /* Where a thing starts, put there with no motion at all. */
-  const park = (element, at, dim) => {
-    claim(element);
-    element.style.transition = 'none';
-    element.style.transform = 'translateY(' + at + 'px)';
-    if (dim) element.style.opacity = '0';
-  };
-
-  /* And the move itself, back to wherever the page would have it.
-   *
-   * These are CSS transitions and not Web Animations, which is not a
-   * preference. A transition takes effect in the next style recalculation,
-   * whenever that is asked for; an animation from element.animate() does not --
-   * measured: pin a panel's max-height with one and read the height straight
-   * back in the same task with layout forced, and it is still the old height,
-   * because animation effects are folded into style once a frame, at a point
-   * that has already passed. The conversation is offset from a ResizeObserver,
-   * which runs after that point, so an animation started there would leave the
-   * messages 66px out of place for exactly the frame that matters.
-   *
-   * The forced read in the middle is the rest of it: without it both writes
-   * land in one style recalculation, the value the browser compares against is
-   * still the one from the frame before, and a transition from nought to nought
-   * does not run. */
-  const letGo = (element, ms, easing, dim) => {
-    void element.offsetHeight;
-    element.style.transition = 'transform ' + ms + 'ms ' + easing +
-      (dim ? ', opacity ' + Math.round(ms * 0.6) + 'ms linear' : '');
-    element.style.transform = '';
-    if (dim) element.style.opacity = '';
-    /* Tidied away after, and only if nothing else has taken it over since --
-       clearing a transition that is still running snaps whatever it is moving. */
-    const mine = claim(element);
-    setTimeout(() => { if (element.__waMove === mine) element.style.transition = ''; },
-               ms + 90);
-  };
+  const { park, letGo, stop: stopMotion } = motion.create();
 
   /* How far down a thing is at this instant, mid-motion and all: a transition
      resolves to a matrix, and the vertical of one is its 6th number in two
@@ -2885,10 +2840,19 @@ const start = ({ send, on }) => {
            it away in one frame; measured at an even fade, the cut landed with
            the bar at about a tenth of its colour still showing. It is gone
            before the room closes over it now. */
-        inside.style.transition = 'transform ' + PANEL_OUT_MS + 'ms ' + PANEL_OUT +
-          ', opacity ' + Math.round(PANEL_OUT_MS * 0.7) + 'ms linear';
-        inside.style.transform = 'translateY(' + Math.round(from / 4) + 'px)';
+        const current = getComputedStyle(inside);
+        const transform = current.transform, opacity = current.opacity;
+        stopMotion(inside);
+        inside.style.transition = 'none';
+        inside.style.transform = 'translate3d(0, ' + Math.round(from / 4) + 'px, 0)';
         inside.style.opacity = '0';
+        const exit = inside.animate([
+          { transform, opacity },
+          { transform: inside.style.transform, opacity: 0, offset: 0.7 },
+          { transform: inside.style.transform, opacity: 0 },
+        ], { duration: PANEL_OUT_MS, easing: PANEL_OUT });
+        exit.onfinish = () => exit.cancel();
+        setTimeout(() => exit.cancel(), PANEL_OUT_MS + 100);
 
         /* Then the room, in one layout, with the conversation sliding down into
            it. It happens after the bar has gone rather than beside it: the bar
@@ -2959,70 +2923,16 @@ const start = ({ send, on }) => {
    * conversation answers 201/216ms blocked with it and 214/240ms without.
    */
 
-  /* The glide is the reply bar's, at the reply bar's easing: the same motion
-     answering the same jump, and two different curves for it in one window
-     would read as two different apps. The pop is a shade longer and lands with
-     a little overshoot, which is the whole of what makes it a pop. */
+  /* Keep the original send's corner pop, overshoot and timing. The performance
+     changes concern how it is scheduled and measured, not its visual design. */
   const ARRIVAL_GLIDE_MS = 260;
   const ARRIVAL_POP_MS = 300;
   const ARRIVAL_POP = 'cubic-bezier(0.34, 1.28, 0.64, 1)';
-
-  /* How much smaller the bubble starts, and the most its far corner is allowed
-     to travel getting back. The cap is what keeps a full-width photo or a long
-     paragraph from lurching: at a flat twelve per cent a 650px bubble would
-     swing its far corner 78px, which is a shove rather than a pop. */
   const ARRIVAL_POP_SCALE = 0.12;
   const ARRIVAL_POP_TRAVEL = 64;
-
-  /* A conversation is not settled the instant its list appears -- the opening
-     render arrives in pieces -- and rows that were already on their way are not
-     arrivals. */
-  const ARRIVAL_SETTLE_MS = 400;
-
-  /* How near the bottom still counts as held there. A conversation the owner
-     has scrolled up into is not scrolled by a message landing below the fold:
-     nothing moves, so there is nothing to smooth and nothing on screen to pop. */
+  const ARRIVAL_SETTLE_MS = 160;
   const ARRIVAL_PIN_SLACK = 3;
-
-  /* Lists are adopted on a timer for the reason #pane-side is: WhatsApp builds a
-     new one for every conversation opened, taking any observer with it. The work
-     is a querySelectorAll and a flag test, and it has to be quicker than the
-     chat list's four seconds -- a message sent within a second of opening a chat
-     is the ordinary case, not the corner one. */
   const ARRIVAL_ADOPT_MS = 600;
-
-  /* Set on the bubble and read by the keyframes, so one stylesheet covers every
-     size of message without a rule per bubble. */
-  const POP_SCALE_VAR = '--whatsapp-desktop-pop';
-
-  const POP_KEYFRAMES = `@keyframes whatsapp-desktop-arrival {
-  from { opacity: 0; transform: scale(var(${POP_SCALE_VAR}, 0.88)); }
-  55%  { opacity: 1; }
-  to   { opacity: 1; transform: none; }
-}`;
-
-  /* Page origin rather than the sheet in src/style.js, and deliberately: a user
-     stylesheet cannot be taken back out of this engine once inserted, and
-     keyframes that only ever run when JavaScript names them belong with the
-     JavaScript that names them.
-   *
-   * Put up when a conversation is adopted and NOT at the first message that
-   * needs one, which is where it was and which the owner saw at once: "the
-   * first one lagged". Appending a style element invalidates the style of every
-   * element under it, and a conversation is a couple of thousand of them -- so
-   * the first send paid for a whole-document recalculation on the very frame it
-   * was trying to glide, and only the first. It is paid in an idle frame now,
-   * about half a second after a chat opens, and once for the whole session. */
-  let popSheet = null;
-  const keyframesReady = () => {
-    if (popSheet && popSheet.isConnected) return true;
-    const head = document.head || document.documentElement;
-    if (!head) return false;
-    popSheet = document.createElement('style');
-    popSheet.textContent = POP_KEYFRAMES;
-    head.appendChild(popSheet);
-    return true;
-  };
 
   /* GNOME's "Reduce animation" reaches Chromium as this query, and a desktop
      that has asked for less motion is not asking for a client with its own.
@@ -3037,57 +2947,57 @@ const start = ({ send, on }) => {
     return stillness.matches;
   };
 
-  /* The bubble, grown out of the corner it belongs to.
-   *
-   * The corner is measured from the box rather than taken from a class: an
-   * outgoing message sits 64px off the right of an English conversation and 64
-   * off the LEFT of an Arabic one, and the two look identical to a selector.
-   * The gaps decide, and a centred row -- a day separator, a security-code
-   * notice -- has no bubble to ask about and never gets here. */
-  const popTheBubble = (bubble, scroller) => {
-    if (!keyframesReady()) return;          /* adoption normally got there first */
-    const box = bubble.getBoundingClientRect();
-    const room = scroller.getBoundingClientRect();
-    if (!(box.width > 0)) return;
-    /* And on screen. A conversation the owner has scrolled up into puts the
-       arriving message below the fold, where an entrance is a compositor layer
-       raised for something nobody can see -- and one that would be over by the
-       time they scrolled down to it. */
-    if (box.bottom < room.top || box.top > room.bottom) return;
-
-    const near = (room.right - box.right) <= (box.left - room.left) ? '100%' : '0%';
-    const reach = Math.max(box.width, box.height, 1);
-    const from = 1 - Math.min(ARRIVAL_POP_SCALE, ARRIVAL_POP_TRAVEL / reach);
-
+  const POP_SCALE_VAR = '--whatsapp-desktop-pop';
+  const POP_KEYFRAMES = `@keyframes whatsapp-desktop-arrival {
+  from { opacity: 0; transform: scale(var(${POP_SCALE_VAR}, 0.88)); }
+  55%  { opacity: 1; }
+  to   { opacity: 1; transform: none; }
+}`;
+  let popSheet = null;
+  const keyframesReady = () => {
+    if (popSheet?.isConnected) return true;
+    const head = document.head || document.documentElement;
+    if (!head) return false;
+    popSheet = document.createElement('style');
+    popSheet.textContent = POP_KEYFRAMES;
+    head.appendChild(popSheet);
+    return true;
+  };
+  const bubbleCleanups = new WeakMap();
+  /* The original CSS corner-pop, with geometry supplied by the read phase.
+     Its stylesheet is installed at adoption, never on the first send. */
+  const popTheBubble = (bubble, box, room) => {
+    if (!keyframesReady() || !(box.width > 0) || box.bottom < room.top || box.top > room.bottom) return;
+    const origin = ((room.right - box.right) <= (box.left - room.left) ? '100%' : '0%') + ' 100%';
+    const from = 1 - Math.min(ARRIVAL_POP_SCALE,
+      ARRIVAL_POP_TRAVEL / Math.max(box.width, box.height, 1));
+    const previousCleanup = bubbleCleanups.get(bubble);
+    const previousAnimation = previousCleanup && bubble.getAnimations?.()
+      .find(animation => animation.animationName === 'whatsapp-desktop-arrival');
+    previousCleanup?.();
     bubble.style.setProperty(POP_SCALE_VAR, from.toFixed(3));
-    bubble.style.transformOrigin = near + ' 100%';
-    bubble.style.animation = 'whatsapp-desktop-arrival ' + ARRIVAL_POP_MS + 'ms ' +
-                             ARRIVAL_POP + ' both';
-
-    /* A CSS animation rather than a transition, for one reason: it cannot leave
-       a message invisible. `both` fills from the first keyframe and hands the
-       element back at the last, so a window hidden mid-pop -- where no frames
-       run at all -- comes back to a bubble at rest rather than to one parked at
-       opacity 0. The tidy-up below is only for the inline style; the backstop
-       is there because animationend does not arrive for an animation the engine
-       drops. */
-    let over = false;
+    bubble.style.transformOrigin = origin;
+    bubble.style.animation = 'whatsapp-desktop-arrival ' + ARRIVAL_POP_MS + 'ms ' + ARRIVAL_POP + ' both';
+    /* A recycled bubble can receive another message before its first pop ends.
+       Reapplying the same CSS name alone keeps the old clock; rewind it so the
+       new message receives the original entrance from its own first frame. */
+    if (previousAnimation) { previousAnimation.currentTime = 0; previousAnimation.play(); }
+    const began = performance.now();
+    let timer;
     const done = event => {
-      /* Ours, and not one from inside the message. `animationend` bubbles, and
-         a bubble is a box with things in it that move -- a spinner on a
-         download, a waveform, whatever WhatsApp animates next. One of those
-         ending would otherwise strip this animation off half way through and
-         snap the message to its resting size. */
-      if (event && event.target !== bubble) return;
-      if (over) return;
-      over = true;
+      if (event && (event.target !== bubble || event.animationName !== 'whatsapp-desktop-arrival')) return;
+      if (event && performance.now() - began < ARRIVAL_POP_MS - 20) return;
+      if (bubbleCleanups.get(bubble) !== done) return;
+      clearTimeout(timer);
       bubble.removeEventListener('animationend', done);
       bubble.style.removeProperty(POP_SCALE_VAR);
       bubble.style.animation = '';
       bubble.style.transformOrigin = '';
+      bubbleCleanups.delete(bubble);
     };
+    bubbleCleanups.set(bubble, done);
     bubble.addEventListener('animationend', done);
-    setTimeout(done, ARRIVAL_POP_MS + 250);
+    timer = setTimeout(done, ARRIVAL_POP_MS + 250);
   };
 
   /* This conversation's own composer. Looked up from the scroller outwards and
@@ -3158,7 +3068,7 @@ const start = ({ send, on }) => {
      dragged -- and a row remembered from two seconds ago is not what that resize
      is about. It is also what times out the rows that piled up while the window
      was behind another one, whose entrance was over before anyone could look. */
-  const ARRIVAL_PENDING_MS = 60;
+  const ARRIVAL_PENDING_MS = 180;
 
   const adoptArrivals = (scroller, list) => {
     const since = performance.now();
@@ -3237,8 +3147,6 @@ const start = ({ send, on }) => {
       return null;
     };
 
-    try { marksOn(0); } catch (err) { return; }
-
     /* The layer the glide moves, made now rather than on the frame it is first
        needed. A transform promotes the list, promoting it means rastering the
        conversation again, and asked for on the frame a message arrives that
@@ -3269,9 +3177,13 @@ const start = ({ send, on }) => {
      * full -- which is what a spell with the app minimised does to it. */
     const shown = new Set();
     const nameOf = row => {
-      const tag = row.querySelector('[data-id]');
+      const tag = row.matches('[data-id]') ? row : row.querySelector('[data-id]');
       return tag ? tag.getAttribute('data-id') : '';
     };
+    for (const row of list.querySelectorAll('[role="row"]')) {
+      const name = nameOf(row);
+      if (name) shown.add(name);
+    }
 
     /* The rows this has recognised, waiting for the frame's own layout to say
        what they cost.
@@ -3283,118 +3195,44 @@ const start = ({ send, on }) => {
      * one message no". */
     let pending = [];
 
-    /*
-     * The split between these two is the whole of why it does not shudder, and
-     * it is the reply bar's split (see followTheRoom) for the reply bar's
-     * reason.
-     *
-     * The mutation is where a message is RECOGNISED, and it touches no geometry
-     * at all: it runs as a microtask, before the frame's style and layout, so
-     * every measurement asked for there is a layout forced early and then paid
-     * for again by the frame that was going to do one anyway.
-     *
-     * The resize is where it is ANSWERED. A ResizeObserver runs after layout
-     * and before paint, with the size the frame actually has -- so the room the
-     * message took is read rather than forced, the offset is applied in the very
-     * frame the room changes, and nothing is ever painted in the wrong place.
-     */
+    /* Recognise identities without measuring in a mutation microtask. A
+       recycled row may receive a new data-id or bubble without being appended;
+       a burst may append several messages in one batch. Only a batch touching
+       the tail is an arrival, so filling older history never starts a glide. */
     const watch = new MutationObserver(records => {
-      if (performance.now() - since < ARRIVAL_SETTLE_MS) return;
-      if (stillnessAsked()) return;
-
-      /* Anything with a message in it at all. Most batches in an open
-         conversation are ticks, timestamps and hover furniture, and they stop
-         here without a measurement or a query being made. */
-      let any = false;
+      const candidates = new Set();
       for (const record of records) {
-        for (const node of record.addedNodes) {
-          if (node.nodeType === 1 &&
-              (node.matches('[role="row"]') || node.querySelector('[role="row"]'))) {
-            any = true;
-            break;
-          }
+        if (record.type === 'attributes') {
+          const row = record.target.closest('[role="row"]');
+          if (row) candidates.add(row);
+          continue;
         }
-        if (any) break;
+        for (const node of record.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          if (node.matches('[role="row"]')) candidates.add(node);
+          for (const row of node.querySelectorAll('[role="row"]')) candidates.add(row);
+          const row = node.closest('[role="row"]');
+          if (row) candidates.add(row);
+        }
       }
-      if (!any) return;
-
-      /*
-       * The one that matters is the last row in the room, and it matters only
-       * if it is one of the ones that just landed.
-       *
-       * This was "exactly one row, and it is the last one", which threw away
-       * arrivals that are perfectly ordinary. MEASURED on the live page: two
-       * rows land together often enough to matter -- a message that opens a new
-       * day brings its date separator, and a message that arrives while the
-       * window is away brings the "unread messages" divider with it -- and the
-       * count test dropped the message along with its label. Sampled over one
-       * session of ordinary use: two batches thrown out for the count, six for
-       * the row not being last.
-       *
-       * Asking about the last row instead keeps out the thing the count test
-       * was for. A page of history being filled in -- scrolling up into the
-       * past, or a jump to an old message -- lands its rows ABOVE, so the last
-       * row in the room is not among them and nothing here fires. And a batch
-       * whose newest row was already dealt with in an earlier one is left
-       * alone, which is what the test for last-ness was doing all along.
-       *
-       * Asked by position rather than by walking up looking for a last sibling:
-       * the list carries trailing children of its own with nothing in them, and
-       * a walk would answer no to every message there has ever been. A query is
-       * not a measurement -- no layout is forced by any of this. */
+      if (!candidates.size) return;
       const rows = list.querySelectorAll('[role="row"]');
-      const last = rows[rows.length - 1];
-      if (!last) return;
-      let landed = false;
-      for (const record of records) {
-        for (const node of record.addedNodes) {
-          if (node.nodeType === 1 && (node === last || node.contains(last))) {
-            landed = true;
-            break;
-          }
-        }
-        if (landed) break;
-      }
-      if (!landed) return;
-
-      /* And a message this has not shown before. A row can be handed back to
-         the list carrying something new, which is an arrival, or shuffled about
-         still carrying what it had, which is not. */
-      const name = nameOf(last);
-      if (name) {
-        if (shown.has(name)) return;
+      if (!candidates.has(rows[rows.length - 1])) return;
+      const now = performance.now();
+      const canPlay = now - since >= ARRIVAL_SETTLE_MS && !stillnessAsked() &&
+        document.visibilityState === 'visible';
+      for (const row of candidates) {
+        if (!row.isConnected || !list.contains(row)) continue;
+        const name = nameOf(row);
+        if (!name || shown.has(name)) continue;
         shown.add(name);
-        /* A conversation read all the way through is a long session's worth of
-           these, and only the newest few can ever be asked about again. */
-        if (shown.size > 400) { shown.clear(); shown.add(name); }
+        if (shown.size > 400) shown.delete(shown.values().next().value);
+        /* Remember hidden and opening messages too, so an acknowledgement or
+           returning to the window cannot replay an already displayed message. */
+        if (canPlay) pending.push({ row, at: now });
       }
-
-      /*
-       * A window in the tray, or minimised, or on a desktop nobody is looking
-       * at. The message is still there when it comes back, which is the right
-       * answer -- an entrance played to an empty room and finished before
-       * anyone looked is not one.
-       *
-       * It is asked AFTER the message has been written down and not before, and
-       * that ordering is the whole of it. Asked first, a message that landed
-       * while the window was away was never remembered -- so the re-render that
-       * comes with marking a chat read on the way back read as a fresh arrival,
-       * and a message the owner had already been looking at for a second grew
-       * into place under them. Caught in the log: a row re-rendered on return
-       * armed an entrance, and the frame that answered it reported that nothing
-       * had moved at all.
-       *
-       * This catches less than it looks like it does, and what follows is
-       * written knowing it: a window merely COVERED by another is still
-       * `visible` here, measured, and gets no frames all the same. What keeps
-       * that case honest is the stamp on each row and the trim against its own
-       * height, not this.
-       */
-      if (document.visibilityState !== 'visible') return;
-
-      pending.push({ row: last, at: performance.now() });
-      if (pending.length > 8) pending.shift();
-      backstop();
+      pending = pending.slice(-8);
+      if (pending.length) backstop();
     });
 
     /*
@@ -3468,6 +3306,9 @@ const start = ({ send, on }) => {
        * nothing is forced by asking. */
       let cost = 0;
       for (const one of landed) cost += Math.round(one.row.getBoundingClientRect().height);
+      const roomBox = scroller.getBoundingClientRect();
+      const bubbles = landed.map(one => one.row.querySelector('[data-testid="msg-container"]'))
+        .filter(Boolean).map(bubble => ({ bubble, box: bubble.getBoundingClientRect() }));
 
       /* The rows the eye is on first, and the scroller's own scrolling only
          when there is no row left to ask. Both are the same travel by different
@@ -3485,6 +3326,7 @@ const start = ({ send, on }) => {
          a pop is not a scroll. */
       const pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <=
                      ARRIVAL_PIN_SLACK;
+      const replying = replyBarOver(scroller);
 
       /* Back where the eye last saw the conversation, then let go to where
          WhatsApp has already scrolled it. The lift is carried so this composes
@@ -3522,7 +3364,7 @@ const start = ({ send, on }) => {
          * all -- a message arriving while a reply is still being written, where
          * nobody is coming to take this over. It is timed past the bar's own
          * exit so that it never fires first. */
-        if (replyBarOver(scroller)) {
+        if (replying) {
           const mine = list.__waMove;
           const go = () => {
             if (list.__waMove !== mine) return;              /* taken over */
@@ -3542,10 +3384,7 @@ const start = ({ send, on }) => {
         }
       }
 
-      for (const one of landed) {
-        const bubble = one.row.querySelector('[data-testid="msg-container"]');
-        if (bubble) popTheBubble(bubble, scroller);
-      }
+      for (const { bubble, box } of bubbles) popTheBubble(bubble, box, roomBox);
     };
 
     /* One reading of where everything is, taken at the point a frame has
@@ -3600,8 +3439,11 @@ const start = ({ send, on }) => {
         room.observe(scroller);
       } catch (err) { room = null; }
     }
+    /* The initial resize supplies the baseline after native layout. Adoption
+       at chat commit never measures the newly mounted conversation early. */
+    if (!room) { try { marksOn(0); } catch (err) { return; } }
 
-    watch.observe(list, { childList: true, subtree: true });
+    watch.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-id'] });
     watched.push({ list: list, watch: watch, room: room });
   };
 
@@ -3625,6 +3467,7 @@ const start = ({ send, on }) => {
   };
 
   setInterval(smoothTheArrivals, ARRIVAL_ADOPT_MS);
+  adoptConversation = smoothTheArrivals;
   smoothTheArrivals();
 
   /* --------------------------------------------------- the jump to a message */

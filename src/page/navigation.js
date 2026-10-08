@@ -3,7 +3,7 @@
 /* The rail and the conversation have separate lifetimes. Closing a chat must
  * also clear the rail's restore target; hiding it behind another tab must not.
  * Read the selected rail button rather than inferring a tab from #main. */
-const start = ({ press, log, window: view = window }) => {
+const start = ({ press, log, prepareChat = () => {}, window: view = window }) => {
   const doc = view.document;
   const RAIL = '[data-testid="chatlist-header"]';
   const LEFT = '[data-testid="drawer-left"] > div > span > div';
@@ -23,7 +23,11 @@ const start = ({ press, log, window: view = window }) => {
   let pendingList = false;
   let sectionGeneration = 0;
   let restoreHooked = false;
+  let updateQueued = false;
+  const stillness = typeof view.matchMedia === 'function'
+    ? view.matchMedia('(prefers-reduced-motion: reduce)') : null;
   const panels = new Map();
+  const preparing = new Set();
   const grab = name => {
     try { return typeof view.require === 'function' ? view.require(name) : null; }
     catch (err) { return null; }
@@ -75,12 +79,26 @@ const start = ({ press, log, window: view = window }) => {
     try { return chatCollection?.getActive?.()?.id?.toString() || ''; }
     catch (err) { return ''; }
   };
-  const reducedMotion = () => typeof view.matchMedia === 'function' &&
-    view.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reducedMotion = () => !!stillness?.matches;
   const motion = (element, frames, duration, easing = EASE) => {
     if (!element || reducedMotion() || typeof element.animate !== 'function') return null;
     try {
-      return element.animate(frames, { duration, easing });
+      const animation = element.animate(frames, { duration, easing });
+      /* Raster the newly mounted content at its first keyframe before starting
+         the clock. Otherwise the first native layout/paint can consume most
+         of a short reveal, which makes it appear to jump to the end. */
+      if (typeof animation.pause === 'function' && typeof view.requestAnimationFrame === 'function') {
+        animation.pause();
+        preparing.add(animation);
+        view.requestAnimationFrame(() => {
+          preparing.delete(animation);
+          if (animation.playState !== 'paused') return;
+          if (!element.isConnected || reducedMotion() || doc.visibilityState === 'hidden')
+            animation.cancel();
+          else animation.play();
+        });
+      }
+      return animation;
     } catch (err) { return null; /* A build without Web Animations still opens. */ }
   };
   const reveal = (element, offset, opacity, duration) => motion(element,
@@ -136,8 +154,8 @@ const start = ({ press, log, window: view = window }) => {
        the newly committed messages and identity move in either case. No
        delayed callbacks or copies of an old chat survive a rapid switch. */
     chatMotions = [
-      reveal(main.querySelector(BODY), 6, 0.25, 180),
-      reveal(main.querySelector('header > div'), 2, 0.45, 150),
+      reveal(main.querySelector(MESSAGES) || main.querySelector(BODY), 4, 0.85, 160),
+      reveal(main.querySelector('header > div'), 2, 0.75, 140),
     ].filter(Boolean);
   };
   const changeSection = (button, state) => {
@@ -204,6 +222,9 @@ const start = ({ press, log, window: view = window }) => {
       if (record.animation) record.animation.cancel();
       record.content = content;
       record.page = page;
+      /* The large welcome/empty surface beside a tab stays steady. Promoting
+         that background as a second reveal adds raster work to the list. */
+      if (page.matches?.('[data-testid="empty-state-drawer"], [data-testid="intro-panel"]')) continue;
       record.animation = reveal(content, 8, 0, 220);
     }
   };
@@ -228,6 +249,8 @@ const start = ({ press, log, window: view = window }) => {
     const main = doc.querySelector('#main');
     const chats = state.selected === state.chats;
     const id = main ? activeId() : '';
+    const messages = main?.querySelector(MESSAGES);
+    const contentKey = messages?.querySelector?.('[data-id]')?.getAttribute('data-id') || '';
     animateSections(state);
     if (chats && !main && !leavingChats &&
         (!previous || (previous.chats && previous.main))) forgetClosedChat();
@@ -239,15 +262,25 @@ const start = ({ press, log, window: view = window }) => {
       listMotion = reveal(list, 8, 0, 220);
       pendingList = false;
     }
-    if (main && (main !== previous?.main || (id && id !== previous?.id)))
-      pendingChat = { main, switching: !!(previous?.chats && previous.main) };
-    if (pendingChat?.main === main && main?.querySelector(BODY)) {
+    if (main && (!previous?.main || (id && id !== previous?.id) ||
+        (!id && main !== previous?.main))) {
+      cancelChatMotion();
+      pendingChat = { main, switching: !!(previous?.chats && previous.main),
+        fromKey: previous?.contentKey || '' };
+    } else if (pendingChat && main) pendingChat.main = main;
+    else if (main && main !== previous?.main) prepareChat(main);
+    /* The active model changes before React replaces the old conversation.
+       Wait for its message identity to change, and don't replay when the same
+       chat later replaces #main while filling its virtualised history. */
+    if (pendingChat?.main === main && main?.querySelector(BODY) &&
+        (!pendingChat.switching || !pendingChat.fromKey || contentKey !== pendingChat.fromKey)) {
+      prepareChat(main);
       animateChat(main, pendingChat.switching);
       pendingChat = null;
     }
     if (!main) { cancelChatMotion(); pendingChat = null; }
     if (!chats) leavingChats = false;
-    previous = { chats, main, id };
+    previous = { chats, main, id, contentKey };
   };
   view.addEventListener('click', event => {
     const state = rail();
@@ -280,14 +313,45 @@ const start = ({ press, log, window: view = window }) => {
     while (target.firstElementChild) target = target.firstElementChild;
     press(button, target);
   }, true);
+  view.addEventListener('visibilitychange', () => {
+    if (doc.visibilityState !== 'hidden') return;
+    for (const animation of preparing) animation.cancel();
+    preparing.clear();
+  });
+  const scheduleUpdate = () => {
+    if (updateQueued) return;
+    if (typeof view.requestAnimationFrame !== 'function') { update(); return; }
+    updateQueued = true;
+    view.requestAnimationFrame(() => {
+      updateQueued = false;
+      update();
+    });
+  };
   const observer = new view.MutationObserver(records => {
+    /* Closing is a navigation decision, not animation work. Clear its restore
+       target in the removal microtask, before a fast tab change can restore
+       the closed chat while the visual reconciliation waits for paint. */
+    if (previous?.chats && previous.main && !leavingChats && records?.some(record =>
+      [...(record.removedNodes || [])].some(node => node === previous.main || node.contains?.(previous.main))) &&
+        !doc.querySelector('#main')) {
+      const state = rail();
+      if (state && state.selected === state.chats) {
+        forgetClosedChat();
+        cancelChatMotion();
+        pendingChat = null;
+        previous = { ...previous, main: null, id: '', contentKey: '' };
+      }
+    }
     /* Message text, ticks, and list previews cannot change the selected tab or
        mount a conversation. Avoid scanning every drawer for those updates.
        A pending conversation still needs its first content commit. */
     if (!pendingChat && !pendingList && records?.length && records.every(record =>
-      record.type === 'childList' && record.target?.closest?.(MESSAGES + ', #pane-side')))
+      record.target?.closest?.(MESSAGES + ', #pane-side')))
       return;
-    update();
+    /* React can commit the rail, drawers and conversation in separate batches.
+       Reconcile once before paint, after those commits, rather than starting
+       an animation in each microtask while the new page is still being built. */
+    scheduleUpdate();
   });
   /* The parser can replace the document-start html element. Watching the
      document also covers that replacement and the first conversation mount. */

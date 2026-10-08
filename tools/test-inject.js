@@ -353,6 +353,7 @@ const sandbox = {
     if (name === './pictures.js') return require('../src/page/pictures.js');
     if (name === './arabic-digits.js') return require('../src/page/arabic-digits.js');
     if (name === './navigation.js') return require('../src/page/navigation.js');
+    if (name === './motion.js') return require('../src/page/motion.js');
     /* Anything else is a name out of WhatsApp's own registry, which the page
        reaches for through this same require -- contextIsolation is off, so
        window.require IS Meta's. The rig answers for a name only once a check has
