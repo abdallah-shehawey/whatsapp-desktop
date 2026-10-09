@@ -33,6 +33,8 @@ this independent client; final review/acceptance must wait for these matters.
 
 I am a new Fedora contributor and need a package-maintainer sponsor.
 
+Fedora Account System Username: abdallah-shehawey
+
 Upstream URL:
 https://github.com/abdallah-shehawey/whatsapp-desktop
 
@@ -44,6 +46,6 @@ https://bugs.debian.org/1150415
 
 Before filing:
 Use a Bugzilla account tied to the maintainer's Fedora/FAS email. Add the
-maintainer's actual FAS username and the FE-NEEDSPONSOR blocker in the form.
+FE-NEEDSPONSOR blocker in the form.
 The account creation, age declaration, CAPTCHA and password setup are personal
 steps for the maintainer; this text does not claim that a review is already open.

@@ -1,6 +1,6 @@
 whatsapp-desktop (1.9.12-1) UNRELEASED; urgency=medium
 
-  * Initial source-only packaging proposal.
+  * Initial source-only packaging proposal (Closes: #1150415).
   * Depend on a separately packaged Electron 40 runtime. Official archive
     inclusion is blocked by Debian Electron request #842420.
   * Install AppStream metadata and a manual page.
