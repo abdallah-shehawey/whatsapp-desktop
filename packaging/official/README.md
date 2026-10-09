@@ -67,12 +67,19 @@ Debian acknowledged ITP <https://bugs.debian.org/1150415> and registered its
 dependency on Electron request #842420. This is an intent to package, not archive
 acceptance. The Ubuntu MOTU proposal is awaiting mailing-list moderator approval.
 
-The maintainer's Fedora/FAS account `abdallah-shehawey` has been created.
+The maintainer's Fedora/FAS account `abdallah-shehawey` has been created, and
+the maintainer personally signed the Fedora Project Contributor Agreement
+(FPCA) on 2026-10-09. This completes the agreement step, not packager sponsorship
+or archive acceptance.
 The proposal is publicly posted to Fedora's devel list:
 <https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/thread/2L7VRATKFL4CDYQWCE5GXZHEFLLAG62P/>.
 Fedora Package Review <https://bugzilla.redhat.com/show_bug.cgi?id=2548541> has
 been filed and blocks `FE-NEEDSPONSOR`, requesting sponsorship for the new
 packager. Review, sponsorship and the Electron prerequisite remain unresolved.
+The separate sponsorship request is open at
+<https://forge.fedoraproject.org/packaging/sponsors/issues/802>; it asks for a
+mentor and guidance on the runtime prerequisite and does not claim readiness
+for archive acceptance.
 `fedora-review-request.txt` records the submitted description and public artifact
 URLs. Track current progress and prerequisites in
 <https://github.com/abdallah-shehawey/whatsapp-desktop/issues/7>.
