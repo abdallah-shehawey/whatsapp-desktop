@@ -32,7 +32,12 @@ mkdir -p "$task_build/rpm"/{SOURCES,SPECS,SRPMS}
 cp "$task_dist/whatsapp-desktop-$task_version.tar.gz" "$task_build/rpm/SOURCES/"
 cp "$task_build/whatsapp-desktop-$task_version/packaging/official/whatsapp-desktop.spec" \
    "$task_build/rpm/SPECS/"
-rpmbuild -bs --define "_topdir $task_build/rpm" \
+cp "$task_build/rpm/SPECS/whatsapp-desktop.spec" "$task_dist/"
+task_rpm_options=(--define "_topdir $task_build/rpm")
+if [[ -n "${RPM_DIST:-}" ]]; then
+  task_rpm_options+=(--define "dist $RPM_DIST")
+fi
+rpmbuild -bs "${task_rpm_options[@]}" \
   "$task_build/rpm/SPECS/whatsapp-desktop.spec"
 cp "$task_build"/rpm/SRPMS/*.src.rpm "$task_dist/"
 
@@ -49,11 +54,11 @@ const audit = {
   included_paths: ['LICENSE', 'README.md', 'Makefile', 'package.json', 'src', 'data', 'tools', 'packaging/official'],
   debian_packaging_in_source_diff: true,
   bundled_runtime: false,
-  runtime_dependency: 'Electron >= 40, < 41, separately built and packaged by the distribution',
+  runtime_dependency: 'Distribution-owned Electron: Fedora >= 43, < 44; Debian >= 40, < 41',
   archive_status: 'proposal; not accepted or installable from official archives',
-  blocker: 'Electron is not packaged in the target Fedora/Ubuntu archives; Debian request #842420 is open'
+  blocker: 'Fedora application review and packager sponsorship remain pending; Debian runtime request #842420 is open; no official application archive acceptance'
 };
 fs.writeFileSync(path.join(dist, 'build-manifest.json'), JSON.stringify(audit, null, 2) + '\n');
 NODE
-(cd "$task_dist" && sha256sum ./*.tar.gz ./*.tar.xz ./*.dsc ./*.src.rpm build-manifest.json > SHA256SUMS)
+(cd "$task_dist" && sha256sum ./*.tar.gz ./*.tar.xz ./*.dsc ./*.src.rpm ./*.spec build-manifest.json > SHA256SUMS)
 printf 'Source review artifacts: %s\n' "$task_dist"
