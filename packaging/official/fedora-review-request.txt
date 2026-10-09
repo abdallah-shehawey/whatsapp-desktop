@@ -2,12 +2,21 @@ Filed Fedora Package Review:
 https://bugzilla.redhat.com/show_bug.cgi?id=2548541
 Status at filing: NEW. Blocks FE-NEEDSPONSOR (tracker #177841).
 
-Follow-up prepared after the 2026-10-09 devel feedback:
+Follow-up published on 2026-10-10 (Cairo), after the 2026-10-09 devel feedback:
 Fedora Rawhide already provides nodejs-electron 43.2.0-1.fc46. SPEC revision 2
 uses Electron >= 43, < 44 and corrects the desktop window class after basic
 runtime checks. See fedora-runtime-check.md and the new review snapshot:
 https://github.com/abdallah-shehawey/whatsapp-desktop/releases/tag/packaging-review-2026-10-10-fedora43
-This update has not been posted to Bugzilla or emailed to the devel list.
+The maintainer authorized the follow-up; it was sent/posted and public
+visibility was verified at all three destinations:
+Fedora devel reply:
+https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/message/FMU2S7YOLQY33XZLSWI5BDIJ3XWGHASQ/
+Bugzilla comment 1:
+https://bugzilla.redhat.com/show_bug.cgi?id=2548541#c1
+Packager sponsorship follow-up:
+https://forge.fedoraproject.org/packaging/sponsors/issues/802#issuecomment-1364993
+The review remains NEW with FE-NEEDSPONSOR; no review approval or sponsorship
+has been granted. These updates are not archive acceptance.
 The original submitted text below is retained as a historical record;
 its statement about Fedora runtime availability was incomplete.
 
