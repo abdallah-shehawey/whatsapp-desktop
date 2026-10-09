@@ -11,14 +11,21 @@ handling. It neither downloads Electron nor disables its sandbox.
 
 ## Runtime dependency
 
-The proposal requires Electron 40 (`>= 40, < 41`), matching the upstream
-application's major version. There is currently no corresponding runtime in the
-target official archives. Debian's runtime request is
-<https://bugs.debian.org/842420>. A source-built application package alone is
-therefore insufficient for archive installation: the runtime must also be
-packaged, reviewed and maintained, including its Chromium dependencies and
-security updates. No prebuilt runtime may be substituted in these source
-packages. Runtime source packaging is not completed by this proposal.
+The published proposal requires Electron 40 (`>= 40, < 41`), matching the
+upstream application's major version. On 2026-10-09, Fedora devel feedback
+identified the official Rawhide runtime as `nodejs-electron` 43.2.0-1.fc46:
+<https://packages.fedoraproject.org/pkgs/nodejs-electron/nodejs-electron/>.
+It provides `electron` and `/usr/bin/electron`, but its version cannot satisfy
+the current proposal. The next Fedora step is to test application compatibility
+with this distribution runtime and then revise the packaging accordingly.
+Compatibility with Electron 43 has not yet been verified. Rawhide availability
+does not establish availability in existing stable Fedora releases.
+
+Debian's runtime request remains <https://bugs.debian.org/842420>. A source-built
+application package alone is insufficient for archive installation: its runtime
+must also be packaged, reviewed and maintained, including Chromium dependencies
+and security updates. No prebuilt runtime may be substituted in these source
+packages. The published application proposal does not package the runtime.
 
 ## Review artifacts and builds
 
@@ -73,9 +80,17 @@ the maintainer personally signed the Fedora Project Contributor Agreement
 or archive acceptance.
 The proposal is publicly posted to Fedora's devel list:
 <https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/thread/2L7VRATKFL4CDYQWCE5GXZHEFLLAG62P/>.
+Seven replies from Neal Gompa, Nicolas Chauvet and Michael J Gruber were read
+on 2026-10-09. Neal identified the existing Rawhide runtime and recommended
+updating the application for Fedora's newer Electron version. Multiple runtime
+versions, COPR and Flatpak were discussed as alternatives; this discussion does
+not grant review approval or sponsorship. Official APT/DNF inclusion remains
+the target.
 Fedora Package Review <https://bugzilla.redhat.com/show_bug.cgi?id=2548541> has
 been filed and blocks `FE-NEEDSPONSOR`, requesting sponsorship for the new
-packager. Review, sponsorship and the Electron prerequisite remain unresolved.
+packager. Review and sponsorship remain unresolved; the Fedora runtime work is
+now compatibility with the existing Rawhide package. Debian's separate runtime
+prerequisite remains unresolved.
 The separate sponsorship request is open at
 <https://forge.fedoraproject.org/packaging/sponsors/issues/802>; it asks for a
 mentor and guidance on the runtime prerequisite and does not claim readiness
