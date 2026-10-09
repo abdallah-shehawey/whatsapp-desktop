@@ -18,7 +18,7 @@ BuildRequires:  appstream
 Requires:       electron >= 40
 Requires:       electron < 41
 Requires:       dbus
-Requires:       glib2
+Requires:       %{_bindir}/gdbus
 Requires:       fontconfig
 Recommends:     google-noto-emoji-color-fonts
 
@@ -38,6 +38,10 @@ test ! -d node_modules
 
 %install
 %{__make} install-system DESTDIR=%{buildroot} PREFIX=%{_prefix} SYSTEM_ELECTRON=%{_bindir}/electron
+# These notices are installed below through %%license rather than duplicated
+# inside the application data directory.
+rm -f %{buildroot}%{_datadir}/%{name}/data/CC0-1.0.txt
+rm -f %{buildroot}%{_datadir}/%{name}/data/icons/NOTICE
 
 %check
 make test
