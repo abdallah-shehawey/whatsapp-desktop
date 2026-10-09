@@ -15,21 +15,26 @@
 
 /* The class asks Electron for an icon in its constructor and nothing else, so a
    stub with a size and no pixels is the whole of what it needs. */
-const electron = require.resolve('electron');
-require.cache[electron] = {
-  id: electron, filename: electron, loaded: true, children: [], paths: [],
-  exports: {
-    nativeImage: {
-      createFromPath: () => ({
-        isEmpty: () => true,
-        getSize: () => ({ width: 0, height: 0 }),
-        toBitmap: () => Buffer.alloc(0),
-      }),
-    },
+const Module = require('module');
+const load = Module._load;
+const electron = {
+  nativeImage: {
+    createFromPath: () => ({
+      isEmpty: () => true,
+      getSize: () => ({ width: 0, height: 0 }),
+      toBitmap: () => Buffer.alloc(0),
+    }),
   },
 };
-
-const { SniTray, ID } = require('../src/tray-sni.js');
+let SniTray, ID;
+try {
+  Module._load = function (request, ...args) {
+    return request === 'electron' ? electron : load.call(this, request, ...args);
+  };
+  ({ SniTray, ID } = require('../src/tray-sni.js'));
+} finally {
+  Module._load = load;
+}
 
 let failures = 0;
 const check = (label, got, want) => {
