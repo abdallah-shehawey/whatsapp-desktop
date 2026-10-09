@@ -51,10 +51,7 @@ jobs:
       - name: Install distribution packaging tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y nodejs debhelper fontconfig desktop-file-utils appstream rpm
-
-      - name: Verify source-only installation
-        run: python3 tools/test-system-package.py
+          sudo apt-get install -y nodejs python3 debhelper fontconfig desktop-file-utils appstream rpm
 
       - name: Build Debian binary from application source
         run: dpkg-buildpackage -us -uc -b

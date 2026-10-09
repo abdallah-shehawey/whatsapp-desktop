@@ -11,6 +11,7 @@ BuildArch:      noarch
 
 BuildRequires:  make
 BuildRequires:  nodejs-devel
+BuildRequires:  python3
 BuildRequires:  fontconfig
 BuildRequires:  desktop-file-utils
 BuildRequires:  appstream
@@ -40,6 +41,7 @@ test ! -d node_modules
 
 %check
 make test
+python3 tools/test-system-package.py
 desktop-file-validate %{buildroot}%{_datadir}/applications/io.github.shehawey.whatsapp-desktop.desktop
 appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/io.github.shehawey.whatsapp-desktop.metainfo.xml
 

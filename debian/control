@@ -2,7 +2,7 @@ Source: whatsapp-desktop
 Section: net
 Priority: optional
 Maintainer: Abdallah Shehawey <shehawey9@gmail.com>
-Build-Depends: debhelper-compat (= 13), nodejs, fontconfig, desktop-file-utils, appstream
+Build-Depends: debhelper-compat (= 13), nodejs, python3, fontconfig, desktop-file-utils, appstream
 Standards-Version: 4.7.4
 Rules-Requires-Root: no
 Homepage: https://github.com/abdallah-shehawey/whatsapp-desktop
