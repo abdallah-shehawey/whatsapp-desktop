@@ -1,0 +1,22 @@
+#!/bin/sh
+# The runtime is supplied and updated by the distribution's Electron package.
+unset ELECTRON_RUN_AS_NODE
+
+case "$1" in
+  --version|-v)
+    printf 'whatsapp-desktop @VERSION@\n'
+    exit 0
+    ;;
+  --help|-h)
+    printf '%s\n' 'Usage: whatsapp-desktop [options] [whatsapp://URL]' '' \
+      'Options:' '  --hidden        Start minimized to the system tray' \
+      '  -v, --version   Show version number' '  -h, --help      Show this help message'
+    exit 0
+    ;;
+esac
+
+wa_fonts="${XDG_DATA_HOME:-$HOME/.local/share}/whatsapp-desktop/fonts.conf"
+[ ! -f "$wa_fonts" ] || export FONTCONFIG_FILE="$wa_fonts"
+
+exec '@ELECTRON_BIN@' '@APPDIR@' \
+  --class=io.github.shehawey.whatsapp-desktop --name=whatsapp-desktop "$@"

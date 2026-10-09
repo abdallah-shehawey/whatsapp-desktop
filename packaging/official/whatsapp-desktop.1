@@ -1,0 +1,36 @@
+.TH WHATSAPP-DESKTOP 1 "October 2026" "whatsapp-desktop" "User Commands"
+.SH NAME
+whatsapp-desktop \- desktop client for WhatsApp Web
+.SH SYNOPSIS
+.B whatsapp-desktop
+.RI [ options ]
+.RI [ whatsapp://URL ]
+.SH DESCRIPTION
+Loads WhatsApp Web in a dedicated window with system tray integration,
+desktop notifications, configurable fonts, themes and privacy controls.
+An existing WhatsApp account and an Internet connection are required.
+This is an independent client and is not affiliated with Meta or WhatsApp.
+.SH OPTIONS
+.TP
+.B --hidden
+Start minimized to the system tray.
+.TP
+.B -v, --version
+Print the application version and exit.
+.TP
+.B -h, --help
+Print usage information and exit.
+.SH FILES
+.TP
+.I ~/.config/whatsapp-desktop/whatsapp-desktop.conf
+Application preferences. XDG_CONFIG_HOME overrides the configuration root.
+.TP
+.I ~/.config/whatsapp-desktop/custom.css
+Optional user stylesheet, enabled through the application settings.
+.TP
+.I ~/.local/share/whatsapp-desktop/
+WhatsApp session and application state. XDG_DATA_HOME overrides the data root.
+.SH AUTHOR
+Abdallah Shehawey.
+.SH BUGS
+https://github.com/abdallah-shehawey/whatsapp-desktop/issues

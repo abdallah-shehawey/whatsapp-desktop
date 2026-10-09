@@ -40,3 +40,30 @@ jobs:
 
       - name: Run test suite
         run: make test
+
+  source-package:
+    name: Source-only distribution packaging
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install distribution packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nodejs debhelper fontconfig desktop-file-utils appstream rpm
+
+      - name: Verify source-only installation
+        run: python3 tools/test-system-package.py
+
+      - name: Build Debian binary from application source
+        run: dpkg-buildpackage -us -uc -b
+
+      - name: Build source review artifacts
+        run: packaging/official/build-source-packages.sh
+
+      - name: Save review artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-packaging-proposal
+          path: dist/official/

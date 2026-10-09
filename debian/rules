@@ -1,0 +1,20 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+
+override_dh_auto_build:
+	# Uncompiled application source: never run npm or download Electron here.
+
+override_dh_auto_test:
+	$(MAKE) test
+
+override_dh_auto_install:
+	$(MAKE) install-system DESTDIR=$(CURDIR)/debian/whatsapp-desktop PREFIX=/usr SYSTEM_ELECTRON=/usr/bin/electron
+	desktop-file-validate debian/whatsapp-desktop/usr/share/applications/io.github.shehawey.whatsapp-desktop.desktop
+	appstreamcli validate --no-net debian/whatsapp-desktop/usr/share/metainfo/io.github.shehawey.whatsapp-desktop.metainfo.xml
+
+override_dh_auto_clean:
+	# Upstream 'make clean' removes development dependencies, not build products.

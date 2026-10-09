@@ -1,0 +1,20 @@
+Source: whatsapp-desktop
+Section: net
+Priority: optional
+Maintainer: Abdallah Shehawey <shehawey9@gmail.com>
+Build-Depends: debhelper-compat (= 13), nodejs, fontconfig, desktop-file-utils, appstream
+Standards-Version: 4.7.4
+Rules-Requires-Root: no
+Homepage: https://github.com/abdallah-shehawey/whatsapp-desktop
+
+Package: whatsapp-desktop
+Architecture: all
+Depends: ${misc:Depends}, electron (>= 40), electron (<< 41), dbus, default-dbus-session-bus | dbus-session-bus, libglib2.0-bin, fontconfig
+Recommends: fonts-noto-color-emoji
+Description: independent desktop client for WhatsApp Web
+ WhatsApp Web in a dedicated window with a system tray, desktop notifications,
+ themes, configurable fonts and privacy controls. An existing WhatsApp account
+ and an Internet connection are required.
+ .
+ This project is not affiliated with Meta or WhatsApp. The Electron runtime is
+ supplied separately by the distribution rather than bundled in this package.
