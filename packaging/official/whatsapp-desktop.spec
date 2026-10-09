@@ -1,12 +1,12 @@
-# Packaging proposal: Electron 40 must first be packaged for Fedora.
+# Source-only application for Fedora Rawhide's system Electron 43 runtime.
 # This package does not bundle or download the Electron runtime.
 Name:           whatsapp-desktop
 Version:        1.9.12
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Independent desktop client for WhatsApp Web
 License:        GPL-3.0-or-later AND GPL-3.0-only AND CC0-1.0
 URL:            https://github.com/abdallah-shehawey/whatsapp-desktop
-Source0:        https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/packaging-review-2026-10-09/%{name}-%{version}.tar.gz
+Source0:        https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/packaging-review-2026-10-10-fedora43/%{name}-%{version}.tar.gz
 BuildArch:      noarch
 
 BuildRequires:  make
@@ -15,8 +15,9 @@ BuildRequires:  python3
 BuildRequires:  fontconfig
 BuildRequires:  desktop-file-utils
 BuildRequires:  appstream
-Requires:       electron >= 40
-Requires:       electron < 41
+BuildRequires:  util-linux-core
+Requires:       electron >= 43
+Requires:       electron < 44
 Requires:       dbus
 Requires:       %{_bindir}/gdbus
 Requires:       fontconfig
@@ -38,10 +39,16 @@ test ! -d node_modules
 
 %install
 %{__make} install-system DESTDIR=%{buildroot} PREFIX=%{_prefix} SYSTEM_ELECTRON=%{_bindir}/electron
+# Fedora's Electron 43 honors the class passed by our system launcher.
+sed -i 's/^StartupWMClass=WhatsApp$/StartupWMClass=io.github.shehawey.whatsapp-desktop/' \
+  %{buildroot}%{_datadir}/applications/io.github.shehawey.whatsapp-desktop.desktop
 # These notices are installed below through %%license rather than duplicated
 # inside the application data directory.
 rm -f %{buildroot}%{_datadir}/%{name}/data/CC0-1.0.txt
 rm -f %{buildroot}%{_datadir}/%{name}/data/icons/NOTICE
+# Preserve icon aliases and application-relative paths without storing
+# duplicate copies. Keep ownership/mode distinctions and ignore timestamps.
+hardlink --ignore-time %{buildroot}%{_datadir}
 
 %check
 make test
@@ -61,5 +68,10 @@ appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/io.github.shehaw
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Sat Oct 10 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.9.12-2
+- Use Fedora Rawhide's official Electron 43 runtime
+- Match the desktop entry to the runtime's observed window class
+- Consolidate duplicate icon and metadata files with hardlinks
+
 * Fri Oct 09 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.9.12-1
 - Initial source-only packaging proposal, pending the Electron runtime

@@ -11,15 +11,16 @@ handling. It neither downloads Electron nor disables its sandbox.
 
 ## Runtime dependency
 
-The published proposal requires Electron 40 (`>= 40, < 41`), matching the
-upstream application's major version. On 2026-10-09, Fedora devel feedback
+The initial published proposal requires Electron 40 (`>= 40, < 41`), matching the
+bundled application's major version. On 2026-10-09, Fedora devel feedback
 identified the official Rawhide runtime as `nodejs-electron` 43.2.0-1.fc46:
 <https://packages.fedoraproject.org/pkgs/nodejs-electron/nodejs-electron/>.
-It provides `electron` and `/usr/bin/electron`, but its version cannot satisfy
-the current proposal. The next Fedora step is to test application compatibility
-with this distribution runtime and then revise the packaging accordingly.
-Compatibility with Electron 43 has not yet been verified. Rawhide availability
-does not establish availability in existing stable Fedora releases.
+It provides `electron` and `/usr/bin/electron`. After basic runtime checks,
+the current Fedora SPEC revision 2 requires Electron `>= 43, < 44` and matches
+the runtime's observed window class. See [the runtime check](fedora-runtime-check.md)
+for the evidence and its limits. Later major versions require further validation.
+Rawhide availability does not establish availability in existing stable Fedora
+releases. The normal bundled release continues to use Electron 40.
 
 Debian's runtime request remains <https://bugs.debian.org/842420>. A source-built
 application package alone is insufficient for archive installation: its runtime
@@ -35,6 +36,11 @@ From a committed checkout with Node.js, Python, make, `dpkg-source` and
 ```sh
 packaging/official/build-source-packages.sh
 ```
+
+Use a separate `DIST` output directory to preserve existing review snapshots.
+`RPM_DIST=.fc46` labels a source RPM intended for Rawhide; build and test its
+binary package in Rawhide before publishing it. The Debian proposal retains
+its separate Electron 40 dependency.
 
 The script exports the application source, SVG icon masters, generated icons,
 tests and build inputs. It excludes `node_modules`, npm's downloaded runtime,
@@ -66,10 +72,14 @@ for most new packages:
 Acceptance and release migration belong to the distributions; they do not
 automatically make the package available in every existing release.
 
-## Submission status, 2026-10-09
+## Submission status, 2026-10-10
 
 Application packaging was merged and the source review artifacts were published:
 <https://github.com/abdallah-shehawey/whatsapp-desktop/releases/tag/packaging-review-2026-10-09>.
+The Fedora revision 2 review snapshot uses the existing Rawhide runtime:
+<https://github.com/abdallah-shehawey/whatsapp-desktop/releases/tag/packaging-review-2026-10-10-fedora43>.
+The first snapshot remains unchanged. Publishing review artifacts does not
+update the submitted Bugzilla description or obtain review approval.
 Debian acknowledged ITP <https://bugs.debian.org/1150415> and registered its
 dependency on Electron request #842420. This is an intent to package, not archive
 acceptance. The Ubuntu MOTU proposal is awaiting mailing-list moderator approval.
@@ -88,9 +98,10 @@ not grant review approval or sponsorship. Official APT/DNF inclusion remains
 the target.
 Fedora Package Review <https://bugzilla.redhat.com/show_bug.cgi?id=2548541> has
 been filed and blocks `FE-NEEDSPONSOR`, requesting sponsorship for the new
-packager. Review and sponsorship remain unresolved; the Fedora runtime work is
-now compatibility with the existing Rawhide package. Debian's separate runtime
-prerequisite remains unresolved.
+packager. Review and sponsorship remain unresolved. Basic compatibility with
+the existing Rawhide runtime was checked; further signed-in and desktop
+integration validation remains. Debian's separate runtime prerequisite remains
+unresolved.
 The separate sponsorship request is open at
 <https://forge.fedoraproject.org/packaging/sponsors/issues/802>; it asks for a
 mentor and guidance on the runtime prerequisite and does not claim readiness
