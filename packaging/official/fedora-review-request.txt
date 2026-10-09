@@ -1,7 +1,11 @@
-Proposed Bugzilla title:
+Filed Fedora Package Review:
+https://bugzilla.redhat.com/show_bug.cgi?id=2548541
+Status at filing: NEW. Blocks FE-NEEDSPONSOR (tracker #177841).
+
+Bugzilla title:
 Review Request: whatsapp-desktop - Independent desktop client for WhatsApp Web
 
-Prepared description:
+Submitted description (the live ticket also links the Fedora devel discussion):
 
 Spec URL:
 https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/packaging-review-2026-10-09/whatsapp-desktop.spec
@@ -44,8 +48,5 @@ https://github.com/abdallah-shehawey/whatsapp-desktop/pull/6
 Debian ITP (blocked by Electron RFP #842420):
 https://bugs.debian.org/1150415
 
-Before filing:
-Use a Bugzilla account tied to the maintainer's Fedora/FAS email. Add the
-FE-NEEDSPONSOR blocker in the form.
-The account creation, age declaration, CAPTCHA and password setup are personal
-steps for the maintainer; this text does not claim that a review is already open.
+This review request is not archive acceptance. Packager sponsorship, review and
+Electron source packaging/security maintenance remain prerequisites.

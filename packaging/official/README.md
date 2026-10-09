@@ -70,7 +70,9 @@ acceptance. The Ubuntu MOTU proposal is awaiting mailing-list moderator approval
 The maintainer's Fedora/FAS account `abdallah-shehawey` has been created.
 The proposal is publicly posted to Fedora's devel list:
 <https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/thread/2L7VRATKFL4CDYQWCE5GXZHEFLLAG62P/>.
-No formal Fedora Package Review ticket has been filed yet: Bugzilla login is
-pending. `fedora-review-request.txt` contains the prepared review text and public
-artifact URLs for that next step. Track current progress and prerequisites in
+Fedora Package Review <https://bugzilla.redhat.com/show_bug.cgi?id=2548541> has
+been filed and blocks `FE-NEEDSPONSOR`, requesting sponsorship for the new
+packager. Review, sponsorship and the Electron prerequisite remain unresolved.
+`fedora-review-request.txt` records the submitted description and public artifact
+URLs. Track current progress and prerequisites in
 <https://github.com/abdallah-shehawey/whatsapp-desktop/issues/7>.
