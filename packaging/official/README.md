@@ -58,3 +58,17 @@ for most new packages:
 <https://documentation.ubuntu.com/project/contributors/new-package/create-a-new-package/>.
 Acceptance and release migration belong to the distributions; they do not
 automatically make the package available in every existing release.
+
+## Submission status, 2026-10-09
+
+Application packaging was merged and the source review artifacts were published:
+<https://github.com/abdallah-shehawey/whatsapp-desktop/releases/tag/packaging-review-2026-10-09>.
+Debian acknowledged ITP <https://bugs.debian.org/1150415> and registered its
+dependency on Electron request #842420. This is an intent to package, not archive
+acceptance. The Ubuntu MOTU proposal is awaiting mailing-list moderator approval.
+
+The upstream maintainer does not yet have a Fedora/FAS account, so no formal
+Fedora Package Review ticket has been filed. `fedora-review-request.txt` contains
+the prepared review text and public artifact URLs for that next step. Track
+current progress and prerequisites in
+<https://github.com/abdallah-shehawey/whatsapp-desktop/issues/7>.

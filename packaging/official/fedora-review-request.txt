@@ -1,0 +1,49 @@
+Proposed Bugzilla title:
+Review Request: whatsapp-desktop - Independent desktop client for WhatsApp Web
+
+Prepared description:
+
+Spec URL:
+https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/packaging-review-2026-10-09/whatsapp-desktop.spec
+
+SRPM URL:
+https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/packaging-review-2026-10-09/whatsapp-desktop-1.9.12-1.fc44.src.rpm
+
+Description:
+Independent desktop client for WhatsApp Web with system tray integration,
+desktop notifications, themes, configurable fonts and privacy controls. It
+requires an existing WhatsApp account and Internet access. The project is not
+affiliated with Meta or WhatsApp.
+
+The application is GPL-3.0-or-later, its WhiteSur-derived artwork GPL-3.0-only,
+and its AppStream metadata CC0-1.0. Artwork sources and license notices are
+included in the source archive.
+
+This source-only application proposal installs JavaScript and data and depends
+on a distribution-owned Electron >= 40, < 41 runtime. It neither downloads
+Electron nor runs npm during the build. The application package and tests pass
+in a clean Fedora 44 environment, with zero rpmlint errors or warnings.
+
+Runtime prerequisite:
+Electron is not currently packaged in the target Fedora repositories. This
+proposal does not complete Electron's source build, dependency packaging or
+security maintenance and cannot currently be installed from the official
+archives. I seek guidance on the runtime prerequisite and the eligibility of
+this independent client; final review/acceptance must wait for these matters.
+
+I am a new Fedora contributor and need a package-maintainer sponsor.
+
+Upstream URL:
+https://github.com/abdallah-shehawey/whatsapp-desktop
+
+Packaging implementation and validation:
+https://github.com/abdallah-shehawey/whatsapp-desktop/pull/6
+
+Debian ITP (blocked by Electron RFP #842420):
+https://bugs.debian.org/1150415
+
+Before filing:
+Use a Bugzilla account tied to the maintainer's Fedora/FAS email. Add the
+maintainer's actual FAS username and the FE-NEEDSPONSOR blocker in the form.
+The account creation, age declaration, CAPTCHA and password setup are personal
+steps for the maintainer; this text does not claim that a review is already open.
