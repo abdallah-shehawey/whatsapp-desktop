@@ -103,8 +103,6 @@ install-system: install-assets
 	      -e 's|@VERSION@|$(VERSION)|g' \
 	      packaging/official/whatsapp-desktop.in > $(DESTDIR)$(bindir)/$(BIN)
 	@chmod 755 $(DESTDIR)$(bindir)/$(BIN)
-	@sed -i 's/^StartupWMClass=.*/StartupWMClass=$(APP_ID)/' \
-	      $(DESTDIR)$(appdir)/$(APP_ID).desktop
 	@install -Dm644 data/$(APP_ID).metainfo.xml \
 	      $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml
 	@install -Dm644 packaging/official/whatsapp-desktop.1 \

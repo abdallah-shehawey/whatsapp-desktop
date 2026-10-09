@@ -29,6 +29,8 @@ with tempfile.TemporaryDirectory(prefix="whatsapp-system-package-") as tmp:
     subprocess.run(["make", "install-system", "PREFIX=/usr", f"DESTDIR={stage}",
                     f"SYSTEM_ELECTRON={runtime}"], cwd=source, check=True)
     launcher = stage / "usr/bin/whatsapp-desktop"
+    desktop = stage / "usr/share/applications/io.github.shehawey.whatsapp-desktop.desktop"
+    assert "StartupWMClass=WhatsApp\n" in desktop.read_text()
     expected_version = json.loads((root / "package.json").read_text())["version"]
     assert subprocess.check_output([launcher, "--version"], text=True).strip() == \
         f"whatsapp-desktop {expected_version}"
