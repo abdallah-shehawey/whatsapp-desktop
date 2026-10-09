@@ -1,0 +1,8 @@
+whatsapp-desktop (1.9.12-1) UNRELEASED; urgency=medium
+
+  * Initial source-only packaging proposal.
+  * Depend on a separately packaged Electron 40 runtime. Official archive
+    inclusion is blocked by Debian Electron request #842420.
+  * Install AppStream metadata and a manual page.
+
+ -- Abdallah Shehawey <shehawey9@gmail.com>  Fri, 09 Oct 2026 12:00:00 +0300

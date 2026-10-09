@@ -23,6 +23,8 @@ icontheme    = $(PREFIX)/share/icons/hicolor
 autostartdir = $(HOME)/.config/autostart
 
 ELECTRON  = node_modules/electron/dist
+SYSTEM_ELECTRON ?= /usr/bin/electron
+systemappdir = $(PREFIX)/share/$(BIN)
 ICON_SIZES = 16 22 24 32 48 64 128 256
 
 # Chromium ships 55 translations of a user interface this app never shows: no
@@ -40,7 +42,7 @@ $(ELECTRON)/electron:
 # What the app itself is: everything the runtime reads, and nothing else.
 APP_FILES = package.json src data
 
-install: $(ELECTRON)/electron
+install: $(ELECTRON)/electron install-assets
 	@install -d $(DESTDIR)$(libdir)
 	@cp -a $(ELECTRON)/. $(DESTDIR)$(libdir)/
 	@rm -f $(DESTDIR)$(libdir)/electron
@@ -87,6 +89,27 @@ install: $(ELECTRON)/electron
 	@printf '\n'                                                              >> $(DESTDIR)$(bindir)/$(BIN)
 	@printf 'exec %s/%s "$$@"\n' "$(libdir)" "$(BIN)"                         >> $(DESTDIR)$(bindir)/$(BIN)
 	@chmod 755 $(DESTDIR)$(bindir)/$(BIN)
+	@echo "  INSTALL  $(DESTDIR)$(bindir)/$(BIN)  ($$(du -sh $(DESTDIR)$(libdir) | cut -f1))"
+
+# Distribution packages contain only our application source. The distribution
+# owns Electron, its sandbox, libraries, translations and security updates.
+# This target has no dependency on npm or a downloaded Electron executable.
+install-system: install-assets
+	@install -d $(DESTDIR)$(systemappdir)
+	@cp -a $(APP_FILES) $(DESTDIR)$(systemappdir)/
+	@install -d $(DESTDIR)$(bindir)
+	@sed -e 's|@ELECTRON_BIN@|$(SYSTEM_ELECTRON)|g' \
+	      -e 's|@APPDIR@|$(systemappdir)|g' \
+	      -e 's|@VERSION@|$(VERSION)|g' \
+	      packaging/official/whatsapp-desktop.in > $(DESTDIR)$(bindir)/$(BIN)
+	@chmod 755 $(DESTDIR)$(bindir)/$(BIN)
+	@install -Dm644 data/$(APP_ID).metainfo.xml \
+	      $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml
+	@install -Dm644 packaging/official/whatsapp-desktop.1 \
+	      $(DESTDIR)$(PREFIX)/share/man/man1/$(BIN).1
+	@echo "  INSTALL  source application using $(SYSTEM_ELECTRON)"
+
+install-assets:
 	@# Tray icons land in both contexts: SNI hosts disagree on which they search.
 	@for s in $(ICON_SIZES); do \
 	  for f in apps/$(APP_ID).png apps/$(APP_ID)-tray.png \
@@ -103,7 +126,6 @@ install: $(ELECTRON)/electron
 	@# Skipped when staging for a package; packaging scripts run them.
 	@test -n "$(DESTDIR)" || update-desktop-database $(appdir) 2>/dev/null || true
 	@test -n "$(DESTDIR)" || gtk-update-icon-cache -qtf $(icontheme) 2>/dev/null || true
-	@echo "  INSTALL  $(DESTDIR)$(bindir)/$(BIN)  ($$(du -sh $(DESTDIR)$(libdir) | cut -f1))"
 
 # Start hidden at login: connected and in the tray, no window on screen.
 autostart: install
@@ -212,4 +234,4 @@ package: package-deb package-rpm package-arch package-appimage package-source
 clean:
 	rm -rf node_modules
 
-.PHONY: all install autostart no-autostart uninstall icons og screenshots test run package-deb package-rpm package-arch package-appimage package-flatpak package-source package clean
+.PHONY: all install install-system install-assets autostart no-autostart uninstall icons og screenshots test run package-deb package-rpm package-arch package-appimage package-flatpak package-source package clean

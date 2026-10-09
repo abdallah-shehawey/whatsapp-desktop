@@ -104,23 +104,28 @@ check('and it can by someone who does', removing.hasPasscode(), false);
  */
 const notify = require.resolve('../src/notify.js');
 delete require.cache[notify];
-const electron = require.resolve('electron');
+const Module = require('module');
+const load = Module._load;
 const raised = [];
-require.cache[electron] = {
-  id: electron, filename: electron, loaded: true, children: [], paths: [],
-  exports: {
-    Notification: class {
-      static isSupported() { return true; }
-      constructor(options) { raised.push(options); }
-      show() {}
-      close() {}
-      on() {}
-    },
-    nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
+const electron = {
+  Notification: class {
+    static isSupported() { return true; }
+    constructor(options) { raised.push(options); }
+    show() {}
+    close() {}
+    on() {}
   },
+  nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
 };
-
-const { Banners } = require('../src/notify.js');
+let Banners;
+try {
+  Module._load = function (request, ...args) {
+    return request === 'electron' ? electron : load.call(this, request, ...args);
+  };
+  ({ Banners } = require('../src/notify.js'));
+} finally {
+  Module._load = load;
+}
 
 let locked = false;
 const banners = new Banners({ isLocked: () => locked });

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.shehawey.whatsapp-desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>WhatsApp Desktop</name>
+  <summary>Use WhatsApp Web with desktop notifications and a system tray</summary>
+  <description>
+    <p>An independent desktop client for WhatsApp Web with system tray integration,
+    desktop notifications, themes, configurable fonts and privacy controls.</p>
+    <p>It requires an existing WhatsApp account and an Internet connection.
+    This project is not affiliated with Meta or WhatsApp.</p>
+  </description>
+  <developer id="io.github.abdallah-shehawey">
+    <name>Abdallah Shehawey</name>
+  </developer>
+  <launchable type="desktop-id">io.github.shehawey.whatsapp-desktop.desktop</launchable>
+  <categories>
+    <category>Network</category>
+    <category>InstantMessaging</category>
+  </categories>
+  <url type="homepage">https://abdallah-shehawey.github.io/whatsapp-desktop/</url>
+  <url type="bugtracker">https://github.com/abdallah-shehawey/whatsapp-desktop/issues</url>
+  <url type="vcs-browser">https://github.com/abdallah-shehawey/whatsapp-desktop</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Desktop integration, theme and privacy settings</caption>
+      <image>https://raw.githubusercontent.com/abdallah-shehawey/whatsapp-desktop/main/docs/assets/settings.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="1.9.12" date="2026-10-08"/>
+  </releases>
+  <requires>
+    <internet>always</internet>
+  </requires>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+    <content_attribute id="social-contacts">intense</content_attribute>
+  </content_rating>
+</component>
