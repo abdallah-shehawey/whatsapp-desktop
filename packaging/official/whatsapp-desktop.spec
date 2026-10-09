@@ -6,11 +6,11 @@ Release:        1%{?dist}
 Summary:        Independent desktop client for WhatsApp Web
 License:        GPL-3.0-or-later AND GPL-3.0-only AND CC0-1.0
 URL:            https://github.com/abdallah-shehawey/whatsapp-desktop
-Source0:        %{name}-%{version}.tar.gz
+Source0:        https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/packaging-review-2026-10-09/%{name}-%{version}.tar.gz
 BuildArch:      noarch
 
 BuildRequires:  make
-BuildRequires:  nodejs-devel
+BuildRequires:  nodejs
 BuildRequires:  python3
 BuildRequires:  fontconfig
 BuildRequires:  desktop-file-utils

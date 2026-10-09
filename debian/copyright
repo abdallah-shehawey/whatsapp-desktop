@@ -6,12 +6,12 @@ Comment: The source review archive contains the application, its tests and
  build inputs. The separate web site and its web fonts are not included.
 
 Files: *
-Copyright: Abdallah Shehawey and whatsapp-desktop contributors
+Copyright: 2026 Abdallah Shehawey and whatsapp-desktop contributors
 License: GPL-3+
 
 Files: data/icons/*
 Copyright: vinceliuice and WhiteSur icon theme contributors
-           Abdallah Shehawey and whatsapp-desktop contributors
+           2026 Abdallah Shehawey and whatsapp-desktop contributors
 License: GPL-3
 Comment: The launcher SVG comes from the WhiteSur icon theme. The tray SVG
  reuses its speech-bubble and handset geometry. Numbered PNG directories are
@@ -19,7 +19,7 @@ Comment: The launcher SVG comes from the WhiteSur icon theme. The tray SVG
  remain the property of their respective holders.
 
 Files: data/io.github.shehawey.whatsapp-desktop.metainfo.xml
-Copyright: Abdallah Shehawey and whatsapp-desktop contributors
+Copyright: 2026 Abdallah Shehawey and whatsapp-desktop contributors
 License: CC0-1.0
 
 License: GPL-3+

@@ -6,6 +6,8 @@ Build-Depends: debhelper-compat (= 13), nodejs, python3, fontconfig, desktop-fil
 Standards-Version: 4.7.4
 Rules-Requires-Root: no
 Homepage: https://github.com/abdallah-shehawey/whatsapp-desktop
+Vcs-Git: https://github.com/abdallah-shehawey/whatsapp-desktop.git -b codex/official-repositories
+Vcs-Browser: https://github.com/abdallah-shehawey/whatsapp-desktop/tree/codex/official-repositories
 
 Package: whatsapp-desktop
 Architecture: all
