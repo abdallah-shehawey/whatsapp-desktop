@@ -1,0 +1,51 @@
+name: Publish GitHub npm Package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: npm-package
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+          scope: '@abdallah-shehawey'
+          cache: npm
+      - name: Check application and stage package
+        run: |
+          make test
+          node packaging/npm/prepare.js
+          cd dist/npm
+          node bin/whatsapp-desktop.js --version
+          node bin/whatsapp-desktop.js --help
+          npm pack --dry-run
+      - name: Publish the version if needed
+        working-directory: dist/npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          package=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$package@$version" version --registry=https://npm.pkg.github.com > /dev/null 2>&1; then
+            echo "$package@$version is already published"
+          else
+            npm publish --registry=https://npm.pkg.github.com
+          fi
+          npm view "$package@$version" version --registry=https://npm.pkg.github.com
+          printf 'Published `%s@%s`\n' "$package" "$version" >> "$GITHUB_STEP_SUMMARY"

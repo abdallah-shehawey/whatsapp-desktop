@@ -357,3 +357,17 @@ Unset by default — it is a way into a live WhatsApp session, not a feature.
 
 GPL-3.0-or-later. Icon origins are recorded in `data/icons/NOTICE`, and the
 two web fonts the site is drawn in are in `docs/assets/FONTS-NOTICE.txt`.
+
+## GitHub Packages (npm)
+
+The Linux application is also published as `@abdallah-shehawey/whatsapp-desktop` on [GitHub Packages](https://github.com/abdallah-shehawey/whatsapp-desktop/packages). Authenticate to GitHub's npm registry with a personal access token (classic) containing `read:packages`, then install:
+
+```sh
+npm login --scope=@abdallah-shehawey --auth-type=legacy --registry=https://npm.pkg.github.com
+npm install --global @abdallah-shehawey/whatsapp-desktop
+whatsapp-desktop
+```
+
+The package includes the application and installs the pinned Electron runtime as a dependency. It needs a Linux desktop and Electron's normal system libraries. `--help`, `--version` and `--hidden` are supported. Native release packages remain the option for desktop menu integration.
+
+`Publish GitHub npm Package` publishes each GitHub release and supports manual dispatch for the current version. Packaging stages a scoped manifest separately, preserving the native application's existing package identity.
