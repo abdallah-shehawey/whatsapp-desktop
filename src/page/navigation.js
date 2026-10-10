@@ -8,6 +8,9 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
   const RAIL = '[data-testid="chatlist-header"]';
   const LEFT = '[data-testid="drawer-left"] > div > span > div';
   const PANELS = LEFT + ', [data-testid="drawer-middle"] > div > span > div';
+  /* Placeholders beside a tab stay steady: a full-size welcome surface is
+     raster work and no information. */
+  const PLACEHOLDER = '[data-testid="empty-state-drawer"], [data-testid="intro-panel"]';
   const BODY = '[data-testid="conversation-panel-body"]';
   const MESSAGES = '[data-testid="conversation-panel-messages"], [data-tab="conversation-panel-messages"]';
   const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
@@ -21,9 +24,16 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
   let requestedSection = null;
   let listMotion = null;
   let pendingList = false;
-  let sectionGeneration = 0;
-  let restoreHooked = false;
   let updateQueued = false;
+  let owning = false;
+  /* When the owner last pressed something: a page that changes within this
+     of a click or a key is one they asked for. Account opens about 65ms after
+     its click; WhatsApp's own loading-to-list swaps come later than this or
+     during the reveal that is already running. */
+  const ASKED_MS = 600;
+  let lastInput = -Infinity;
+  const now = () => (view.performance && typeof view.performance.now === 'function'
+    ? view.performance.now() : Date.now());
   const stillness = typeof view.matchMedia === 'function'
     ? view.matchMedia('(prefers-reduced-motion: reduce)') : null;
   const panels = new Map();
@@ -65,7 +75,6 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
     return !!top && !state.chats.contains(top);
   };
   const forgetClosedChat = () => {
-    sectionGeneration++;
     const activity = grab('WAWebSideNavButtonsActivityModel');
     const restore = grab('WAWebOpenLastActiveChatAction');
     try {
@@ -83,7 +92,9 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
   const motion = (element, frames, duration, easing = EASE) => {
     if (!element || reducedMotion() || typeof element.animate !== 'function') return null;
     try {
+      owning = true;
       const animation = element.animate(frames, { duration, easing });
+      owning = false;
       /* Raster the newly mounted content at its first keyframe before starting
          the clock. Otherwise the first native layout/paint can consume most
          of a short reveal, which makes it appear to jump to the end. */
@@ -99,37 +110,43 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
         });
       }
       return animation;
-    } catch (err) { return null; /* A build without Web Animations still opens. */ }
+    } catch (err) { owning = false; return null; /* A build without Web Animations still opens. */ }
   };
   const reveal = (element, offset, opacity, duration) => motion(element,
     [{ transform: `translate3d(0, ${offset}px, 0)`, opacity },
      { transform: 'none', opacity: 1 }], duration);
-  const deferChatRestore = () => {
-    if (restoreHooked || typeof view.requestAnimationFrame !== 'function') return;
-    const restore = grab('WAWebOpenLastActiveChatAction');
-    const original = restore?.openLastActiveChatIfNotLocked;
-    if (typeof original !== 'function') return;
-    /* The native tab handler restores the conversation in the same task as
-       the tab change. Give the list's compositor reveal a painted first frame
-       before rebuilding messages. Keep native lock/restore checks intact. */
-    restore.openLastActiveChatIfNotLocked = function (...args) {
-      const state = rail();
-      if (!state || (requestedSection !== state.chats &&
-          !(state.selected === state.chats && previous && !previous.chats)))
-        return original.apply(this, args);
-      const generation = sectionGeneration;
-      return new Promise((resolve, reject) => {
-        view.requestAnimationFrame(() => view.setTimeout(() => {
-          const current = rail();
-          if (generation !== sectionGeneration || !current || current.selected !== current.chats) {
-            resolve(); return;
-          }
-          try { resolve(original.apply(this, args)); }
-          catch (err) { reject(err); }
-        }, 0));
-      });
+  /* WhatsApp animates some panels itself -- a fade from 0.5 over 50ms on most,
+     a slide in from the left over 300ms on Channels -- and the reveal below
+     owns that same panel's opacity and transform. Two animations of one
+     property on one element are the case the compositor will not take
+     ("TargetHasIncompatibleAnimations" in a trace), so the reveal fell back to
+     the main thread exactly when WhatsApp was busiest; and holding the native
+     ones down with an !important style instead pinned THEM to the main thread,
+     drawing nothing, 50-300ms per tab. The native motion of a panel goes
+     through with no duration and no fill: it finishes on the spot, its promise
+     still resolves, and it leaves no value behind. */
+  const quietNativeMotion = () => {
+    const proto = view.Element && view.Element.prototype;
+    const native = proto && proto.animate;
+    if (typeof native !== 'function' || native.__waQuiet) return;
+    const MOVING = ['opacity', 'transform', 'translate', 'scale', 'rotate'];
+    const panelMotion = frames => {
+      const keys = Array.isArray(frames) ? frames.flatMap(frame => Object.keys(frame || {}))
+        : Object.keys(frames || {});
+      const moving = keys.filter(key => !['offset', 'easing', 'composite'].includes(key));
+      return moving.length > 0 && moving.every(key => MOVING.includes(key));
     };
-    restoreHooked = true;
+    const animate = function (frames, options) {
+      try {
+        if (!owning && panelMotion(frames) && this.matches?.(PANELS))
+          options = typeof options === 'object' && options
+            ? { ...options, duration: 0, delay: 0, endDelay: 0, fill: 'none' }
+            : { duration: 0, fill: 'none' };
+      } catch (err) { /* not a panel: native arguments as given */ }
+      return native.call(this, frames, options);
+    };
+    animate.__waQuiet = true;
+    proto.animate = animate;
   };
   const cancelChatMotion = () => {
     for (const animation of chatMotions) animation.cancel();
@@ -160,7 +177,6 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
   };
   const changeSection = (button, state) => {
     if (button === state.selected) return;
-    sectionGeneration++;
     requestedSection = button;
     pendingList = button === state.chats;
     if (listMotion) { listMotion.cancel(); listMotion = null; }
@@ -197,11 +213,17 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
       if (fronts.has(group)) {
         if (!record) {
           panel.setAttribute('data-wa-navigation-panel', 'inactive');
-          panels.set(panel, { owner: destination, group, active: false, content: null, page: null, animation: null });
+          panels.set(panel, { owner: destination, group, active: false, page: '', animation: null });
         }
         continue;
       }
       fronts.add(group);
+      const page = panel.querySelector?.('[data-testid]');
+      /* A wrapper with nothing in it yet takes nothing over. Profile's arrives
+         about 50ms before its page, and retiring You on the wrapper put a blank
+         surface on screen for those frames; the page it replaces stays up until
+         this one has something to show. */
+      if ((!record || !record.active) && !page) continue;
       if (!record || !record.active) {
         for (const [old, retiring] of panels) {
           if (old === panel || retiring.group !== group || !retiring.active) continue;
@@ -210,22 +232,36 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
           if (retiring.animation) { retiring.animation.cancel(); retiring.animation = null; }
         }
         panel.setAttribute('data-wa-navigation-panel', 'active');
-        record = { owner: destination, group, active: true, content: null, page: null, animation: null };
+        record = { owner: destination, group, active: true, page: '', animation: null };
         panels.set(panel, record);
       }
-      const content = panel.firstElementChild;
-      const page = panel.querySelector?.('[data-testid]') || content;
-      if (!content || (content === record.content && page === record.page)) continue;
-      /* Velocity fades the OUTER wrapper on the main thread, even after a
-         new section has mounted above it. The stylesheet holds that wrapper
-         steady; one compositor animation on its child owns the reveal. */
-      if (record.animation) record.animation.cancel();
-      record.content = content;
-      record.page = page;
-      /* The large welcome/empty surface beside a tab stays steady. Promoting
-         that background as a second reveal adds raster work to the list. */
-      if (page.matches?.('[data-testid="empty-state-drawer"], [data-testid="intro-panel"]')) continue;
-      record.animation = reveal(content, 8, 0, 220);
+      /* The panel is what moves, never something inside it. It is positioned
+         and as big as the drawer, so a transform on it changes no layout and
+         the compositor takes it whole. Its first child was the target before
+         and that is not always a box: Profile mounts a wrapper 0px tall whose
+         page hangs off it absolutely, so its reveal had no effect on the
+         compositor and ran on the main thread for its whole 220ms -- measured
+         -- which is the stutter Profile had and its siblings did not.
+
+         One reveal per page the owner asked for. Profile is a panel of its
+         own, but Account, Privacy and the rest replace the page inside the You
+         panel, and so does Back -- the page root's test id says which page is
+         up. WhatsApp swaps pages by itself too: Calls shows a loading page and
+         then the list, under a different id. Restarting on that was a second
+         fade over the first -- seen frame by frame. So a page that changes
+         while a reveal is still running joins it, and one that changes long
+         after the last click or key is WhatsApp's own business. */
+      const key = page?.getAttribute?.('data-testid') || '';
+      if (!key || key === record.page) continue;
+      const first = !record.page;
+      record.page = key;
+      if (!first) {
+        const running = record.animation &&
+          !['finished', 'idle'].includes(record.animation.playState);
+        if (running || now() - lastInput > ASKED_MS) continue;
+        record.animation?.cancel();
+      }
+      record.animation = page.matches?.(PLACEHOLDER) ? null : reveal(panel, 8, 0, 220);
     }
   };
   const mediaCloseButton = () => {
@@ -245,7 +281,6 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
   const update = () => {
     const state = rail();
     if (!state) return;
-    deferChatRestore();
     const main = doc.querySelector('#main');
     const chats = state.selected === state.chats;
     const id = main ? activeId() : '';
@@ -297,7 +332,9 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
       }, 1000);
     }
   }, true);
+  view.addEventListener('pointerdown', () => { lastInput = now(); }, true);
   view.addEventListener('keydown', event => {
+    lastInput = now();
     if (event.key !== 'Escape' || event.repeat || event.isComposing ||
         event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
     const mediaButton = mediaCloseButton();
@@ -358,6 +395,7 @@ const start = ({ press, log, prepareChat = () => {}, window: view = window }) =>
   observer.observe(doc, {
     childList: true, subtree: true, attributes: true, attributeFilter: ['aria-pressed'],
   });
+  quietNativeMotion();
   update();
 };
 

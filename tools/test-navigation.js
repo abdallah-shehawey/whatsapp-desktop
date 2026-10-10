@@ -12,6 +12,7 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
   let panelNodes = [], bodyReady = true;
   let messageKey = '';
   let animations = [], presses = 0, timers = [], frames = [], restores = 0;
+  let clock = 1000;
   const restore = { cancelPendingLastActiveChatRestore: () => cancelled++,
     openLastActiveChatIfNotLocked: () => { restores++; return Promise.resolve(); } };
   const animatedElement = name => ({
@@ -66,6 +67,7 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
   };
   const view = {
     document,
+    performance: { now: () => clock },
     matchMedia: () => ({ matches: reduced }),
     addEventListener: (type, cb) => { handlers[type] = cb; },
     setTimeout: cb => timers.push(cb),
@@ -131,13 +133,19 @@ const rig = ({ reduced = false, rtl = false, registry = true, beforeHtml = false
     hide: () => { document.visibilityState = 'hidden'; handlers.visibilitychange(); },
     mutate: target => update([{ type: 'childList', target }]),
     selectSection: () => { selected = section; update(); },
-    addPanel: (placeholder = false) => {
+    addPanel: (placeholder = false, page = 'section-drawer') => {
       const panel = animatedElement('panel');
       panel.closest = () => sectionContainer;
       panel.firstElementChild = animatedElement('panel-content');
-      if (placeholder) panel.querySelector = () => ({ matches: () => true });
+      panel.page = page;
+      panel.querySelector = () => panel.page === null ? null
+        : { getAttribute: () => panel.page, matches: () => placeholder };
       panelNodes.unshift(panel); update(); return panel;
     },
+    showPage: (panel, page) => { panel.page = page; update(); },
+    pointer: () => handlers.pointerdown({}),
+    later: ms => { clock += ms; },
+    settle: () => animations.forEach(a => { if (a.playState !== 'idle') a.playState = 'finished'; }),
     removePanel: panel => { panel.isConnected = false; panelNodes = panelNodes.filter(p => p !== panel); update(); },
     setBodyReady: ready => { bodyReady = ready; update(); },
     setListReady: ready => { list.firstElementChild = ready ? {} : null; update(); },
@@ -229,15 +237,30 @@ const sections = rig();
 sections.selectSection();
 const firstPanel = sections.addPanel();
 assert.equal(firstPanel.attributes['data-wa-navigation-panel'], 'active');
-assert.equal(sections.state.animations.at(-1).target, firstPanel.firstElementChild, 'one animation owns the section content, leaving the native outer wrapper steady');
+assert.equal(sections.state.animations.at(-1).target, firstPanel,
+  'the panel itself moves: positioned and drawer-sized, it is a box the compositor takes whole');
 sections.update();
 assert.equal(sections.state.animations.length, 1, 'section content mutations do not replay its entrance');
+sections.showPage(firstPanel, 'calls-tab-drawer');
+assert.equal(sections.state.animations.length, 1,
+  'a loading page turning into the section while its reveal runs joins that reveal instead of fading in twice');
+sections.settle(); sections.later(2000);
+sections.showPage(firstPanel, 'section-drawer');
+assert.equal(sections.state.animations.length, 1, 'WhatsApp swapping a page by itself, long after any input, is not animated');
+sections.pointer(); sections.later(65);
+sections.showPage(firstPanel, 'account-settings-drawer');
+assert.equal(sections.state.animations.length, 2, 'a settings page the owner opened inside the same panel gets its own reveal');
+sections.update();
+assert.equal(sections.state.animations.length, 2, 'a page filling in under the same test id keeps the reveal already running');
+sections.settle(); sections.later(500); sections.key({ key: 'Tab' }); sections.later(70);
+sections.showPage(firstPanel, 'section-drawer');
+assert.equal(sections.state.animations.length, 3, 'Back from a key is a page change too');
 const profilePanel = sections.addPanel();
 assert.equal(firstPanel.attributes['data-wa-navigation-panel'], 'inactive', 'a nested page retires the prior wrapper even with the same rail selection');
 assert.equal(profilePanel.attributes['data-wa-navigation-panel'], 'active', 'the nested page gets its own reveal');
 sections.key();
 assert.equal(firstPanel.attributes['data-wa-navigation-panel'], 'inactive', 'returning to Chats hides the retiring section before native unmount');
-assert.ok(sections.state.animations[0].cancelled, 'returning during a section reveal cancels it');
+assert.ok(sections.state.animations.slice(0, 3).every(a => a.cancelled || a.playState === 'finished'), 'returning during a section reveal cancels it');
 sections.selectSection();
 const secondPanel = sections.addPanel();
 assert.equal(secondPanel.attributes['data-wa-navigation-panel'], 'active', 'reopening a section gets a fresh reveal');
@@ -245,19 +268,25 @@ const secondAnimation = sections.state.animations.at(-1);
 sections.removePanel(secondPanel);
 assert.ok(secondAnimation.cancelled, 'removing an animated section cancels its motion');
 assert.equal(profilePanel.attributes['data-wa-navigation-panel'], 'active', 'a retained page becomes visible again when returning from a nested page');
+const holding = rig();
+holding.selectSection();
+const youPanel = holding.addPanel(false, 'me-tab-drawer');
+const incoming = holding.addPanel(false, null);
+assert.equal(youPanel.attributes['data-wa-navigation-panel'], 'active',
+  'an empty incoming wrapper leaves the page it replaces on screen: no blank frames before Profile');
+assert.ok(!incoming.attributes['data-wa-navigation-panel'], 'and takes nothing over until it has a page');
+holding.showPage(incoming, 'profile-drawer');
+assert.equal(youPanel.attributes['data-wa-navigation-panel'], 'inactive');
+assert.equal(incoming.attributes['data-wa-navigation-panel'], 'active');
+assert.equal(holding.state.animations.at(-1).target, incoming, 'Profile is revealed the moment its page exists');
 const returning = rig({ deferRestore: true });
 returning.open('a'); returning.paint(); returning.leave(); returning.paint();
 returning.returnByClick(true);
-assert.equal(returning.state.restores, 0, 'conversation rebuilding waits for the tab to paint');
+assert.equal(returning.state.restores, 1,
+  'the conversation is restored in the same task as the tab change, as WhatsApp does it: deferred, its rebuild landed in the middle of the list reveal');
 returning.paint();
 assert.equal(returning.state.animations.at(-1).options.duration, 220, 'Chats uses the same duration as the other sections');
 assert.equal(returning.state.animations.at(-1).frames[0].opacity, 0, 'Chats gets the full section reveal');
-returning.paint();
-assert.equal(returning.state.restores, 0, 'restore runs in a task after the first paint');
-returning.drain();
-assert.equal(returning.state.restores, 1, 'native lock and restore checks run once after painting');
-returning.leave(); returning.paint(); returning.returnByClick(true); returning.leave(); returning.paint(); returning.drain();
-assert.equal(returning.state.restores, 1, 'a rapid departure cancels a deferred restore');
 const lateList = rig();
 lateList.setListReady(false); lateList.selectSection(); lateList.returnByClick();
 assert.equal(lateList.state.animations.length, 0, 'a loading list does not consume the return animation');
@@ -273,7 +302,7 @@ assert.equal(batched.state.animations.length, 3, 'only the final conversation ge
 batched.open('c'); batched.close(); batched.paint();
 assert.equal(batched.state.animations.length, 3, 'closing before paint cancels a pending entrance');
 batched.selectSection(); batched.addPanel(); batched.returnByClick(); batched.paint();
-assert.equal(batched.state.animations.filter(a => a.target.name === 'panel-content').length, 0,
+assert.equal(batched.state.animations.filter(a => a.target.name === 'panel').length, 0,
   'a section abandoned before paint never animates over Chats');
 const prepared = rig({ scheduled: true, preparation: true });
 prepared.open('a'); prepared.paint();
@@ -300,4 +329,42 @@ rapidClose.open('a'); rapidClose.paint(); rapidClose.close();
 assert.equal(rapidClose.state.last, null, 'a closed chat is forgotten before visual reconciliation paints');
 rapidClose.leave(); rapidClose.returnByClick(); rapidClose.paint();
 assert.ok(!rapidClose.state.last, 'closing then changing tabs before paint cannot revive the conversation');
+/* WhatsApp's own motion of a panel -- the 50ms fade, the 300ms slide on
+   Channels -- goes through with no duration and no fill, so the reveal is the
+   only animation of that panel and the compositor takes it whole. Anything
+   else that animates is untouched. */
+{
+  const calls = [];
+  class FakeElement {
+    constructor(panel) { this.panel = panel; }
+    matches() { return this.panel; }
+  }
+  FakeElement.prototype.animate = function (frames, options) {
+    calls.push({ target: this, frames, options });
+    return { cancel() {}, playState: 'running' };
+  };
+  start({ log() {}, press() {}, window: {
+    Element: FakeElement,
+    document: { documentElement: null, querySelector: () => null, querySelectorAll: () => [] },
+    matchMedia: () => ({ matches: false }),
+    addEventListener() {}, setTimeout() {},
+    MutationObserver: class { observe() {} },
+  } });
+  const panel = new FakeElement(true), other = new FakeElement(false);
+  panel.animate([{ opacity: '0.5' }, { opacity: '1' }],
+                { duration: 50, delay: 0, easing: 'cubic-bezier(0.14, 0.62, 0.33, 0.9)', fill: 'forwards' });
+  assert.deepEqual([calls[0].options.duration, calls[0].options.fill, calls[0].options.easing],
+    [0, 'none', 'cubic-bezier(0.14, 0.62, 0.33, 0.9)'], 'the native panel fade finishes on the spot and leaves no value behind');
+  other.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 50, fill: 'forwards' });
+  assert.equal(calls[1].options.duration, 50, 'a fade on anything that is not a panel is left to WhatsApp');
+  panel.animate([{ transform: 'translateX(-100%)' }, { transform: 'translateX(0%)' }],
+                { duration: 300, delay: 0, easing: 'cubic-bezier(0.1, 0.82, 0.25, 1)', fill: 'forwards' });
+  assert.deepEqual([calls[2].options.duration, calls[2].options.fill], [0, 'none'],
+    'the native slide Channels gets is quieted the same way: two transforms on one panel put the reveal on the main thread');
+  panel.animate([{ maxHeight: '0px' }, { maxHeight: '90px' }], { duration: 120 });
+  assert.equal(calls[3].options.duration, 120, 'an animation of anything but motion is not the panel transition, and is left alone');
+  panel.animate({ opacity: [0.5, 1] }, 50);
+  assert.deepEqual(calls[4].options, { duration: 0, fill: 'none' }, 'the property-indexed form with a bare duration is the same fade');
+}
+
 console.log('navigation checks pass');

@@ -237,47 +237,28 @@ assert.match(shipped, /span\[data-icon\] > svg \{[^}]*max-height: 100%/);
 assert.doesNotMatch(shipped, /span\[data-icon\] > svg \{[^}]*[^-]width: 100%/);
 
 /*
- * Profile, in Settings, which is the one panel there WhatsApp never animated.
+ * The panels behind the nav rail and in You: nothing in the sheet may hold
+ * their opacity or transform, and nothing in it animates them.
  *
- * Its siblings are slid in by Velocity from translateX(100%) -- sampled on the
- * live page, 336px at 1ms down to under a pixel by 248 -- and Profile mounts
- * into [data-testid="drawer-left"] with animation-name: none and no transform
- * at any point. So the missing half is written here, to those numbers.
+ * Both were here. An !important `opacity: 1; transform: none` on every managed
+ * panel, and an 18px keyframe slide on the same chain -- and an animation
+ * cannot beat an !important declaration, so the slide drew nothing while
+ * Chromium, which will not composite an animation of an !important property,
+ * ran it on the main thread: "AffectsImportantProperty" in a trace, 160ms per
+ * tab change and per settings page. The reveal is navigation.js's now, on the
+ * panel itself, on the compositor.
  */
-const settings = shipped.slice(shipped.indexOf('[data-testid="drawer-left"]'));
-assert.match(shipped, /\[data-testid="drawer-left"\] > div > span > div \{/);
-/* The CHILD chain, not a descendant one. `[data-testid="drawer-left"] span >
-   div` matches four elements on the live page and three of them are furniture
-   inside the panel, which would each animate separately; the chain matches the
-   panel and nothing else. */
-assert.doesNotMatch(shipped, /\[data-testid="drawer-left"\] span > div \{/);
-assert.match(settings, /animation: whatsapp-desktop-settings 160ms/);
-assert.match(shipped, /@media \(prefers-reduced-motion: no-preference\) \{\n  \[data-testid="drawer-left"\]/);
-assert.match(settings, /@keyframes whatsapp-desktop-settings \{\n  from \{ transform: translate3d\(18px, 0, 0\); \}/);
-
-/*
- * And NOT opacity, in either direction, which is the fix for the lag reported
- * on the left rail.
- *
- * This rule reaches more than Profile -- Status and Channels mount at the same
- * child chain -- and WhatsApp fades those in itself with Velocity, an inline
- * opacity 0.5 -> 1 that is done in 36ms. An animation declaration at user
- * origin outranks an inline style, so keyframes that carry opacity take that
- * fade over and stretch it to the whole duration: measured from the mount, the
- * panel was drawn at 0 for the first 17ms and at 0.98 still at 143ms, where
- * WhatsApp had it solid at 36. Leaving opacity out hands the fade back.
- */
-const settingsBlock = settings.slice(0, settings.indexOf('[role="tooltip"]'));
-assert.doesNotMatch(settingsBlock, /opacity/);
-/* A real animation and not the 1ms no-op the drawer and the reply bar use: this
-   panel is replaced on every open, so a CSS animation runs every time and there
-   is nothing for JavaScript to do. The other two are never unmounted. */
-assert.doesNotMatch(settings.slice(0, settings.indexOf('}')), /1ms/);
-/* And the side is the interface's. transform knows nothing about direction, so
-   in Arabic -- where this drawer is on the other edge of the window -- the
-   panel would otherwise slide in from the wrong side. */
-assert.match(shipped, /html\[dir="rtl"\] \[data-testid="drawer-left"\] > div > span > div/);
-assert.match(shipped, /@keyframes whatsapp-desktop-settings-rtl \{\n  from \{ transform: translate3d\(-18px, 0, 0\); \}/);
+assert.doesNotMatch(shipped, /whatsapp-desktop-settings/);
+assert.doesNotMatch(shipped, /\[data-wa-navigation-panel\][^{]*\{[^}]*(?:opacity|transform)/);
+assert.doesNotMatch(shipped, /\[data-testid="drawer-(?:left|middle)"\] > div > span > div \{[^}]*animation/);
+/* What it still does: the retiring panel is hidden on the spot, so two
+   sections never overlap, and the surface sits on the CONTAINER while a panel
+   is up -- on the panel it would fade with it and show the chat list through. */
+assert.match(shipped, /\[data-wa-navigation-panel="inactive"\] \{\n  visibility: hidden !important;/);
+assert.match(shipped, /\[data-testid="drawer-left"\] > div > span:has\(> \[data-wa-navigation-panel="active"\]\)/);
+assert.match(shipped, /\[data-testid="drawer-middle"\] > div > span:has\(> \[data-wa-navigation-panel="active"\]\)[^{]*\{\n  background-color:/);
+/* The media hub keeps its short rise. */
+assert.match(shipped, /\[data-testid="media-hub-modal"\] \{\n    animation: whatsapp-desktop-media 160ms/);
 
 /* The label beside the nav rail -- "You", "Chats" -- which WhatsApp mounts
    already opaque under a `transition: opacity` that therefore never runs. It is

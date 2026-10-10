@@ -744,48 +744,33 @@ footer [data-testid="popup_panel"] {
 }
 @keyframes whatsapp-desktop-panel { from { opacity: 1; } to { opacity: 1; } }`;
 
-/* navigation.js owns the reveal of rail sections on the compositor. Native
- * Velocity keeps fading old wrappers for a while after the selection changes;
- * hold managed wrappers opaque and hide the retiring one so two sections never
- * overlap. The opaque surface also keeps the underlying chat list from bleeding
- * through. Nested drawers retain their native lifecycle and the short slide. */
+/* The panels behind the nav rail and in You are revealed by navigation.js, on
+ * the compositor, and nothing in this sheet may hold their opacity or their
+ * transform. It did: an !important `opacity: 1; transform: none` on each panel
+ * and a keyframe slide on the same chain. An animation cannot beat an
+ * !important declaration, so the slide drew nothing, and Chromium will not
+ * hand an animation of an !important property to the compositor -- measured
+ * in a trace, "AffectsImportantProperty" on every panel, every time: 160ms of
+ * main-thread animation per tab change and per settings page, drawing nothing,
+ * stalling whatever else was moving.
+ *
+ * What the sheet still does: the retiring panel is hidden on the spot, so two
+ * sections never overlap; and the surface goes on the CONTAINER while a panel
+ * is up, so the chat list underneath cannot show through one that is fading
+ * in. On the panel itself that colour would fade with it. */
 const SETTINGS_PANEL = `
-[data-wa-navigation-panel] {
-  opacity: 1 !important;
-  transform: none !important;
-  background-color: var(--WDS-surface-default, var(--background-default));
-}
 [data-wa-navigation-panel="inactive"] {
   visibility: hidden !important;
   pointer-events: none !important;
 }
+[data-testid="drawer-left"] > div > span:has(> [data-wa-navigation-panel="active"]),
+[data-testid="drawer-middle"] > div > span:has(> [data-wa-navigation-panel="active"]) {
+  background-color: var(--WDS-surface-default, var(--background-default));
+}
 @media (prefers-reduced-motion: no-preference) {
-  [data-testid="drawer-left"] > div > span > div {
-    animation: whatsapp-desktop-settings 160ms cubic-bezier(0.2, 0.8, 0.2, 1) !important;
-  }
-  [data-testid="drawer-middle"] > div > span > div {
-    animation: whatsapp-desktop-settings 160ms cubic-bezier(0.2, 0.8, 0.2, 1) !important;
-  }
-  [data-wa-navigation-panel] {
-    animation-duration: 1ms !important;
-  }
-  html[dir="rtl"] [data-testid="drawer-left"] > div > span > div {
-    animation-name: whatsapp-desktop-settings-rtl !important;
-  }
-  html[dir="rtl"] [data-testid="drawer-middle"] > div > span > div {
-    animation-name: whatsapp-desktop-settings-rtl !important;
-  }
   [data-testid="media-hub-modal"] {
     animation: whatsapp-desktop-media 160ms cubic-bezier(0.2, 0.8, 0.2, 1) !important;
   }
-}
-@keyframes whatsapp-desktop-settings {
-  from { transform: translate3d(18px, 0, 0); }
-  to { transform: none; }
-}
-@keyframes whatsapp-desktop-settings-rtl {
-  from { transform: translate3d(-18px, 0, 0); }
-  to { transform: none; }
 }
 @keyframes whatsapp-desktop-media {
   from { transform: translate3d(0, 12px, 0); }
