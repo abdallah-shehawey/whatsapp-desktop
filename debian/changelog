@@ -1,4 +1,4 @@
-whatsapp-desktop (1.9.12-1) UNRELEASED; urgency=medium
+whatsapp-desktop (1.9.13-1) UNRELEASED; urgency=medium
 
   * Initial source-only packaging proposal (Closes: #1150415).
   * Depend on a separately packaged Electron 40 runtime. Official archive
