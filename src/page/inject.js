@@ -29,6 +29,7 @@ const pictures = require('./pictures.js');
 const arabicDigits = require('./arabic-digits.js');
 const navigation = require('./navigation.js');
 const motion = require('./motion.js');
+const wallpaper = require('./wallpaper.js');
 
 const SEP = '\u001f';   // joins the parts of an answer; occurs in no chat name
 
@@ -1891,7 +1892,8 @@ const start = ({ send, on }) => {
   /* ------------------------------------------------------------ the question */
 
   let adoptConversation = () => {};
-  navigation.start({ press, log, window, prepareChat: () => adoptConversation() });
+  const doodles = wallpaper.start({ log, window });
+  navigation.start({ press, log, window, prepareChat: () => { adoptConversation(); doodles.scan(); } });
 
   /* Answers the app's one question at notification time: what just arrived, and
      was it the conversation already on screen? The reply is the chat, the sender,
@@ -3466,7 +3468,9 @@ const start = ({ send, on }) => {
     }
   };
 
-  setInterval(smoothTheArrivals, ARRIVAL_ADOPT_MS);
+  /* A community thread draws its conversation, and its wallpaper, in a dialog
+     outside #main; the same poll that adopts its messages finds its doodles. */
+  setInterval(() => { smoothTheArrivals(); doodles.scan(); }, ARRIVAL_ADOPT_MS);
   adoptConversation = smoothTheArrivals;
   smoothTheArrivals();
 

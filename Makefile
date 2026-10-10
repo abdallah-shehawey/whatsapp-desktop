@@ -179,6 +179,7 @@ test:
 	@node tools/test-inject.js
 	@node tools/test-navigation.js
 	@node tools/test-motion.js
+	@node tools/test-wallpaper.js
 	@node tools/test-bidi.js
 	@node tools/test-wording.js
 	@node tools/test-style.js
