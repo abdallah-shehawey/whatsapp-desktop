@@ -107,7 +107,26 @@ const start = ({ press, log, window: view = window }) => {
     return true;
   };
 
+  const mediaSearch = () => {
+    const button = doc.querySelector('[data-testid="media-hub-modal"] [aria-label="Search"]')
+    if (!button || !onTop(button)) return false;
+
+    let pressed = false;
+    try {
+      const Cmd = grab('WAWebCmd')?.Cmd;
+      const chat = grab('WAWebChatCollection')?.ChatCollection?.getActive?.();
+      if (typeof Cmd?.chatSearch === 'function' && chat) Cmd.chatSearch(chat);
+      else { press(button, deepestIn(button)); pressed = true; }
+    } catch (err) {
+      press(button, deepestIn(button));
+      pressed = true;
+    }
+
+    return true;
+  };
+
   const find = () => {
+    if (mediaSearch()) return true;
     if (messageSearch()) return true;
     for (const place of PLACES) {
       const box = boxIn(doc.querySelector(place));
@@ -128,3 +147,4 @@ const start = ({ press, log, window: view = window }) => {
 };
 
 module.exports = { start };
+// vim: et ts=2 sw=2 sts=2
