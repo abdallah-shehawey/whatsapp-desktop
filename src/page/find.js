@@ -4,6 +4,7 @@
  * Ctrl+F, which a browser answers with its find bar and which this client
  * answered with nothing at all (issue #11). It searches whatever is on screen:
  *
+ *   the media hub   -- its own search, while the dialog is up over the rest;
  *   a conversation  -- its own message search, the panel the magnifier in its
  *                      header opens, with the caret already in the box;
  *   Calls, Channels -- the box at the top of that section, and the same for any
@@ -33,6 +34,7 @@ const start = ({ press, log, window: view = window }) => {
   /* Where a box may be taken from, in the order they are asked: a panel over
      the chat list, then the chat list itself. */
   const PLACES = ['[data-testid="drawer-left"]', '#side'];
+  const HUB = '[data-testid="media-hub-modal"]';
   /* The panel slides in and its box arrives with it; give up after this. */
   const OPEN_MS = 1000;
   /* How long WhatsApp's command is given before the magnifier is pressed
@@ -63,6 +65,8 @@ const start = ({ press, log, window: view = window }) => {
     while (node.firstElementChild) node = node.firstElementChild;
     return node;
   };
+  const magnifierIn = root => [...root.querySelectorAll('button, [role="button"]')]
+    .find(el => titles(el).some(title => SEARCH_ICON.test(title)));
 
   const panel = () => {
     const drawer = doc.querySelector('[data-testid="drawer-right"]');
@@ -72,8 +76,7 @@ const start = ({ press, log, window: view = window }) => {
   const messageSearch = () => {
     const header = doc.querySelector('#main header');
     if (!header) return false;
-    const button = [...header.querySelectorAll('button, [role="button"]')]
-      .find(el => titles(el).some(title => SEARCH_ICON.test(title)));
+    const button = magnifierIn(header);
     if (!button || !onTop(button)) return false;
 
     const ready = boxIn(panel());
@@ -107,21 +110,32 @@ const start = ({ press, log, window: view = window }) => {
     return true;
   };
 
+  /* The media hub, the dialog the first button at the foot of the navbar
+     opens over the whole window, has a search of its own behind a button in
+     it. That button is pressed: Cmd.chatSearch is the open conversation's
+     search, and would open underneath the dialog. The label is the one
+     WhatsApp writes in English; the magnifier icon is asked for after it, for
+     a client in another language. */
   const mediaSearch = () => {
-    const button = doc.querySelector('[data-testid="media-hub-modal"] [aria-label="Search"]')
+    const hub = doc.querySelector(HUB);
+    if (!hub) return false;
+
+    const ready = boxIn(hub);
+    if (ready) { ++opening; take(ready); return true; }
+
+    const button = hub.querySelector('[aria-label="Search"]') || magnifierIn(hub);
     if (!button || !onTop(button)) return false;
+    press(button, deepestIn(button));
 
-    let pressed = false;
-    try {
-      const Cmd = grab('WAWebCmd')?.Cmd;
-      const chat = grab('WAWebChatCollection')?.ChatCollection?.getActive?.();
-      if (typeof Cmd?.chatSearch === 'function' && chat) Cmd.chatSearch(chat);
-      else { press(button, deepestIn(button)); pressed = true; }
-    } catch (err) {
-      press(button, deepestIn(button));
-      pressed = true;
-    }
-
+    const mine = ++opening;
+    const asked = Date.now();
+    const wait = () => {
+      if (mine !== opening) return;
+      const box = boxIn(hub);
+      if (box) take(box);
+      else if (Date.now() - asked < OPEN_MS) view.setTimeout(wait, 16);
+    };
+    wait();
     return true;
   };
 
@@ -147,4 +161,3 @@ const start = ({ press, log, window: view = window }) => {
 };
 
 module.exports = { start };
-// vim: et ts=2 sw=2 sts=2
