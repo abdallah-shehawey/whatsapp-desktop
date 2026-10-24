@@ -31,6 +31,7 @@ class Node {
 }
 
 const ancestor = (node, test) => { for (let n = node.parent; n; n = n.parent) if (test(n)) return true; return false; };
+const hasattr = (name, value=true) => n => n.attrs[name] === value;
 const testid = id => n => n.attrs['data-testid'] === id;
 /* Only the selectors find.js asks with. Anything else throws, so a selector
    changed there cannot quietly match nothing here. */
@@ -42,6 +43,7 @@ const SELECTORS = {
   '[data-testid="drawer-left"]': testid('drawer-left'),
   '#side': n => n.attrs.id === 'side',
   '#main header': n => n.tag === 'header' && ancestor(n, m => m.attrs.id === 'main'),
+  '[data-testid="media-hub-modal"] [aria-label="Search"]': n => testid('media-hub-modal')(n) && ancestor(n, hasattr('aria-label', 'Search'))
 };
 const match = selector => {
   if (!SELECTORS[selector]) throw new Error('unexpected selector: ' + selector);
@@ -273,3 +275,4 @@ const build = ({ commands = true, answers = true, magnifierOpens = true } = {}) 
 }
 
 console.log('find checks pass');
+// vim: et ts=2 sw=2 sts=2
