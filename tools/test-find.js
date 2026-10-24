@@ -31,7 +31,6 @@ class Node {
 }
 
 const ancestor = (node, test) => { for (let n = node.parent; n; n = n.parent) if (test(n)) return true; return false; };
-const hasattr = (name, value=true) => n => n.attrs[name] === value;
 const testid = id => n => n.attrs['data-testid'] === id;
 /* Only the selectors find.js asks with. Anything else throws, so a selector
    changed there cannot quietly match nothing here. */
@@ -43,7 +42,8 @@ const SELECTORS = {
   '[data-testid="drawer-left"]': testid('drawer-left'),
   '#side': n => n.attrs.id === 'side',
   '#main header': n => n.tag === 'header' && ancestor(n, m => m.attrs.id === 'main'),
-  '[data-testid="media-hub-modal"] [aria-label="Search"]': n => testid('media-hub-modal')(n) && ancestor(n, hasattr('aria-label', 'Search'))
+  '[data-testid="media-hub-modal"]': testid('media-hub-modal'),
+  '[aria-label="Search"]': n => n.attrs['aria-label'] === 'Search',
 };
 const match = selector => {
   if (!SELECTORS[selector]) throw new Error('unexpected selector: ' + selector);
@@ -97,6 +97,8 @@ const build = ({ commands = true, answers = true, magnifierOpens = true } = {}) 
     assert.ok(element.contains(target), 'a press is aimed inside what it presses');
     t.pressed.push(element);
     if (element === t.magnifier && magnifierOpens) openPanel();
+    if (element === t.hubSearch && !t.hubBox)
+      view.setTimeout(() => { t.hubBox = t.hub.add(box()); }, 40);
   };
   const withClock = fn => {
     const real = Date.now;
@@ -123,6 +125,15 @@ const build = ({ commands = true, answers = true, magnifierOpens = true } = {}) 
       t.left = body.add(new Node('div', { 'data-testid': 'drawer-left' }));
       if (withBox) t.leftBox = t.left.add(box());
       if (t.sideBox) t.sideBox.under = t.left;
+    },
+    /* The media hub: a dialog over the whole window, its search behind a
+       button that is labelled in the client's language. */
+    mediaHub: ({ label = 'Search', glyph = null } = {}) => {
+      t.hub = body.add(new Node('div', { 'data-testid': 'media-hub-modal' }));
+      if (label || glyph)
+        t.hubSearch = t.hub.add(new Node('button', label ? { 'aria-label': label } : {},
+                                         glyph ? [icon(glyph)] : []));
+      for (const node of [t.magnifier, t.sideBox, t.leftBox]) if (node) node.under = t.hub;
     },
     key: (fields = {}) => {
       const event = Object.assign({ key: 'f', code: 'KeyF', ctrlKey: true, prevented: false,
@@ -254,6 +265,47 @@ const build = ({ commands = true, answers = true, magnifierOpens = true } = {}) 
                    'a covered page is left alone');
 }
 
+/* The media hub over an open conversation: the hub's own search, not the
+   conversation's under it, and the caret in its box once it is there. */
+{
+  const t = build();
+  t.chatList();
+  t.conversation();
+  t.mediaHub();
+  const event = t.key();
+  assert.ok(event.prevented, 'Ctrl+F over the media hub is taken');
+  assert.deepEqual(t.searched, [], 'the conversation behind it is not searched');
+  assert.deepEqual(t.pressed, [t.hubSearch], 'the hub\'s search is pressed');
+  t.tick(100);
+  assert.equal(t.focused, t.hubBox, 'the caret lands in the hub\'s box');
+
+  /* Again, with its search open: back to the box, nothing pressed twice. */
+  t.focused = null;
+  t.key();
+  assert.equal(t.focused, t.hubBox, 'a second Ctrl+F goes back to the box');
+  assert.deepEqual(t.pressed, [t.hubSearch], 'without pressing the button again');
+}
+
+/* A client in Arabic labels the button in Arabic: the magnifier finds it. */
+{
+  const t = build();
+  t.chatList();
+  t.mediaHub({ label: 'بحث', glyph: 'wds-ic-search' });
+  t.key();
+  assert.deepEqual(t.pressed, [t.hubSearch], 'the button is found by its icon');
+}
+
+/* A hub with no search on it: nothing under the dialog moves either. */
+{
+  const t = build();
+  t.chatList();
+  t.conversation();
+  t.mediaHub({ label: null });
+  const event = t.key();
+  assert.deepEqual([t.searched, t.pressed, t.focused, event.prevented], [[], [], null, false],
+                   'a hub with nothing to search is left alone');
+}
+
 /* Which keys count. */
 {
   const t = build();
@@ -275,4 +327,3 @@ const build = ({ commands = true, answers = true, magnifierOpens = true } = {}) 
 }
 
 console.log('find checks pass');
-// vim: et ts=2 sw=2 sts=2

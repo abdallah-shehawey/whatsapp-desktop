@@ -222,7 +222,7 @@ make screenshots # re-photographs the three windows, for the README and the site
 |---|---|
 | `Ctrl` `+` / `-` / `0` | zoom in, out, reset |
 | `Ctrl+,` | settings |
-| `Ctrl+F` | search: the open chat's messages, or the list on screen — chats, Calls, Channels |
+| `Ctrl+F` | search: the open chat's messages, the media hub while it is open, or the list on screen — chats, Calls, Channels |
 | `Ctrl+Alt+P` | blur the conversation, and reveal it again |
 | `Ctrl+Alt+L` | lock it now, if a passcode is set |
 | `Ctrl+Shift+I` | devtools |
