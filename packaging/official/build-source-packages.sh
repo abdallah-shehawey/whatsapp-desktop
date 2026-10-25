@@ -5,7 +5,8 @@ set -euo pipefail
 
 task_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 task_dist=${DIST:-$task_root/dist/official}
-task_version=$(node -p "require('$task_root/package.json').version")
+task_manifest=$(git -C "$task_root" show HEAD:package.json)
+task_version=$(printf '%s' "$task_manifest" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).version')
 task_build=$(mktemp -d)
 trap 'rm -rf "$task_build"' EXIT
 mkdir -p "$task_dist"
@@ -33,6 +34,17 @@ cp "$task_dist/whatsapp-desktop-$task_version.tar.gz" "$task_build/rpm/SOURCES/"
 cp "$task_build/whatsapp-desktop-$task_version/packaging/official/whatsapp-desktop.spec" \
    "$task_build/rpm/SPECS/"
 cp "$task_build/rpm/SPECS/whatsapp-desktop.spec" "$task_dist/"
+task_rpm_version=$(rpmspec -q --srpm --qf '%{VERSION}' "$task_dist/whatsapp-desktop.spec")
+task_source_url=$(rpmspec --parse "$task_dist/whatsapp-desktop.spec" | \
+  sed -n 's/^Source0:[[:space:]]*//p')
+task_review_tag=${task_source_url#*/releases/download/}
+task_review_tag=${task_review_tag%%/*}
+if [[ "$task_rpm_version" != "$task_version" || \
+      "$task_review_tag" != "packaging-review-$task_version-fedora43" || \
+      "$task_source_url" != "https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/$task_review_tag/whatsapp-desktop-$task_version.tar.gz" ]]; then
+  printf 'Review SPEC version/Source0 does not match committed application %s\n' "$task_version" >&2
+  exit 1
+fi
 task_rpm_options=(--define "_topdir $task_build/rpm")
 if [[ -n "${RPM_DIST:-}" ]]; then
   task_rpm_options+=(--define "dist $RPM_DIST")
@@ -41,12 +53,12 @@ rpmbuild -bs "${task_rpm_options[@]}" \
   "$task_build/rpm/SPECS/whatsapp-desktop.spec"
 cp "$task_build"/rpm/SRPMS/*.src.rpm "$task_dist/"
 
-node - "$task_root" "$task_dist" <<'NODE'
+node - "$task_root" "$task_dist" "$task_source_url" "$task_review_tag" <<'NODE'
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const [root, dist] = process.argv.slice(2);
-const manifest = require(path.join(root, 'package.json'));
+const [root, dist, sourceUrl, reviewTag] = process.argv.slice(2);
+const manifest = JSON.parse(execFileSync('git', ['-C', root, 'show', 'HEAD:package.json'], {encoding:'utf8'}));
 const audit = {
   project: manifest.name,
   version: manifest.version,
@@ -54,6 +66,8 @@ const audit = {
   included_paths: ['LICENSE', 'README.md', 'Makefile', 'package.json', 'src', 'data', 'tools', 'packaging/official'],
   debian_packaging_in_source_diff: true,
   bundled_runtime: false,
+  fedora_review_tag: reviewTag,
+  fedora_source_url: sourceUrl,
   runtime_dependency: 'Distribution-owned Electron: Fedora >= 43, < 44; Debian >= 40, < 41',
   archive_status: 'proposal; not accepted or installable from official archives',
   blocker: 'Fedora application review and packager sponsorship remain pending; Debian runtime request #842420 is open; no official application archive acceptance'
