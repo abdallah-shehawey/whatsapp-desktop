@@ -38,6 +38,13 @@ packaging/official/build-source-packages.sh
 ```
 
 Use a separate `DIST` output directory to preserve existing review snapshots.
+Fedora review sources use a version-specific release tag,
+`packaging-review-<application version>-fedora43`. The builder checks the
+committed package version against the expanded SPEC `Source0` and records the
+exact URL and tag in `build-manifest.json`. Publish every generated review
+artifact together under that tag, then verify anonymous downloads against
+`SHA256SUMS` before linking the snapshot in the distribution review. A normal
+application release does not publish a new review snapshot automatically.
 `RPM_DIST=.fc46` labels a source RPM intended for Rawhide; build and test its
 binary package in Rawhide before publishing it. The Debian proposal retains
 its separate Electron 40 dependency.
