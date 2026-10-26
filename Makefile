@@ -193,6 +193,7 @@ test:
 	@node tools/test-window.js
 	@node tools/test-x11.js
 	@node tools/test-display.js
+	@node tools/test-desktop.js
 	@node tools/test-mpris.js
 	@node tools/test-config.js
 	@node tools/test-privacy.js

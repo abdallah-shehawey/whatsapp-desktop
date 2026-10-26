@@ -9,7 +9,7 @@
  */
 'use strict';
 
-const { execFile, execFileSync } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 
 const SCHEMA = 'org.gnome.desktop.interface';
 
@@ -94,17 +94,37 @@ const prefersDark = () => {
   return scheme !== 'prefer-light';
 };
 
-/* `gsettings monitor` prints a line per change and costs one idle process, which
-   is what following the desktop live is worth. It is a child of this process, so
-   it goes away with it. */
+/*
+ * `gsettings monitor` prints a line per change and costs one idle process, which
+ * is what following the desktop live is worth.
+ *
+ * It does not go away with this process on its own -- a child outlives its
+ * parent -- and it starts holding every descriptor Chromium had left open, the
+ * GPU process's and the network service's channels to the browser among them.
+ * So a client that was quit, restarted or killed left the monitor running until
+ * the next change in the desktop's interface settings (it dies writing that
+ * line), and a client that was killed or crashed left its GPU process and
+ * network service running with it, waiting for a browser that was gone: found
+ * four and a half hours after the client was stopped, and gone the moment the
+ * monitor was. Measured on a quit, the monitor alone stayed; on a kill, the GPU
+ * process with it.
+ *
+ * So the monitor runs under a shell that reads from this process and stops it
+ * when that pipe closes -- which the kernel does however this process ends.
+ */
+const MONITOR = 'gsettings monitor "$1" & trap \'kill $! 2>/dev/null\' EXIT; ' +
+                'trap exit HUP INT TERM; read -r _';
+
 const watch = (keys, onChange) => {
   let child;
   try {
-    child = execFile('gsettings', ['monitor', SCHEMA]);
+    child = spawn('/bin/sh', ['-c', MONITOR, 'whatsapp-desktop-settings', SCHEMA],
+                  { stdio: ['pipe', 'pipe', 'ignore'] });
   } catch (e) {
     return () => {};
   }
 
+  child.stdout.setEncoding('utf8');
   let buffer = '';
   child.stdout.on('data', chunk => {
     buffer += chunk;
@@ -116,8 +136,11 @@ const watch = (keys, onChange) => {
     }
   });
   child.on('error', () => {});
+  child.stdin.on('error', () => {});
 
-  return () => { try { child.kill(); } catch (e) {} };
+  /* Closing the pipe is the stop: the shell's read returns and its exit takes
+     the monitor down with it. */
+  return () => { try { child.stdin.end(); } catch (e) {} };
 };
 
 module.exports = { interfaceFont, prefersDark, watch, familyOf,
