@@ -34,6 +34,7 @@ const themes = require('./themes.js');
 const connectionPage = require('./connection.js');
 const restart = require('./relaunch.js');
 const { LockManager } = require('./lock.js');
+const x11 = require('./x11.js');
 /* Version, licence and author, read from the one file that already says them. */
 const manifest = require('../package.json');
 
@@ -364,6 +365,50 @@ const noteNormalSize = () => {
   normalSize = { width, height };
 };
 
+/* Whether the window went down maximised, on X11 -- where the window manager
+   forgets a window once it is taken down, and maps it next time as one it has
+   never met. Set when it is put away, spent when it comes back. */
+let downMaximized = false;
+
+/* Down, and how it went. Read only off a window that is up: a hidden one has
+   nothing left to say about it. */
+const takeDown = () => {
+  if (win.isVisible()) downMaximized = !onWayland && win.isMaximized();
+  win.hide();
+};
+
+/*
+ * The size a window that came up maximised on X11 un-maximises to.
+ *
+ * Mutter takes it from the size the window is mapped at, and the window is
+ * mapped at the size of the screen -- because that is the size the page has
+ * been laid out and drawn at while the window was down, in the tray or before
+ * its first show, and what is drawn then is what its first frames up are made
+ * of. It used to be mapped at its own size, to give mutter the right answer
+ * that way, and the page then came up as a small copy of itself in the corner
+ * of a black screen-sized window until Chromium caught up. Measured on the
+ * owner's chats, opened from the tray's "Open WhatsApp": 110ms of an empty
+ * black window and then two frames of the small page; on the first open after
+ * a --hidden start, six frames of it.
+ *
+ * So the window goes up at the size it will be, and once mutter has it up
+ * maximised it is told the window's own size -- which it takes as the size to
+ * un-maximise to, and draws nothing for. Not through Electron: see src/x11.js.
+ * Failing costs only what it would have without it, an un-maximise to the
+ * whole screen.
+ */
+const giveNormalSize = () => {
+  if (!normalSize) return;
+  const { scaleFactor } = electronScreen.getDisplayMatching(win.getBounds());
+  const xid = win.getNativeWindowHandle().readUInt32LE(0);
+  const width = Math.round(normalSize.width * scaleFactor);
+  const height = Math.round(normalSize.height * scaleFactor);
+  x11.sizeToUnmaximiseTo(xid, width, height).then(
+    result => debug.trace('window: %dx%d to un-maximise to: %s', width, height, result),
+    error => console.log('window: could not tell the window manager the size to un-maximise to (%s)',
+                         error.message));
+};
+
 /* Up, and maximised the first time if that is how it was left. maximize() on a
    window that is not up yet maps it maximised, in one go -- where showing it
    and then maximising would draw it at its own size for a frame and then
@@ -371,12 +416,15 @@ const noteNormalSize = () => {
    maximize() puts a window up, and a client started into the tray stays
    there. */
 const putUp = () => {
+  const maximized = openMaximized || downMaximized;
+  downMaximized = false;
   if (openMaximized) {
     openMaximized = false;
     win.maximize();
-    return;
+  } else {
+    win.show();
   }
-  win.show();
+  if (maximized && !onWayland) giveNormalSize();
 };
 
 /* What the window writes back about itself. The size is as much the window
@@ -710,7 +758,7 @@ const remapWindow = () => {
      runs out of three from the dock and two out of two from behind another
      window, the window comes back with the focus either way. */
   remapping = true;
-  win.hide();
+  takeDown();
 
   /* A window taken down while it was minimised keeps that state in Ozone --
      hide() unmaps it and leaves it kMinimized, measured -- and showing it in
@@ -832,7 +880,13 @@ const showWindow = (why, measure = true) => {
     console.log('raising the window by %s%s', raiseStrategy,
                 raiseMeasured ? '' : ', as the config asks');
   }
-  raiseWindow(raiseStrategy, why, raiseMeasured && measure);
+  /* Measured only when there was a window up to raise. One in the tray is
+     mapped by either way up, so whether it took says nothing about which way
+     works here -- and a map waits on the page: on the first open after a
+     --hidden start the focus had not arrived 250ms later, the raise was taken
+     to have failed, and the window was taken down and put up again in front of
+     the owner, with "remap from here on" kept for the rest of the session. */
+  raiseWindow(raiseStrategy, why, raiseMeasured && measure && win.isVisible());
 };
 
 /* A notification click belongs to the shell until its modal grab closes.
@@ -962,18 +1016,10 @@ const hideWindow = () => {
      later. */
   raising.gen++;
   cancelShellRaise();
-  /* A maximised window put away on X11 is mapped again at the size it had
-     when it went: the whole screen. Mutter takes that as the size it
-     un-maximises to, so un-maximising a window that had been to the tray once
-     went to a window covering the screen, and that size was then kept as its
-     own. Measured in a nested GNOME 50 on Xwayland, and only there: Wayland
-     un-maximises to the right size. Given its own size while it is down, it
-     still comes back maximised in a single map (probed on window_manager
-     "map"), and un-maximises to that size. Not unmaximize() to get there --
-     a restore shows the window, so it came straight back out of the tray. */
-  const maximized = !onWayland && win.isMaximized();
-  win.hide();
-  if (maximized && normalSize) win.setSize(normalSize.width, normalSize.height);
+  /* At the size it is. A maximised window put away on X11 comes back as one
+     mutter has never met, and is told what size it un-maximises to once it is
+     up -- see giveNormalSize. */
+  takeDown();
 };
 
 /* The tray's one item, and the whole of what it does -- for the hosts that
@@ -1624,10 +1670,16 @@ const createWindow = () => {
   openMaximized = config.get('window.maximized') === true;
   normalSize = { width, height };
   const family = uiFont();
+  /* Made at the size it will open at, when that is maximised on X11: the page
+     is laid out and painted while the window is still down, and that is what
+     its first frames up show. Its own size is told to mutter once it is up --
+     see giveNormalSize. */
+  const made = openMaximized && !onWayland ? electronScreen.getPrimaryDisplay().workAreaSize
+                                           : { width, height };
 
   win = new BrowserWindow({
-    width,
-    height,
+    width: made.width,
+    height: made.height,
     minWidth: 500,
     minHeight: 400,
     title: TITLE,

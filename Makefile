@@ -191,6 +191,7 @@ test:
 	@node tools/test-links.js
 	@node tools/test-tray.js
 	@node tools/test-window.js
+	@node tools/test-x11.js
 	@node tools/test-display.js
 	@node tools/test-mpris.js
 	@node tools/test-config.js

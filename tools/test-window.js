@@ -62,6 +62,7 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
       win.emit('show');
     },
     setSize(width, height) { calls.push(`setSize ${width}x${height}`); },
+    getNativeWindowHandle: () => { const handle = Buffer.alloc(8); handle.writeUInt32LE(0x400004, 0); return handle; },
     restore() {
       calls.push('restore');
       state.minimized = false;
@@ -87,7 +88,14 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
     withdrawRinging() {},
     debug: { trace() {} },
     console: { log() {} },
-    electronScreen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }) },
+    electronScreen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }),
+                      getDisplayMatching: () => ({ scaleFactor: 1 }) },
+    /* The size told to mutter from a connection of its own, which the window
+       itself never hears about. */
+    x11: { sizeToUnmaximiseTo(xid, width, height) {
+      calls.push(`x11 ${xid.toString(16)} ${width}x${height}`);
+      return Promise.resolve('sent');
+    } },
     Date: { now: () => now },
     setTimeout(fn, delay) {
       const id = ++nextTimer;
@@ -391,7 +399,14 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
         getNormalBounds: () => ({ x: 0, y: 0, width: 2560, height: 1373 }),
         webContents: { getZoomFactor: () => page },
       },
-      electronScreen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }) },
+      electronScreen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }),
+                      getDisplayMatching: () => ({ scaleFactor: 1 }) },
+    /* The size told to mutter from a connection of its own, which the window
+       itself never hears about. */
+    x11: { sizeToUnmaximiseTo(xid, width, height) {
+      calls.push(`x11 ${xid.toString(16)} ${width}x${height}`);
+      return Promise.resolve('sent');
+    } },
     });
     vm.runInContext(controller + '\nglobalThis.keep = keepWindowState;' +
                     '\nglobalThis.note = noteNormalSize;' +
@@ -451,20 +466,54 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
   check('and is written once it has settled', [t.saves(), t.values['window.width']], [1, 958]);
 }
 
-/* Put away maximised on X11, a window comes back at the size of the screen and
-   un-maximises to that -- so it is given its own size while it is down. Not on
-   Wayland, which un-maximises to the right size, and not a window that was
-   not maximised. */
-for (const [wayland, maximized, want] of [[false, true, ['hide', 'setSize 958x1047']],
-                                          [true, true, ['hide']], [false, false, ['hide']]]) {
+/* Put away, a window keeps its size -- maximised or not, X11 or Wayland: a
+   window resized while it is down comes back drawn at that size inside a
+   window mutter has maximised, which is the small page in the corner. */
+for (const [wayland, maximized] of [[false, true], [true, true], [false, false]]) {
   const t = build({ wayland });
   t.showEvent();
   t.note();
   t.state.maximized = maximized;
   t.calls.length = 0;
   t.hide();
-  check(`${wayland ? 'Wayland' : 'X11'}: a ${maximized ? 'maximised' : 'plain'} window put away ` +
-        (want.length > 1 ? 'is given its own size' : 'is left as it is'), t.calls, want);
+  const name = `${wayland ? 'Wayland' : 'X11'}: a ${maximized ? 'maximised' : 'plain'} window`;
+  check(`${name} put away is left at its size`, t.calls, ['hide']);
+  t.show('the tray was asked for it');
+  t.focus();
+  t.tick(1000);
+  /* And mutter, which maps it as a window it has never met, is told what size
+     it un-maximises to once it is up -- on X11, and only for one that went
+     away maximised. */
+  check(`${name} back from the tray ` +
+        (!wayland && maximized ? 'tells mutter its own size' : 'tells mutter nothing'),
+        t.calls.filter(call => call.startsWith('x11')),
+        !wayland && maximized ? ['x11 400004 958x1047'] : []);
+}
+
+/* The same on the way back from a re-map, which takes the window down too. */
+{
+  const t = build({ wayland: false, strategy: 'remap' });
+  t.showEvent();
+  t.note();
+  t.state.maximized = true;
+  t.calls.length = 0;
+  t.show('a second copy was started');
+  check('X11: a maximised window re-mapped is told its own size once it is up',
+        t.calls, ['hide', 'show', 'x11 400004 958x1047', 'focus']);
+}
+
+/* A window in the tray is mapped by either way up, so a raise of one is not
+   the measurement of which way works: the first open after a --hidden start
+   waits on the page, and taking that wait for a refusal took the window down
+   and put it up again in front of the owner. */
+for (const wayland of [false, true]) {
+  const t = build({ wayland });
+  t.show('the tray was asked for it');
+  t.tick(1500);
+  t.focus();
+  t.tick(1000);
+  check(`${wayland ? 'Wayland' : 'X11'}: a window opened from the tray is not taken down when the focus is slow`,
+        t.calls.filter(call => call === 'hide' || call === 'show'), wayland ? ['hide', 'show'] : ['show']);
 }
 
 /* Opened the way it was left: the first show of a window left maximised is a
@@ -472,12 +521,17 @@ for (const [wayland, maximized, want] of [[false, true, ['hide', 'setSize 958x10
    the owner has since un-maximised is shown as it is. */
 for (const wayland of [false, true]) {
   const t = build({ wayland });
+  /* The size it was made with, from the config. */
+  t.note();
   t.leftMaximized();
   t.show('the client started');
   t.focus();
   t.tick(1000);
   check(`${wayland ? 'Wayland' : 'X11'}: the first show of a window left maximised maximises it`,
         t.calls.filter(call => call === 'maximize' || call === 'show'), ['maximize']);
+  check(`${wayland ? 'Wayland' : 'X11'}: and ` +
+        (wayland ? 'mutter is told nothing' : 'mutter is told its own size once it is up'),
+        t.calls.filter(call => call.startsWith('x11')), wayland ? [] : ['x11 400004 958x1047']);
   t.hide();
   t.calls.length = 0;
   t.show('the tray was asked for it');
