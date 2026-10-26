@@ -2,7 +2,7 @@
 # This package does not bundle or download the Electron runtime.
 %global review_tag packaging-review-%{version}-fedora43
 Name:           whatsapp-desktop
-Version:        1.9.21
+Version:        1.10.0
 Release:        1%{?dist}
 Summary:        Independent desktop client for WhatsApp Web
 License:        GPL-3.0-or-later AND GPL-3.0-only AND CC0-1.0
@@ -69,6 +69,9 @@ appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/io.github.shehaw
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Mon Oct 26 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.0-1
+- Update to 1.10.0
+
 * Mon Oct 26 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.9.21-1
 - Update to 1.9.21
 
