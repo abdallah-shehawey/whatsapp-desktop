@@ -415,7 +415,7 @@ const giveNormalSize = () => {
    jump. And on the first show rather than when the window is made, because
    maximize() puts a window up, and a client started into the tray stays
    there. */
-const putUp = () => {
+const putUpNow = () => {
   const maximized = openMaximized || downMaximized;
   downMaximized = false;
   if (openMaximized) {
@@ -425,6 +425,58 @@ const putUp = () => {
     win.show();
   }
   if (maximized && !onWayland) giveNormalSize();
+};
+
+/*
+ * Up -- and on X11, out of the tray, only once the page has been drawn for it.
+ *
+ * Mutter shows an X11 window the moment it is mapped. Chromium asks for the
+ * plain _NET_WM_SYNC_REQUEST and not for the frame-drawn counter that would
+ * make the window manager wait for its first frame, so a window mapped before
+ * Chromium has drawn into it comes up empty: pure black under its title bar,
+ * with the map animation running on it, until the page arrives. That was the
+ * "something like a window, there for an instant and gone, and then WhatsApp
+ * opens" the owner saw from the tray's "Open WhatsApp" -- and never from the
+ * dock, where a minimised window stays mapped and keeps what it last drew.
+ * Recorded at the compositor's own rate on the owner's chats (the shell's
+ * recorder stops at 60fps and drops exactly those frames): the first open after
+ * a --hidden start was a black window for 870ms, and later opens showed one to
+ * three black frames, now and then.
+ *
+ * A copy of one pixel of the page makes Chromium draw it for a window that is
+ * down, and the window goes up when the copy is back: the first frame mutter
+ * shows is then the page. It took 4-9ms, 32ms on the first open after
+ * --hidden, and ten opens through the tray's menu showed no black frame at all.
+ * Only with background throttling off, which is how the loaded web client
+ * runs: with it on -- the connection page's state, see connection.js -- a
+ * hidden window's copy never comes back, measured, and there the window goes
+ * up at once, as it always did. And a copy that is slow is waited for only so
+ * long. focus() on a window that is down does nothing, so the caller's own is
+ * spent while this waits; it is asked again here.
+ */
+const DRAW_WAIT_MS = 300;
+let drawing = false;
+/* When the window was last put away, so that a draw outlived by a hide does not
+   bring it back up. */
+let putAwayAt = 0;
+const putUp = () => {
+  if (onWayland || win.isVisible() || win.webContents.getBackgroundThrottling()) {
+    putUpNow();
+    return;
+  }
+  if (drawing) return;
+  drawing = true;
+  const asked = Date.now();
+  const drawn = win.webContents.capturePage({ x: 0, y: 0, width: 1, height: 1 })
+    .then(() => 'drawn', error => `not drawn (${error.message})`);
+  const late = new Promise(resolve => setTimeout(resolve, DRAW_WAIT_MS, 'not drawn in time'));
+  Promise.race([drawn, late]).then(how => {
+    drawing = false;
+    debug.trace('window: page %s, %dms before going up', how, Date.now() - asked);
+    if (!win || win.isDestroyed() || win.isVisible() || putAwayAt >= asked) return;
+    putUpNow();
+    win.focus();
+  });
 };
 
 /* What the window writes back about itself. The size is as much the window
@@ -1015,6 +1067,7 @@ const hideWindow = () => {
      owner has just put away is not one to fetch back a quarter of a second
      later. */
   raising.gen++;
+  putAwayAt = Date.now();
   cancelShellRaise();
   /* At the size it is. A maximised window put away on X11 comes back as one
      mutter has never met, and is told what size it un-maximises to once it is

@@ -70,7 +70,10 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
     },
     /* A request is not a grant. Only the test's focus event grants it. */
     focus() { calls.push('focus'); },
-    webContents: { send() {}, getZoomFactor: () => 1 },
+    /* Throttled, as on the connection page: the window goes up at once. The
+       draw before going up, with throttling off, waits on a real page. */
+    webContents: { send() {}, getZoomFactor: () => 1, getBackgroundThrottling: () => true,
+                   capturePage: () => new Promise(() => {}) },
   });
   const context = vm.createContext({
     win,
