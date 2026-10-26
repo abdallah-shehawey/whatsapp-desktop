@@ -69,11 +69,6 @@ if (process.argv.includes('--wa-popup')) {
   if (location.href.split('?')[0] === pathToFileURL(path.join(__dirname, 'connection.html')).href) {
     document.addEventListener('DOMContentLoaded', async () => {
       const button = document.getElementById('connection-retry');
-      if (new URLSearchParams(location.search).has('connecting')) {
-        document.getElementById('connection-title').textContent = 'Connecting to WhatsApp';
-        document.getElementById('connection-message').textContent = 'Your chats will appear when the connection is ready.';
-        button.disabled = true;
-      }
       button.addEventListener('click', () => send('connection-retry'));
       window.addEventListener('online', () => send('connection-retry'));
       on('connection-check', busy => {

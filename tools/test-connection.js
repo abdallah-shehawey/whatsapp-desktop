@@ -66,12 +66,11 @@ const build = () => {
   {
     const t = build();
     await t.controller.start();
-    check('startup paints a bundled page before loading WhatsApp', () => {
-      assert.deepStrictEqual(t.calls.map(call => call[0]), ['local', 'remote']);
-      assert.strictEqual(t.calls[0][2].query.connecting, '1');
+    check('startup goes straight to WhatsApp, with no page of its own in front', () => {
+      assert.deepStrictEqual(t.calls.map(call => call[0]), ['remote']);
     });
     t.fail(-3); t.fail(-106, false); t.fail(-106, true, 'https://other.example/');
-    check('aborts, subframe failures and other origins do not replace the page', () => assert.strictEqual(t.calls.length, 2));
+    check('aborts, subframe failures and other origins do not replace the page', () => assert.strictEqual(t.calls.length, 1));
     t.fail();
     check('a failed main navigation shows the connection page and schedules recovery', () => {
       assert.strictEqual(t.controller.isLocal(), true); assert.strictEqual(t.timers.size, 1);

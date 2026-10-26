@@ -1,5 +1,12 @@
 /* Keep a local page visible while WhatsApp is unreachable. Retrying in the
- * background avoids replacing it with Chromium's empty network-error page. */
+ * background avoids replacing it with Chromium's empty network-error page.
+ *
+ * Only then. Startup used to paint this page first, as "Connecting to
+ * WhatsApp", and load WhatsApp behind it -- so every start online flashed it
+ * for most of a second (measured, 0.8s cold) before WhatsApp's own loading
+ * screen, which says the same thing in WhatsApp's own way. A failed load
+ * still lands here: did-fail-load is what brings it up, from startup as from
+ * anywhere else. */
 'use strict';
 
 const { pathToFileURL } = require('url');
@@ -77,9 +84,7 @@ const attach = (win, { url, file, ipcMain, probe, retryMs = 5000 }) => {
 
   return {
     isLocal: () => isLocal(),
-    start: () => win.loadFile(file, { query: { connecting: '1' } }).then(() => {
-      if (alive() && isLocal()) return win.loadURL(url);
-    }).catch(() => {}),
+    start: () => win.loadURL(url).catch(() => {}), // did-fail-load brings up the local page
   };
 };
 
