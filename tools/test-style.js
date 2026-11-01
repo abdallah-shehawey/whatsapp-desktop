@@ -94,10 +94,18 @@ assert.doesNotMatch(drawer.slice(0, drawer.indexOf('}')), /animation-name|@keyfr
 
 /* The reply bar over the composer is the case turned round -- its panel IS
    unmounted every time, so keyframes on it fire on every mount, and that is
-   the event inject.js puts the caret back on. The rule carries no motion
-   itself; it exists to be started. */
+   the event inject.js puts the caret back on, and hangs the bar's own motion
+   on. The rule carries no motion itself; it exists to be started. */
 assert.match(shipped, /footer \[data-testid="popup_panel"\] \{\n  animation: whatsapp-desktop-panel 1ms !important;/);
 assert.match(shipped, /@keyframes whatsapp-desktop-panel/);
+/* And the two properties WhatsApp tweens inline, frame by frame, as the bar
+   grows. max-height is a layout property: unpinned, the footer and the
+   conversation above it are laid out again on every frame of a 190ms open.
+   Pinned at user origin, each of those writes decides nothing and the bar
+   takes its height in one layout. 200px is WhatsApp's own ceiling, so a tall
+   quoted message is still clipped where WhatsApp clips it. */
+assert.match(shipped, /  max-height: 200px !important;/);
+assert.match(shipped, /  transform: none !important;/);
 /* Not scoped to #main: a community thread draws its composer in a panel of its
    own, outside #main, and a reply written there wants its caret too. */
 assert.doesNotMatch(shipped, /#main footer \[data-testid="popup_panel"\]/);

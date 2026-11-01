@@ -134,7 +134,18 @@ the latest release.
   finishes on the spot and the bar's card slides out from behind the composer
   with the messages rising beside it, and back down with them when it is
   dismissed; send the reply and the card fades as the message comes up in its
-  place, the conversation moving once, by the difference between the two. And a
+  place, the conversation moving once, by the difference between the two. That
+  animation is WhatsApp's own `max-height`, written inline frame by frame — a
+  layout property, so the footer and the whole conversation above it are laid
+  out again on every one of its frames: measured, twelve of them over an open,
+  in frames of 5 to 26ms against a display that draws one every 6. It is
+  pinned by this client's stylesheet, where a user-origin declaration outranks
+  the inline one without touching the style attribute React owns, so the bar
+  takes its height in a single layout and the motion is the compositor's.
+  Dismissing it runs the same tween backwards over 292ms before WhatsApp
+  unmounts the bar, so the dismissal is answered on that tween's first frame
+  rather than its last — the card starts falling 12ms after the X instead of
+  292. And a
   message landing in the conversation on screen no longer arrives by teleport:
   WhatsApp appends the row and scrolls by exactly its height in the same frame,
   so the whole conversation used to step up 55px at once — it now glides that

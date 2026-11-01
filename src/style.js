@@ -715,33 +715,80 @@ const DRAWER_MOTION = `
 }`;
 
 /*
- * The reply bar over the composer, and the one thing this sheet does for it.
+ * The reply bar over the composer: the moment it arrives, and the layout
+ * animation it arrives by.
  *
  * Clicking Reply mounts [data-testid="popup_panel"] into a footer with the
- * quoted message inside it, and the caret belongs in the composer under it:
- * the bar arrives from a menu that has just taken the focus away with it.
- * src/page/inject.js puts it back, and all that needs from CSS is the moment
- * the bar arrives.
+ * quoted message inside it. Two things are wanted from CSS here, and the
+ * second is the reason the bar came up with a lag in it.
  *
- * That is what this is: a one-millisecond animation that changes nothing and
- * raises `animationstart` on every mount, in every chat, group and community,
- * with no observer walking the page to find the panel. The bar's motion is
- * not hung on it any more: WhatsApp moves the bar with Web Animations now, and
- * inject.js takes those over at the call itself.
+ * The first is the moment. The caret belongs in the composer under the bar --
+ * it arrives from a menu that has just taken the focus away with it -- and
+ * src/page/inject.js also hangs the bar's own motion on this event. A
+ * one-millisecond animation that changes nothing raises `animationstart` on
+ * every mount, in every chat, group and community, with no observer walking
+ * the page to find the panel.
  *
  * It is the drawer's case turned round, which is the only reason a mount event
  * works here at all. That panel is never unmounted, so an animation of ours on
  * it would play once and never again; this one is removed from the DOM every
  * time the bar is dismissed, and a fresh element gets a fresh animation.
  *
- * `!important` because the sheet is at user origin, where a normal declaration
- * loses to the page's own. There is nothing here to override: WhatsApp
- * declares no CSS animation on this panel -- computed animation-name: none,
- * measured -- and its own motion comes from script.
+ * The second is the two properties under it, and they are pinned.
+ *
+ * MEASURED on the live page 2026-11-01, the panel's style attribute read on
+ * every mutation through an open:
+ *
+ *   max-height: 0px -> 0.62 -> 10.7 -> 12.8 -> 15.2 -> 17.5 -> 20.2 -> ...
+ *   transform:  translateY(24px) -> 23.93 -> 22.71 -> 22.46 -> 22.18 -> ...
+ *
+ * written INLINE, frame after frame, for about 190ms. Fractional values
+ * written by hand like that are a script tween -- WhatsApp calls
+ * `Element.prototype.animate` on this panel not once, checked with the
+ * prototype wrapped and every call on anything in the footer logged.
+ *
+ * `max-height` is a LAYOUT property, so each of those writes lays out the
+ * footer and the conversation above it again. Sampled in the same run: the
+ * panel grew 1, 4, 8, 13, 20, 27, 37, 48, 61, 75, 90, 91px while the
+ * conversation's scroller went 853 -> 762 and its scrollTop 3609 -> 3700, and
+ * the frames those twelve took were 5, 11, 26, 8, 20, 19, 13, 12, 19, 16, 13
+ * and 18ms against a display that draws one every 6.
+ *
+ * So the tween is made to change nothing. A user-origin !important
+ * declaration outranks the inline one WhatsApp writes, without touching the
+ * style attribute React owns -- the same trick the wallpaper above uses --
+ * and every write then lands on a property that is already decided. The bar
+ * takes its height in ONE layout, and inject.js puts the motion back on the
+ * compositor, where the card slides up from behind the composer and the
+ * messages ride with it.
+ *
+ * 200px and not `none`: that is the ceiling WhatsApp's own tween runs to
+ * (measured at rest: max-height 199.4px against a panel 91px tall), so a
+ * quoted message too tall for the bar is clipped exactly where WhatsApp
+ * clips it. The inline `overflow-y: hidden` that comes with it is left alone.
+ *
+ * `transform` is pinned for a different reason: WhatsApp slides the panel
+ * 24px as it grows, and a second mover on a property this client is already
+ * animating is the case the compositor refuses. Nothing of ours animates the
+ * PANEL -- the card that moves is its parent -- so pinning it here costs no
+ * motion at all.
+ *
+ * And the one state that un-pins it. Dismissing the bar runs the same tween
+ * backwards over 292ms -- measured -- and the panel is only unmounted once it
+ * reaches nothing. Pinned, it would stand at its full height for all of that,
+ * so inject.js answers the tween's FIRST frame instead: it leaves a copy of
+ * the card to fall, hands the room back, and marks the panel going. The mark
+ * is what takes the real bar out of the footer in one layout, in the frame
+ * its copy takes over, rather than a third of a second later.
  */
 const PANEL_MOUNT = `
 footer [data-testid="popup_panel"] {
   animation: whatsapp-desktop-panel 1ms !important;
+  max-height: 200px !important;
+  transform: none !important;
+}
+footer [data-testid="popup_panel"][data-wa-reply-bar="going"] {
+  max-height: 0px !important;
 }
 @keyframes whatsapp-desktop-panel { from { opacity: 1; } to { opacity: 1; } }`;
 

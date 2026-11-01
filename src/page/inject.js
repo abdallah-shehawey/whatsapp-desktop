@@ -2945,6 +2945,13 @@ const start = ({ send, on }) => {
       ghost.appendChild(copy);
       foot.appendChild(ghost);
     }
+    /* The real bar out of the footer in this same frame, now that its copy is
+       standing where it stood. WhatsApp will not unmount it for most of a
+       third of a second (measured: 299ms after the X), and src/style.js pins
+       the height it would shrink by, so without this the copy falls away in
+       front of a bar still drawn at full height behind it. The mark is read
+       by that sheet; the style attribute React owns is not touched. */
+    panel.setAttribute('data-wa-reply-bar', 'going');
     let gone = false;
     const leave = fade => {
       if (gone || !ghost) return;
@@ -2992,20 +2999,145 @@ const start = ({ send, on }) => {
   };
 
   /*
-   * The hook: WhatsApp's own animate() on the bar, seen as it is called.
+   * When the bar arrives and when it goes, and why neither is an animate()
+   * call any more.
    *
-   * Element.prototype.animate is wrapped, the way navigation.js already wraps
-   * it for its panels, and only a call on [data-testid="popup_panel"] with
-   * max-height keyframes is touched -- any other goes through exactly as made.
-   * Either way WhatsApp's own animation runs: with no duration, so it finishes
-   * at once, its promise resolves and its committed styles land, and the
-   * close's unmount follows a frame later rather than 300ms later (checked:
-   * unmounted at 17ms instead of 313).
+   * This section used to take the bar over by wrapping
+   * Element.prototype.animate: WhatsApp moved the bar with Web Animations,
+   * and the call itself was the one moment it announced the open and the
+   * close. It does not any more.
+   *
+   * MEASURED on the live page 2026-11-01, with the prototype wrapped and
+   * every animate() on anything inside the footer logged: the log came back
+   * EMPTY through an open and a close. What the panel's style attribute shows
+   * over the same open is a script tween, written inline frame after frame
+   * for about 190ms --
+   *
+   *   max-height: 0px -> 0.62 -> 10.7 -> 12.8 -> 15.2 -> 17.5 -> 20.2 -> ...
+   *   transform:  translateY(24px) -> 23.93 -> 22.71 -> 22.46 -> 22.18 -> ...
+   *
+   * -- which is what Velocity used to do here, and what the Web Animations
+   * takeover was written to replace. So the takeover had quietly not run for
+   * some time: no card, no messages riding up with it, and a `max-height`
+   * tween laying out the footer and the whole conversation on every one of
+   * its frames. Sampled together: the panel grew 1, 4, 8, 13, 20, 27, 37, 48,
+   * 61, 75, 90, 91px while the scroller went 853 -> 762 and its scrollTop
+   * 3609 -> 3700, in frames of 5, 11, 26, 8, 20, 19, 13, 12, 19, 16, 13 and
+   * 18ms against a display that draws one every 6.
+   *
+   * The tween is answered where it can be answered without listening for
+   * anything: src/style.js pins `max-height` and `transform` at user origin,
+   * which outranks the inline declaration WhatsApp writes without touching
+   * the style attribute React owns. Every write then decides nothing, and the
+   * bar takes its height in one layout.
+   *
+   * That leaves the two moments, and the page still offers both:
+   *
+   *  - the open is the one-millisecond animation src/style.js puts on every
+   *    popup_panel, raised once per mount in every chat, group and community.
+   *    The same event this file already puts the caret back on.
+   *  - the close is WhatsApp writing `max-height: 0px` in a single step, 3.8ms
+   *    before it unmounts the panel and 16ms before the spacer hands the room
+   *    back -- measured. An observer on the panel's own style attribute runs
+   *    as a microtask, so `fall` still has the bar in the page to copy.
+   *
+   * The removal is watched alongside it, in the same observer and over the
+   * footer only, for a close that comes some other way.
+   *
+   * The animate() wrapper is kept behind both. It costs one `getAttribute` on
+   * calls this page makes anyway, and the day WhatsApp goes back to Web
+   * Animations -- it has moved between the two once already -- the bar is
+   * taken over at the call again, ahead of the mount. Whichever arrives
+   * first wins: `bars` is what says a panel is already in hand.
    *
    * A desktop that has asked for less motion gets the same instant bar and
    * none of the motion of ours.
    */
+  const PANEL_MOUNT_NAME = 'whatsapp-desktop-panel';
+
+  /* One way in for each moment, whatever raised it. */
+  const barArrived = panel => {
+    if (bars.has(panel) || closers.has(panel)) return false;
+    watchForTheClose(panel);
+    return stillnessAsked() ? true : rise(panel);
+  };
+  const barLeaving = panel => {
+    const closer = closers.get(panel);
+    if (closer) { closers.delete(panel); closer.disconnect(); }
+    return stillnessAsked() ? true : fall(panel);
+  };
+
+  /*
+   * The close, read off the same tween -- at its FIRST frame and not its last.
+   *
+   * Dismissing the bar runs the open's tween backwards, and that one is not
+   * instant: MEASURED on the live page 2026-11-01, the X clicked and the
+   * panel's style attribute sampled on every mutation,
+   *
+   *   max-height: 199.4 -> 198.6 -> 197.8 -> 196.8 -> 195.6 -> ... -> 1.6 -> 0
+   *
+   * over 292ms, and only then is the panel unmounted (at 299ms) and the room
+   * handed back (at 312ms). Pinned by src/style.js, every one of those writes
+   * draws nothing -- so a close answered at `max-height: 0` is a bar that
+   * stands at its full height, untouched, for most of a third of a second
+   * after it was dismissed. That is the delay the owner reported on the X,
+   * and it is this client's doing: unpinned the bar at least shrank, badly.
+   *
+   * So the close is the first write that goes DOWN. A fall of more than a
+   * couple of pixels below the tallest this bar has been, which the opening
+   * tween cannot produce -- it only ever climbs -- and which a settle of a
+   * pixel at the top of the open cannot either. Measured, that is 196.8px at
+   * 11.8ms rather than 0px at 291.6ms.
+   *
+   * The write to nothing and the unmount are both kept behind it, for a close
+   * that comes some other way: Escape writes 0 in a single step, and a chat
+   * switched out from under the bar takes the whole footer with it.
+   *
+   * Scoped to the bar and the footer deliberately. The removal could be read
+   * off the document, and a childList observer over the whole page would then
+   * run on every row the conversation drops off its top and walk every
+   * subtree a chat switch takes away. The footer is a dozen nodes.
+   */
+  const BAR_CLOSING_PX = 2;
+  const closers = new WeakMap();
+  const watchForTheClose = panel => {
+    if (typeof MutationObserver !== 'function') return;
+    const foot = panel.closest('footer');
+    let tallest = parseFloat(panel.style.maxHeight);
+    if (!(tallest > 0)) tallest = 0;
+    let watch;
+    try {
+      watch = new MutationObserver(records => {
+        for (const record of records) {
+          if (record.type === 'attributes') {
+            const now = parseFloat(panel.style.maxHeight);
+            if (!(now >= 0)) continue;
+            if (now > tallest) { tallest = now; continue; }
+            if (now === 0 || tallest - now > BAR_CLOSING_PX) { barLeaving(panel); return; }
+            continue;
+          }
+          for (const node of record.removedNodes) {
+            if (node.nodeType === 1 && (node === panel || node.contains(panel))) {
+              barLeaving(panel);
+              return;
+            }
+          }
+        }
+      });
+      watch.observe(panel, { attributes: true, attributeFilter: ['style'] });
+      if (foot) watch.observe(foot, { childList: true, subtree: true });
+    } catch (err) { return; }
+    closers.set(panel, watch);
+  };
+
   const takeOverTheReplyBar = () => {
+    addEventListener('animationstart', event => {
+      const panel = event.target;
+      if (event.animationName !== PANEL_MOUNT_NAME) return;
+      if (!(panel instanceof Element) || !panel.matches || !panel.matches(PANEL)) return;
+      try { barArrived(panel); } catch (err) { /* the bar is simply there */ }
+    }, true);
+
     const proto = typeof Element === 'function' ? Element.prototype : null;
     const native = proto && proto.animate;
     if (typeof native !== 'function' || native.__waReplyBar) return;
@@ -3017,7 +3149,7 @@ const start = ({ send, on }) => {
       try {
         if (barFrames(this, frames) && this.closest('footer')) {
           const closing = parseFloat(frames[frames.length - 1].maxHeight) === 0;
-          if (stillnessAsked() || (closing ? fall(this) : rise(this))) {
+          if (closing ? barLeaving(this) : barArrived(this)) {
             options = typeof options === 'object' && options
               ? { ...options, duration: 0, delay: 0, endDelay: 0 }
               : { duration: 0, fill: 'forwards' };
