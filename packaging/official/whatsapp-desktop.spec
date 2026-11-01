@@ -2,7 +2,7 @@
 # This package does not bundle or download the Electron runtime.
 %global review_tag packaging-review-%{version}-fedora43
 Name:           whatsapp-desktop
-Version:        1.10.2
+Version:        1.10.3
 Release:        1%{?dist}
 Summary:        Independent desktop client for WhatsApp Web
 License:        GPL-3.0-or-later AND GPL-3.0-only AND CC0-1.0
@@ -69,6 +69,10 @@ appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/io.github.shehaw
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Sun Nov 01 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.3-1
+- Take the reply bar over where WhatsApp now moves it, so opening and
+  dismissing it no longer lay out the whole conversation on every frame
+
 * Mon Oct 26 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.2-1
 - Stop the desktop settings monitor when the client exits
 
