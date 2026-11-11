@@ -26,7 +26,7 @@ BuildArch:      noarch
 
 BuildRequires:  make
 # The application needs no Node.js at run time -- Electron carries its own --
-# but the test suite this package runs in %check does. tools/test-x11.js
+# but the test suite this package runs in %%check does. tools/test-x11.js
 # stands up a fake X server on an abstract socket, which Node refuses with
 # EINVAL before 18.20, so the version is named rather than left to whatever
 # the buildroot happens to carry.
