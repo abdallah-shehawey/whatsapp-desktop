@@ -1,6 +1,20 @@
 # Source-only application for Fedora Rawhide's system Electron 43 runtime.
 # This package does not bundle or download the Electron runtime.
 %global review_tag packaging-review-%{version}-fedora43
+# Fedora owns the Electron runtime and this application tracks one major
+# version of it at a time. Both bounds belong in a single rich dependency:
+# written as two Requires lines, each one is satisfied on its own, so any
+# Electron at all satisfies the lower bound while anything else that provides
+# electron is free to satisfy the upper one -- the pair never held the runtime
+# inside the range it was written for. The same range is required at build
+# time, which is the assertion: the range is not a note left in the metadata
+# for someone to read, it has to resolve against the Electron Fedora actually
+# has, and a Fedora that has moved its runtime on fails this build -- where
+# its maintainers and ours both see it -- rather than shipping an application
+# onto a runtime it was never run on.
+%global electron_major 43
+%global electron_next 44
+%global electron_dep (electron >= %{electron_major} with electron < %{electron_next})
 Name:           whatsapp-desktop
 Version:        1.10.3
 Release:        1%{?dist}
@@ -17,8 +31,8 @@ BuildRequires:  fontconfig
 BuildRequires:  desktop-file-utils
 BuildRequires:  appstream
 BuildRequires:  util-linux-core
-Requires:       electron >= 43
-Requires:       electron < 44
+BuildRequires:  %{electron_dep}
+Requires:       %{electron_dep}
 Requires:       dbus
 Requires:       %{_bindir}/gdbus
 Requires:       fontconfig
