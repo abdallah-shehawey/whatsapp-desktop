@@ -42,6 +42,21 @@ must also be packaged, reviewed and maintained, including Chromium dependencies
 and security updates. No prebuilt runtime may be substituted in these source
 packages. The published application proposal does not package the runtime.
 
+## Build-time Node.js
+
+The application needs no Node.js at run time; Electron carries its own. The
+test suite that both source packages run during the build does. One of its
+checks, `tools/test-x11.js`, stands up a fake X server on an abstract unix
+socket, which Node refuses with `EINVAL` before 18.20, so both packages name
+`nodejs (>= 20)` rather than accept whatever the buildroot carries. Verified by
+running that check on 18.20.8, 20.20.2 and 22.23.4, all passing, against
+Ubuntu 24.04's archive `nodejs` 18.19.1, which fails. Ubuntu 24.04 therefore
+cannot build these sources from its own archive; a distribution release with
+`nodejs` 20 or newer can. Debian 13 (trixie), whose archive carries `nodejs`
+20.19.2, builds the `.dsc` with the whole suite passing and no Lintian errors,
+and CI builds the Debian package in that container rather than on its Ubuntu
+runner for the same reason.
+
 ## Review artifacts and builds
 
 From a committed checkout with Node.js, Python, make, `dpkg-source` and
