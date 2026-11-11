@@ -22,6 +22,20 @@ for the evidence and its limits. Later major versions require further validation
 Rawhide availability does not establish availability in existing stable Fedora
 releases. The normal bundled release continues to use Electron 40.
 
+The SPEC states that range as one rich dependency,
+`(electron >= 43 with electron < 44)`, so a single installed Electron has to
+satisfy both bounds. Written as two separate `Requires` lines each bound was
+satisfied on its own and the range never held. The same dependency is also a
+`BuildRequires`: once Fedora's runtime leaves the range this package stops
+building, where both its maintainers and ours see it, rather than installing
+against a runtime it was never run on. Reviewed on the Fedora devel thread on
+2026-10-26:
+<https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/message/U3A4APO5RW77LU6RI7G2LUIQAIJ4JYML/>.
+
+Debian expresses the same range as `electron (>= 40), electron (<< 41)`, where
+both relations name one real package and dpkg applies them to the version it
+installs, so they do not need combining.
+
 Debian's runtime request remains <https://bugs.debian.org/842420>. A source-built
 application package alone is insufficient for archive installation: its runtime
 must also be packaged, reviewed and maintained, including Chromium dependencies
