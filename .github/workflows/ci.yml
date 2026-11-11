@@ -54,7 +54,26 @@ jobs:
           sudo apt-get install -y build-essential nodejs python3 debhelper fontconfig desktop-file-utils appstream rpm
 
       - name: Build Debian binary from application source
-        run: dpkg-buildpackage -us -uc -b
+        shell: bash
+        run: |
+          set -euo pipefail
+          # In a Debian container, not on the runner: this build declares
+          # nodejs (>= 20) for the X11 check in its test suite, and Ubuntu
+          # 24.04's archive answers a bare nodejs with 18.19.1, so
+          # dpkg-checkbuilddeps on the runner refuses the build. Trixie's
+          # archive carries 20.19, which is the situation the package is
+          # written for -- a distribution whose own Node satisfies it --
+          # and the source is copied in so nothing roots the workspace.
+          docker run --rm -v "$PWD:/src:ro" debian:trixie bash -euo pipefail -c '
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get -qq update
+            apt-get -qq -y install build-essential nodejs python3 debhelper \
+              fontconfig desktop-file-utils appstream
+            node --version
+            cp -a /src /build
+            cd /build
+            dpkg-buildpackage -us -uc -b
+          '
 
       - name: Build source review artifacts
         run: packaging/official/build-source-packages.sh
