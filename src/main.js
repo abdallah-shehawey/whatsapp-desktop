@@ -35,6 +35,7 @@ const connectionPage = require('./connection.js');
 const restart = require('./relaunch.js');
 const { LockManager } = require('./lock.js');
 const x11 = require('./x11.js');
+const { shortcutKey } = require('./keys.js');
 /* Version, licence and author, read from the one file that already says them. */
 const manifest = require('../package.json');
 
@@ -1783,15 +1784,15 @@ const createWindow = () => {
 
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown') lock.recordActivity();
-    if (input.type === 'keyDown' && (input.control || input.meta) && input.key === ',') {
+    /* Every key here is read through shortcutKey, so it is the same key on the
+       Arabic layout -- where these type و, ح and م -- as on a Latin one. */
+    if (input.type === 'keyDown' && (input.control || input.meta) && shortcutKey(input) === ',') {
       event.preventDefault();
       openSettings();
       return;
     }
-    /* Read from `code` rather than `key`, so it is the same physical key on an
-       Arabic layout -- where that key types ح -- as on a Latin one. */
     if (input.type === 'keyDown' && input.control && input.alt && !input.shift &&
-        input.code === 'KeyP') {
+        shortcutKey(input) === 'p') {
       event.preventDefault();
       toggleShield();
       return;
@@ -1800,7 +1801,7 @@ const createWindow = () => {
        a passcode that gets used, because the moment you want it is the moment
        you are standing up. Does nothing without one set. */
     if (input.type === 'keyDown' && input.control && input.alt && !input.shift &&
-        input.code === 'KeyL') {
+        shortcutKey(input) === 'l') {
       event.preventDefault();
       if (!lockApp('Ctrl+Alt+L')) console.log('lock: no passcode set, so nothing to lock');
     }
@@ -2208,10 +2209,12 @@ const adoptPopup = popup => {
 
 /* ------------------------------------------------------------------- keys */
 
+/* Read through shortcutKey, never input.key: with the Arabic layout up, `key`
+   says ض for Ctrl+Q, and every key below used to go to the page instead. */
 const onKey = (event, input) => {
   if (input.type !== 'keyDown' || !win) return;
   const ctrl = input.control || input.meta;
-  const key = input.key.toLowerCase();
+  const key = shortcutKey(input);
 
   if (ctrl && key === 'q') { event.preventDefault(); quit(); return; }
   if (ctrl && key === 'w') { event.preventDefault(); win.close(); return; }
@@ -2240,7 +2243,7 @@ const onKey = (event, input) => {
 const onPopupKey = (popup, event, input) => {
   if (input.type !== 'keyDown' || popup.isDestroyed()) return;
   const ctrl = input.control || input.meta;
-  const key = input.key.toLowerCase();
+  const key = shortcutKey(input);
 
   if (ctrl && key === 'q') { event.preventDefault(); quit(); return; }
   if (ctrl && key === 'w') { event.preventDefault(); popup.close(); return; }
