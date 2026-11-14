@@ -245,6 +245,13 @@ reach a client that is behind something else or in the tray. A combination the
 desktop has already given away cannot be taken twice; the client says so on
 startup and carries on without it.
 
+On a Wayland session (GNOME 48 or later, KDE, Hyprland) they go through the
+desktop's global shortcuts portal, through XWayland or not. The first start
+opens the desktop's own dialog to confirm them. After that the desktop owns
+the binding: change it in the desktop's settings, or change it here and the
+client opens that dialog again. Where there is no such portal, the keys are
+grabbed from X11 as before.
+
 | | |
 |---|---|
 | `Super+Alt+W` | show the window, or put it away |

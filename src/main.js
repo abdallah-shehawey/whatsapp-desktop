@@ -36,6 +36,7 @@ const restart = require('./relaunch.js');
 const { LockManager } = require('./lock.js');
 const x11 = require('./x11.js');
 const { shortcutKey } = require('./keys.js');
+const portal = require('./portal-keys.js');
 /* Version, licence and author, read from the one file that already says them. */
 const manifest = require('../package.json');
 
@@ -2765,33 +2766,81 @@ const applySpellcheck = ses => {
  * given that combination to something else. Said once, in words that name the
  * key, rather than retried: there is nothing this can do about it, and the
  * owner is the one who can.
+ *
+ * On a Wayland session the keys are asked of the desktop's portal instead --
+ * see src/portal-keys.js for why a grab cannot work there, through XWayland or
+ * not. The desktop asks the user once which keys they go on, and from then on
+ * owns them: a key changed in the config afterwards opens the desktop's own
+ * dialog, because that is where the binding lives. No portal for it, and the
+ * keys are grabbed from X as before.
  */
-const wireGlobalKeys = () => {
-  globalShortcut.unregisterAll();
-  if (config.get('shortcuts.global') === false) return;
+const portalKeys = portal.waylandSession()
+  ? portal.create({ appId: APP_ID, log: line => console.log('%s', line) })
+  : null;
+let portalBroken = false;
+let portalAsked = '';
 
-  const register = (key, what, run) => {
-    if (!key) return;
+const globalKeys = () => {
+  if (config.get('shortcuts.global') === false) return [];
+  return [
+    {
+      id: 'toggle-window', what: 'showing the window',
+      description: 'Show WhatsApp, or put it away',
+      accelerator: config.get('shortcuts.toggle'),
+      run: () => {
+        if (!win || win.isDestroyed()) return;
+        /* The same decision the tray's own item makes, so the key and the item
+           never disagree about which of the two they are offering. */
+        if (windowInFront()) hideWindow();
+        else showWindow('a global key');
+      },
+    },
+    {
+      id: 'mute-call', what: 'muting a call',
+      description: 'Mute or unmute the microphone in a call',
+      accelerator: config.get('shortcuts.mute-call'),
+      run: () => {
+        if (!win || win.isDestroyed()) return;
+        win.webContents.send('wa:toggle-call-mute');
+      },
+    },
+  ].filter(one => one.accelerator);
+};
+
+const grabGlobalKeys = wanted => {
+  for (const one of wanted) {
     try {
-      if (!globalShortcut.register(key, run)) {
-        console.warn('keys: %s is already taken, so %s has no global key', key, what);
+      if (!globalShortcut.register(one.accelerator, one.run)) {
+        console.warn('keys: %s is already taken, so %s has no global key', one.accelerator, one.what);
       }
     } catch (err) {
-      console.warn('keys: %s is not a key this desktop understands (%s)', key, err.message);
+      console.warn('keys: %s is not a key this desktop understands (%s)', one.accelerator, err.message);
     }
-  };
+  }
+};
 
-  register(config.get('shortcuts.toggle'), 'showing the window', () => {
-    if (!win || win.isDestroyed()) return;
-    /* The same decision the tray's own item makes, so the key and the item
-       never disagree about which of the two they are offering. */
-    if (windowInFront()) hideWindow();
-    else showWindow('a global key');
-  });
+const wireGlobalKeys = () => {
+  globalShortcut.unregisterAll();
+  const wanted = globalKeys();
+  if (!portalKeys || portalBroken) { grabGlobalKeys(wanted); return; }
 
-  register(config.get('shortcuts.mute-call'), 'muting a call', () => {
-    if (!win || win.isDestroyed()) return;
-    win.webContents.send('wa:toggle-call-mute');
+  if (!wanted.length) { portalKeys.close(); portalAsked = ''; return; }
+  const asked = wanted.map(one => one.accelerator).join(', ');
+  const changed = portalAsked !== '' && portalAsked !== asked;
+  portalAsked = asked;
+  portalKeys.bind(wanted).then(result => {
+    if (result.declined) {
+      console.log('keys: the desktop was asked for %s and the request was turned down', asked);
+      return;
+    }
+    console.log('keys: the desktop holds %s for this client', result.bound.join(', ') || 'none of them');
+    /* The desktop answers with the key it already has for an id, not the one
+       just written in the config -- so the change is made in its own dialog. */
+    if (changed) portalKeys.configure();
+  }).catch(err => {
+    console.warn('keys: no desktop portal for global keys (%s), so they are grabbed from X', err.message);
+    portalBroken = true;
+    grabGlobalKeys(globalKeys());
   });
 };
 
@@ -2876,6 +2925,7 @@ const quit = () => {
      relaunch -- which is the same process asking for the keys again -- find
      them free rather than held by the copy that is leaving. */
   try { globalShortcut.unregisterAll(); } catch (e) {}
+  if (portalKeys) portalKeys.close();
   app.quit();
 };
 

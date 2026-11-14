@@ -183,6 +183,7 @@ test:
 	@node tools/test-warmup.js
 	@node tools/test-find.js
 	@node tools/test-keys.js
+	@node tools/test-portal-keys.js
 	@node tools/test-bidi.js
 	@node tools/test-wording.js
 	@node tools/test-style.js
