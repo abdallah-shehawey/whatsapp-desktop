@@ -16,7 +16,7 @@
 %global electron_next 44
 %global electron_dep (electron >= %{electron_major} with electron < %{electron_next})
 Name:           whatsapp-desktop
-Version:        1.10.4
+Version:        1.10.5
 Release:        1%{?dist}
 Summary:        Independent desktop client for WhatsApp Web
 License:        GPL-3.0-or-later AND GPL-3.0-only AND CC0-1.0
@@ -88,6 +88,10 @@ appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/io.github.shehaw
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Sat Nov 14 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.5-1
+- Bind the global keys through the desktop's GlobalShortcuts portal on
+  Wayland, so they reach the client from any window, XWayland included
+
 * Sat Nov 14 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.4-1
 - Answer the window's own shortcuts -- quit, close, reload, zoom,
   settings, devtools -- with the Arabic keyboard layout active
