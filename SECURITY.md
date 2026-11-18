@@ -1,7 +1,28 @@
 # Security policy
 
-Please do not report security vulnerabilities, session-handling concerns, or issues that could expose account data in a public issue.
+## Supported versions
 
-Until a private security contact is published, open a private report through the repository owner’s GitHub profile and include the affected version, Linux distribution, reproduction steps, and a redacted impact description. Do not attach WhatsApp session files, tokens, phone numbers, or private message content.
+Security fixes go into the latest release only.
 
-This project loads WhatsApp Web and stores a persistent browser session locally. Treat debug output and profile data as sensitive.
+## Reporting a vulnerability
+
+Please don't report it in a public issue. Report it privately on GitHub: open
+the repository's **Security** tab and choose **Report a vulnerability**. If you
+don't see that option, open an issue asking for a private contact, and leave out
+any details.
+
+Include:
+
+- the version (from *About*), your distribution, and how you installed the client
+- steps to reproduce the problem, and what an attacker could do with it
+
+Never attach session files, tokens, phone numbers or message content.
+
+## Scope
+
+The client loads WhatsApp Web and keeps a persistent browser session in
+`~/.local/share/whatsapp-desktop`. Treat that folder, debug output and logs as
+sensitive.
+
+Problems in WhatsApp's own service belong to the
+[Meta Bug Bounty](https://bugbounty.meta.com/) program, not to this project.

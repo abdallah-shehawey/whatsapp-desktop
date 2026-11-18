@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an improvement for WhatsApp Desktop
+description: Suggest an improvement
 title: "feature: "
 labels:
   - enhancement
@@ -8,24 +8,20 @@ body:
     id: problem
     attributes:
       label: What problem would this solve?
-      description: Explain the user need or limitation.
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed solution
-      description: Describe the behavior you would like to see.
+      label: What would you like to happen?
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
-    validations:
-      required: false
+      label: Alternatives you've considered
   - type: textarea
     id: notes
     attributes:
-      label: Additional context
-      description: Do not include account data or private message content.
+      label: Anything else?
+      description: Don't include account data or private messages.

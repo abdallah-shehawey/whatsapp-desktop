@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem with WhatsApp Desktop
+description: Something doesn't work as expected
 title: "bug: "
 labels:
   - bug
@@ -7,33 +7,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Please do not include phone numbers, message content, screenshots of private conversations, or session data.
+        Check the [troubleshooting guide](https://github.com/abdallah-shehawey/whatsapp-desktop/blob/main/docs/troubleshooting.md) first. Don't include phone numbers, message text, screenshots of private chats or session files.
   - type: textarea
     id: summary
     attributes:
       label: What happened?
-      description: Describe the observed behavior and what you expected instead.
-    validations:
-      required: true
-  - type: input
-    id: version
-    attributes:
-      label: Application version
-      placeholder: "0.1.0"
-    validations:
-      required: true
-  - type: input
-    id: distro
-    attributes:
-      label: Linux distribution and version
-      placeholder: "Ubuntu 24.04"
-    validations:
-      required: true
-  - type: input
-    id: install-method
-    attributes:
-      label: Installation method
-      placeholder: ".deb, .rpm, source tree, or other"
+      description: What you saw, and what you expected instead.
     validations:
       required: true
   - type: textarea
@@ -41,13 +20,41 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Start the application
+        1. Start the client
         2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in About, in the tray menu.
+      placeholder: "1.10.7"
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install it?
+      options:
+        - shinux repository (dnf, apt or pacman)
+        - Package from a GitHub release (rpm, deb or pkg.tar.zst)
+        - AppImage
+        - npm (GitHub Packages)
+        - Built from source
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Distribution and desktop
+      placeholder: "Fedora 45, GNOME 51 on Wayland"
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: Relevant logs
-      description: Paste redacted logs only. Never include account data or message content.
+      label: Log output
+      description: Run `whatsapp-desktop` from a terminal and paste the relevant lines. Remove any personal data first.
       render: shell

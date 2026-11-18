@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting guide
+    url: https://github.com/abdallah-shehawey/whatsapp-desktop/blob/main/docs/troubleshooting.md
+    about: Fixes for common problems with notifications, links, screen sharing and the tray icon.
+  - name: Report a security vulnerability
+    url: https://github.com/abdallah-shehawey/whatsapp-desktop/blob/main/SECURITY.md
+    about: Report security problems privately, not in a public issue.
