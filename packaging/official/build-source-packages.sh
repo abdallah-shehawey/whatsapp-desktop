@@ -39,8 +39,17 @@ task_source_url=$(rpmspec --parse "$task_dist/whatsapp-desktop.spec" | \
   sed -n 's/^Source0:[[:space:]]*//p')
 task_review_tag=${task_source_url#*/releases/download/}
 task_review_tag=${task_review_tag%%/*}
+# The Fedora range is read from the SPEC, the one place it is written, so the
+# tag and the manifest below follow it rather than restating it.
+task_electron_major=$(sed -n 's/^%global electron_major[[:space:]]*//p' "$task_dist/whatsapp-desktop.spec")
+task_electron_next=$(sed -n 's/^%global electron_next[[:space:]]*//p' "$task_dist/whatsapp-desktop.spec")
+if [[ ! "$task_electron_major" =~ ^[0-9]+$ || "$task_electron_next" != "$((task_electron_major + 1))" ]]; then
+  printf 'Review SPEC Electron range %s..%s is not one major version\n' \
+    "$task_electron_major" "$task_electron_next" >&2
+  exit 1
+fi
 if [[ "$task_rpm_version" != "$task_version" || \
-      "$task_review_tag" != "packaging-review-$task_version-fedora43" || \
+      "$task_review_tag" != "packaging-review-$task_version-fedora$task_electron_major" || \
       "$task_source_url" != "https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/$task_review_tag/whatsapp-desktop-$task_version.tar.gz" ]]; then
   printf 'Review SPEC version/Source0 does not match committed application %s\n' "$task_version" >&2
   exit 1
@@ -53,11 +62,12 @@ rpmbuild -bs "${task_rpm_options[@]}" \
   "$task_build/rpm/SPECS/whatsapp-desktop.spec"
 cp "$task_build"/rpm/SRPMS/*.src.rpm "$task_dist/"
 
-node - "$task_root" "$task_dist" "$task_source_url" "$task_review_tag" <<'NODE'
+node - "$task_root" "$task_dist" "$task_source_url" "$task_review_tag" \
+  "$task_electron_major" "$task_electron_next" <<'NODE'
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const [root, dist, sourceUrl, reviewTag] = process.argv.slice(2);
+const [root, dist, sourceUrl, reviewTag, electronMajor, electronNext] = process.argv.slice(2);
 const manifest = JSON.parse(execFileSync('git', ['-C', root, 'show', 'HEAD:package.json'], {encoding:'utf8'}));
 const audit = {
   project: manifest.name,
@@ -68,7 +78,7 @@ const audit = {
   bundled_runtime: false,
   fedora_review_tag: reviewTag,
   fedora_source_url: sourceUrl,
-  runtime_dependency: 'Distribution-owned Electron: Fedora >= 43, < 44; Debian >= 40, < 41',
+  runtime_dependency: `Distribution-owned Electron: Fedora >= ${electronMajor}, < ${electronNext}; Debian >= 40, < 41`,
   archive_status: 'proposal; not accepted or installable from official archives',
   blocker: 'Fedora application review and packager sponsorship remain pending; Debian runtime request #842420 is open; no official application archive acceptance'
 };

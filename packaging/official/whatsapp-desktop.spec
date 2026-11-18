@@ -1,6 +1,5 @@
-# Source-only application for Fedora Rawhide's system Electron 43 runtime.
+# Source-only application for Fedora Rawhide's system Electron 44 runtime.
 # This package does not bundle or download the Electron runtime.
-%global review_tag packaging-review-%{version}-fedora43
 # Fedora owns the Electron runtime and this application tracks one major
 # version of it at a time. Both bounds belong in a single rich dependency:
 # written as two Requires lines, each one is satisfied on its own, so any
@@ -12,12 +11,15 @@
 # has, and a Fedora that has moved its runtime on fails this build -- where
 # its maintainers and ours both see it -- rather than shipping an application
 # onto a runtime it was never run on.
-%global electron_major 43
-%global electron_next 44
+%global electron_major 44
+%global electron_next 45
 %global electron_dep (electron >= %{electron_major} with electron < %{electron_next})
+# Each review snapshot is published under a tag naming the Electron major it
+# was built and run against, so moving the range moves the tag with it.
+%global review_tag packaging-review-%{version}-fedora%{electron_major}
 Name:           whatsapp-desktop
 Version:        1.10.5
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Independent desktop client for WhatsApp Web
 License:        GPL-3.0-or-later AND GPL-3.0-only AND CC0-1.0
 URL:            https://github.com/abdallah-shehawey/whatsapp-desktop
@@ -59,7 +61,8 @@ test ! -d node_modules
 
 %install
 %{__make} install-system DESTDIR=%{buildroot} PREFIX=%{_prefix} SYSTEM_ELECTRON=%{_bindir}/electron
-# Fedora's Electron 43 honors the class passed by our system launcher.
+# Fedora's Electron honors the class passed by our system launcher
+# (observed on 43 and 44).
 sed -i 's/^StartupWMClass=WhatsApp$/StartupWMClass=io.github.shehawey.whatsapp-desktop/' \
   %{buildroot}%{_datadir}/applications/io.github.shehawey.whatsapp-desktop.desktop
 # These notices are installed below through %%license rather than duplicated
@@ -88,6 +91,11 @@ appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/io.github.shehaw
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Wed Nov 18 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.5-2
+- Move to Fedora Rawhide's Electron 44 runtime, which replaced 43 there;
+  the build and runtime dependency is now (electron >= 44 with electron < 45)
+- Publish the review source under a tag naming the Electron major
+
 * Sat Nov 14 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.5-1
 - Bind the global keys through the desktop's GlobalShortcuts portal on
   Wayland, so they reach the client from any window, XWayland included
