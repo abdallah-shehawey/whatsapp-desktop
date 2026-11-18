@@ -42,6 +42,10 @@
       <caption>Desktop integration, theme and privacy settings</caption>
       <image>https://raw.githubusercontent.com/abdallah-shehawey/whatsapp-desktop/main/data/brands/dardasha/screenshots/settings.png</image>
     </screenshot>
+    <screenshot>
+      <caption>About Dardasha, with its version and update check</caption>
+      <image>https://raw.githubusercontent.com/abdallah-shehawey/whatsapp-desktop/main/data/brands/dardasha/screenshots/about.png</image>
+    </screenshot>
   </screenshots>
   <!-- @RELEASES@ the default brand's <releases>, copied in by `make install` -->
   <requires>
