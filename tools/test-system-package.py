@@ -15,9 +15,9 @@ expected_version = json.loads((root / "package.json").read_text())["version"]
 # What each brand's install has to come out as.
 BRANDS = {
     "whatsapp": dict(bin="whatsapp-desktop", id="io.github.shehawey.whatsapp-desktop",
-                     name="WhatsApp", wm_class="WhatsApp"),
+                     name="WhatsApp", wm_class="io.github.shehawey.whatsapp-desktop"),
     "dardasha": dict(bin="dardasha", id="io.github.abdallah_shehawey.dardasha",
-                     name="Dardasha", wm_class="Dardasha"),
+                     name="Dardasha", wm_class="io.github.abdallah_shehawey.dardasha"),
 }
 
 

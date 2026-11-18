@@ -11,7 +11,7 @@ Vcs-Browser: https://github.com/abdallah-shehawey/whatsapp-desktop
 
 Package: dardasha
 Architecture: all
-Depends: ${misc:Depends}, electron (>= 40), electron (<< 41), dbus, default-dbus-session-bus | dbus-session-bus, libglib2.0-bin, fontconfig
+Depends: ${misc:Depends}, electron (>= 44), electron (<< 45), dbus, default-dbus-session-bus | dbus-session-bus, libglib2.0-bin, fontconfig
 Recommends: fonts-noto-color-emoji
 Description: independent desktop client for WhatsApp Web
  Dardasha puts WhatsApp Web in a dedicated window with a system tray, desktop

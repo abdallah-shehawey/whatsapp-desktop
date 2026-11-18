@@ -94,7 +94,7 @@ const audit = {
   bundled_runtime: false,
   fedora_review_tag: reviewTag,
   fedora_source_url: sourceUrl,
-  runtime_dependency: `Distribution-owned Electron: Fedora >= ${electronMajor}, < ${electronNext}; Debian >= 40, < 41`,
+  runtime_dependency: `Distribution-owned Electron: Fedora >= ${electronMajor}, < ${electronNext}; Debian >= 44, < 45`,
   archive_status: 'proposal; not accepted or installable from official archives',
   blocker: 'Fedora application review and packager sponsorship remain pending; Debian runtime request #842420 is open; no official application archive acceptance'
 };

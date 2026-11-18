@@ -11,5 +11,5 @@ Keywords=whatsapp;chat;messaging;dardasha;دردشة;
 # see src/links.js, which then asks to be the default.
 MimeType=x-scheme-handler/whatsapp;
 StartupNotify=true
-StartupWMClass=Dardasha
+StartupWMClass=io.github.abdallah_shehawey.dardasha
 SingleMainWindow=true

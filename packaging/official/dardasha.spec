@@ -26,8 +26,8 @@
 %global upstream whatsapp-desktop
 %global app_id io.github.abdallah_shehawey.dardasha
 Name:           dardasha
-Version:        1.10.5
-Release:        3%{?dist}
+Version:        1.10.6
+Release:        1%{?dist}
 Summary:        Independent desktop client for WhatsApp Web
 # The Dardasha artwork is GPL-3.0-or-later and the AppStream metadata CC0-1.0.
 # The upstream archive also carries other artwork that this package does not
@@ -73,10 +73,6 @@ test ! -d node_modules
 %install
 %{__make} install-system BRAND=dardasha DESTDIR=%{buildroot} PREFIX=%{_prefix} \
   SYSTEM_ELECTRON=%{_bindir}/electron
-# Fedora's Electron honors the class passed by our system launcher
-# (observed on 43 and 44).
-sed -i 's/^StartupWMClass=Dardasha$/StartupWMClass=%{app_id}/' \
-  %{buildroot}%{_datadir}/applications/%{app_id}.desktop
 # These notices are installed below through %%license rather than duplicated
 # inside the application data directory.
 rm -f %{buildroot}%{_datadir}/%{name}/data/CC0-1.0.txt
@@ -105,6 +101,11 @@ grep -q '"id": "%{app_id}"' %{buildroot}%{_datadir}/%{name}/data/brand.json
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Wed Nov 18 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.6-1
+- Update to 1.10.6: the bundled runtime moves to Electron 44, frameless
+  windows keep their own corners, and the desktop entry's StartupWMClass is
+  the application id, so the window class no longer needs rewriting here
+
 * Wed Nov 18 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.5-3
 - Rename the package to dardasha and install the project's Dardasha brand:
   its own name, application id (io.github.abdallah_shehawey.dardasha) and

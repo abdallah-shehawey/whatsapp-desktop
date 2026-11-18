@@ -38,6 +38,12 @@ autostartdir = $(HOME)/.config/autostart
 
 ELECTRON  = node_modules/electron/dist
 SYSTEM_ELECTRON ?= /usr/bin/electron
+# Inside a Flatpak, Chromium's sandbox can use neither the setuid helper nor
+# user namespaces of its own; the Electron BaseApp's zypak carries it through
+# the Flatpak sandbox instead, so the binary has to be started through it. A
+# Flatpak build passes SANDBOX_WRAPPER=zypak-wrapper. Empty everywhere else,
+# where the launcher runs the binary directly, as it always has.
+SANDBOX_WRAPPER ?=
 systemappdir = $(PREFIX)/share/$(BIN)
 ICON_SIZES = 16 22 24 32 48 64 128 256
 
@@ -50,8 +56,12 @@ LOCALES = en-US ar
 all: $(ELECTRON)/electron
 	@echo "  nothing to build -- run 'make install' or 'npm start'"
 
+# Since Electron 42 the npm package no longer downloads its binary from a
+# postinstall script; the runtime is fetched by its own installer, run here, so
+# that node_modules/electron/dist is there for `make install` to copy.
 $(ELECTRON)/electron:
 	npm install --no-audit --no-fund
+	node node_modules/electron/install.js
 
 # What the app itself is: everything the runtime reads, and nothing else.
 APP_FILES = package.json src data
@@ -99,8 +109,10 @@ install: $(ELECTRON)/electron install-assets
 	@# every upgrade lays it down again. Root ownership is the packaging's
 	@# (dpkg-deb --root-owner-group, rpmbuild, makepkg under fakeroot); a local
 	@# install has only the user's, which Chromium rejects -- and does not need,
-	@# since a system that allows namespaces never looks at the helper.
-	@chmod 4755 $(DESTDIR)$(libdir)/chrome-sandbox 2>/dev/null || true
+	@# since a system that allows namespaces never looks at the helper. Under
+	@# SANDBOX_WRAPPER the helper is never used, and a Flatpak takes no setuid
+	@# file, so the bit is left off.
+	$(if $(SANDBOX_WRAPPER),,@chmod 4755 $(DESTDIR)$(libdir)/chrome-sandbox 2>/dev/null || true)
 	@install -d $(DESTDIR)$(bindir)
 	@printf '#!/bin/sh\n'                                                     >  $(DESTDIR)$(bindir)/$(BIN)
 	@printf '# A terminal inside VS Code exports ELECTRON_RUN_AS_NODE=1, and\n' >> $(DESTDIR)$(bindir)/$(BIN)
@@ -115,7 +127,7 @@ install: $(ELECTRON)/electron install-assets
 	@printf 'wa_fonts="$${XDG_DATA_HOME:-$$HOME/.local/share}/whatsapp-desktop/fonts.conf"\n' >> $(DESTDIR)$(bindir)/$(BIN)
 	@printf '[ -f "$$wa_fonts" ] && export FONTCONFIG_FILE="$$wa_fonts"\n'    >> $(DESTDIR)$(bindir)/$(BIN)
 	@printf '\n'                                                              >> $(DESTDIR)$(bindir)/$(BIN)
-	@printf 'exec %s/%s "$$@"\n' "$(libdir)" "$(BIN)"                         >> $(DESTDIR)$(bindir)/$(BIN)
+	@printf 'exec %s%s/%s "$$@"\n' "$(if $(SANDBOX_WRAPPER),$(SANDBOX_WRAPPER) )" "$(libdir)" "$(BIN)" >> $(DESTDIR)$(bindir)/$(BIN)
 	@chmod 755 $(DESTDIR)$(bindir)/$(BIN)
 	@echo "  INSTALL  $(DESTDIR)$(bindir)/$(BIN)  ($$(du -sh $(DESTDIR)$(libdir) | cut -f1))"
 

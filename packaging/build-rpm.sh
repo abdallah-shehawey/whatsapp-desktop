@@ -11,7 +11,9 @@ mkdir -p "$DIST"
 rm -f "$DIST"/whatsapp-desktop-"$VERSION"-*.rpm
 
 if [[ ! -x "$ROOT/node_modules/electron/dist/electron" ]]; then
-  (cd "$ROOT" && npm ci --no-audit --no-fund)
+  # Electron 42 and later fetch their binary through their own installer
+  # rather than an npm postinstall script.
+  (cd "$ROOT" && npm ci --no-audit --no-fund && node node_modules/electron/install.js)
 fi
 
 # RPM builds from a self-contained tree. The Electron runtime is build input,

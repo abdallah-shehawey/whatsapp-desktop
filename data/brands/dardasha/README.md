@@ -10,9 +10,9 @@ notifications.
 
 It requires an existing WhatsApp account and an Internet connection.
 
-Dardasha is the name this client carries in Flathub and in the Fedora and
-Debian archives, which do not take the WhatsApp name or logo on a client that
-WhatsApp did not make. It is built from the whatsapp-desktop project,
+Dardasha is the name this client carries in the Fedora and Debian archives,
+which do not take the WhatsApp name or logo on a client that WhatsApp did not
+make. It is built from the whatsapp-desktop project,
 <https://github.com/abdallah-shehawey/whatsapp-desktop>, with `BRAND=dardasha`.
 Report problems there.
 
