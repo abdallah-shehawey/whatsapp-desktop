@@ -1,8 +1,8 @@
 /*
- * One request to the X server, written here rather than installed -- for the
+ * Direct requests to the X server, written here rather than installed -- for the
  * reason src/dbus.js gives: the client ships with no runtime dependencies.
  *
- * The request is a resize, and the point of it is that Chromium never hears
+ * The main request is a resize, and the point of it is that Chromium never hears
  * about it. A window the window manager has maximised on X11 is a window whose
  * own size requests are taken by mutter as the size to un-maximise to: the
  * window stays exactly where it is, nothing is drawn, and the next un-maximise
@@ -18,8 +18,8 @@
  * of the chat list in its corner for a frame and back. From a connection of
  * its own, the request goes past Chromium and nothing is drawn.
  *
- * Only what that needs is here: a local display, the MIT-MAGIC-COOKIE-1 that
- * every desktop's Xauthority carries, and five requests. No extensions, no
+ * Only what the resize and XSettings wait need is here: a local display, the
+ * MIT-MAGIC-COOKIE-1 that every desktop's Xauthority carries. No extensions, no
  * events, no big-endian server -- the byte order is the client's to choose,
  * and this one chooses little-endian.
  */
@@ -102,7 +102,7 @@ const setupRequest = cookie => {
 };
 
 const OP = { GET_WINDOW_ATTRIBUTES: 3, CONFIGURE_WINDOW: 12, INTERN_ATOM: 16,
-             GET_PROPERTY: 20, GET_INPUT_FOCUS: 43 };
+             GET_PROPERTY: 20, GET_SELECTION_OWNER: 23, GET_INPUT_FOCUS: 43 };
 const VIEWABLE = 2;
 const CONFIGURE_WIDTH = 0x4;
 const CONFIGURE_HEIGHT = 0x8;
@@ -219,20 +219,20 @@ class Connection {
 
 /* The server's socket: the file first, then the same name in the abstract
    namespace, which is where Xwayland listens when /tmp is not shared. */
-const open = number => new Promise((resolve, reject) => {
+const open = (number, signal) => new Promise((resolve, reject) => {
   const names = [`/tmp/.X11-unix/X${number}`, `\0/tmp/.X11-unix/X${number}`];
   const attempt = i => {
-    const socket = net.createConnection(names[i]);
+    const socket = net.createConnection({ path: names[i], signal });
     socket.once('connect', () => { socket.removeAllListeners('error'); resolve(socket); });
     socket.once('error', error => (i + 1 < names.length ? attempt(i + 1) : reject(error)));
   };
   attempt(0);
 });
 
-const connect = async (display = process.env.DISPLAY) => {
+const connect = async (display = process.env.DISPLAY, signal) => {
   const number = displayNumber(display);
   if (number === null) throw new Error(`not a local X display: ${display || '(unset)'}`);
-  const connection = new Connection(await open(number));
+  const connection = new Connection(await open(number, signal));
   try {
     await connection.setUp(readCookie(number));
   } catch (error) {
@@ -243,6 +243,30 @@ const connect = async (display = process.env.DISPLAY) => {
 };
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/* Connecting starts XWayland if it is still dormant. Wait until GNOME's
+   selection owner has actually written the initial XSettings property. */
+const waitForXSettings = async ({ display, within = 2000, every = 40 } = {}) => {
+  const signal = AbortSignal.timeout(within);
+  const connection = await connect(display, signal);
+  try {
+    const atom = async name => (await connection.ask(internAtom(name))).readUInt32LE(8);
+    while (!signal.aborted) {
+      const [selection, settings] = await Promise.all(['_XSETTINGS_S0', '_XSETTINGS_SETTINGS'].map(atom));
+      if (selection && settings) {
+        const owner = (await connection.ask(request(OP.GET_SELECTION_OWNER, 0, [selection]))).readUInt32LE(8);
+        if (owner) {
+          const reply = await connection.ask(request(OP.GET_PROPERTY, 0, [owner, settings, settings, 0, 0]));
+          /* A zero-length read leaves the property size in bytesAfter. */
+          if (reply[1] === 8 && reply.readUInt32LE(12) > 0) return;
+        }
+      }
+      await sleep(every);
+    }
+  } finally {
+    connection.close();
+  }
+};
 
 /*
  * The size `xid` goes back to when it is un-maximised, told to the window
@@ -294,4 +318,4 @@ const sizeToUnmaximiseTo = async (xid, width, height, { display, within = 3000, 
   }
 };
 
-module.exports = { sizeToUnmaximiseTo, displayNumber, findCookie };
+module.exports = { sizeToUnmaximiseTo, waitForXSettings, displayNumber, findCookie };

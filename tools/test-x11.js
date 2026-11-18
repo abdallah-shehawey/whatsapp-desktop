@@ -1,8 +1,6 @@
 /*
- * The one X request the client makes, against a fake X server: the setup and
- * its cookie, the wait for the window manager to have the window up, and the
- * resize sent only to a window that came up maximised. No display needed --
- * the server listens in the abstract namespace under a display number nothing
+ * Exercise the resize and XSettings requests against a fake X server. The
+ * server listens in the abstract namespace under a display number nothing
  * real uses.
  */
 'use strict';
@@ -11,7 +9,7 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
-const { sizeToUnmaximiseTo, displayNumber, findCookie } = require('../src/x11.js');
+const { sizeToUnmaximiseTo, waitForXSettings, displayNumber, findCookie } = require('../src/x11.js');
 
 let failures = 0;
 const check = (label, got, want) => {
@@ -69,10 +67,11 @@ check('nor is no display at all', displayNumber(undefined), null);
 const NUMBER = '987';
 const COOKIE = Buffer.from('0123456789abcdef');
 const WINDOW = 0x400004;
-const ATOMS = { _NET_WM_STATE: 300, _NET_WM_STATE_MAXIMIZED_VERT: 301, _NET_WM_STATE_MAXIMIZED_HORZ: 302 };
+const ATOMS = { _NET_WM_STATE: 300, _NET_WM_STATE_MAXIMIZED_VERT: 301, _NET_WM_STATE_MAXIMIZED_HORZ: 302,
+                _XSETTINGS_S0: 303, _XSETTINGS_SETTINGS: 304 };
 
-const serve = (script, { cookie = COOKIE } = {}) => new Promise(resolve => {
-  const seen = { configures: [], polls: 0, setup: null };
+const serve = (script, { cookie = COOKIE, settingsAfter = Infinity, stallSettings = false } = {}) => new Promise(resolve => {
+  const seen = { configures: [], polls: 0, settingsReads: 0, setup: null };
   const server = net.createServer(socket => {
     let buffer = Buffer.alloc(0);
     let ready = false;
@@ -131,6 +130,18 @@ const serve = (script, { cookie = COOKIE } = {}) => new Promise(resolve => {
         } else if (opcode === 3) {
           const now = script[Math.min(seen.polls++, script.length - 1)];
           reply(Buffer.alloc(12), out => { out[26] = now.mapped ? 2 : 0; });
+        } else if (opcode === 23) {
+          const owner = request.readUInt32LE(4) === ATOMS._XSETTINGS_S0 ? WINDOW : 0;
+          reply(Buffer.alloc(0), out => out.writeUInt32LE(owner, 8));
+        } else if (opcode === 20 && request.readUInt32LE(8) === ATOMS._XSETTINGS_SETTINGS) {
+          seen.settingsReads++;
+          if (stallSettings) continue;
+          reply(Buffer.alloc(0), out => {
+            if (seen.settingsReads < settingsAfter) return;
+            out[1] = 8;
+            out.writeUInt32LE(ATOMS._XSETTINGS_SETTINGS, 8);
+            out.writeUInt32LE(32, 12);
+          });
         } else if (opcode === 20) {
           const now = script[Math.min(seen.polls - 1, script.length - 1)];
           const atoms = now.maximised ? [ATOMS._NET_WM_STATE_MAXIMIZED_VERT, ATOMS._NET_WM_STATE_MAXIMIZED_HORZ]
@@ -207,6 +218,26 @@ const run = async () => {
     check('a refused connection says why and sends nothing',
           [result, seen.configures.length],
           ['error: the X server refused the connection: No protocol specified', 0]);
+  }
+  {
+    const { server, seen } = await serve([], { settingsAfter: 3 });
+    try {
+      await waitForXSettings({ display, within: 300, every: 10 });
+      check('XSettings waits for the property even after GNOME owns the selection', seen.settingsReads, 3);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  }
+  {
+    const { server, seen } = await serve([], { stallSettings: true });
+    try {
+      await waitForXSettings({ display, within: 100, every: 10 });
+      check('a stalled settings read should time out', 'resolved', 'AbortError');
+    } catch (error) {
+      check('a stalled settings read is cancelled at the deadline', [seen.settingsReads, error.name], [1, 'AbortError']);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
   }
   fs.rmSync(dir, { recursive: true, force: true });
 };

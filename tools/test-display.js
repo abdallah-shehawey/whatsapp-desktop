@@ -17,28 +17,26 @@ const end = main.indexOf('/* Scrolling.', start);
 assert(start !== -1 && end > start, 'display startup block is present');
 const startup = main.slice(start, end);
 
-const run = ({ platform = 'wayland', forceX11 = false, args = [], env = {} } = {}) => {
+const run = ({ platform = 'wayland', forceX11 = false, args = [], env = {}, waitForXSettings } = {}) => {
   const switches = new Map([['ozone-platform', platform]]);
   const appended = [];
   const relaunched = [];
-  const stopped = {};
   const context = {
     process: { argv: ['/electron', '/app', ...args], env },
     config: { get: key => key === 'system.force-x11' && forceX11 },
     console: { log() {} },
+    x11: { waitForXSettings },
     app: {
       commandLine: {
         getSwitchValue: key => switches.get(key) || '',
         appendSwitch(key, value) { appended.push([key, value]); switches.set(key, value); },
       },
       relaunch(options) { relaunched.push(Array.from(options.args)); },
-      exit(code) { assert.strictEqual(code, 0); throw stopped; },
+      exit(code) { assert.strictEqual(code, 0); },
     },
   };
   context.relaunch = options => context.app.relaunch(options);
-  let result;
-  try { result = vm.runInNewContext(startup + '\n({ onWayland, forceX11 });', context); }
-  catch (error) { if (error !== stopped) throw error; }
+  const result = vm.runInNewContext(`(() => { ${startup}\nreturn { onWayland, forceX11 }; })()`, context);
   return { result, switches, appended, relaunched };
 };
 
@@ -83,4 +81,21 @@ assert.deepStrictEqual(x11.switches.get('enable-features').split(','),
   ['MemoryPurgeOnFreezeLimit', 'WebRTCPipeWireCapturer'],
   'X11 keeps memory and screen-sharing features without Wayland decorations');
 
-console.log('display startup checks pass');
+const checkXSettings = async () => {
+  const env = { XDG_CURRENT_DESKTOP: 'fedora:GNOME', DISPLAY: ':0' };
+  for (const startService of [true, false]) {
+    let finishWait;
+    const ready = new Promise((resolve, reject) => { finishWait = startService ? resolve : reject; });
+    const delayed = run({ forceX11: true, args: originalArgs, env, waitForXSettings: () => ready });
+    assert.deepStrictEqual(delayed.relaunched, [], 'GNOME XWayland starts after the settings wait');
+    assert.strictEqual(delayed.result, undefined, 'the waiting process does not create the window');
+    finishWait();
+    await Promise.resolve();
+    assert.deepStrictEqual(delayed.relaunched, requested.relaunched, 'the restart proceeds after the wait settles');
+  }
+};
+
+checkXSettings().then(() => console.log('display startup checks pass'), error => {
+  console.error(error);
+  process.exitCode = 1;
+});

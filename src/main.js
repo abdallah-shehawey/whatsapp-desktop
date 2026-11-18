@@ -211,15 +211,27 @@ const ozonePlatform = app.commandLine.getSwitchValue('ozone-platform');
 const explicitOzonePlatform = process.argv.some(arg => arg.startsWith('--ozone-platform='));
 const forceX11 = explicitOzonePlatform ? ozonePlatform === 'x11' :
                  config.get('system.force-x11') === true;
+const onWayland = ozonePlatform === 'wayland';
 if (forceX11 && ozonePlatform !== 'x11') {
   /* Appending a switch here is too late: the browser would keep Wayland while
      its child processes were told X11. Pass it to a fresh process instead. The
      new process sees the explicit flag and cannot enter this branch again. */
-  console.log('restarting once to apply system.force-x11');
-  relaunch({ args: process.argv.slice(1).concat('--ozone-platform=x11') });
-  app.exit(0);
+  const switchToX11 = () => {
+    console.log('restarting once to apply system.force-x11');
+    relaunch({ args: process.argv.slice(1).concat('--ozone-platform=x11') });
+    app.exit(0);
+  };
+  /* GNOME starts XSettings on demand alongside XWayland. Electron 44 reads
+     GTK settings early and sticks with Adwaita if the cursor theme is still
+     unset. Give GNOME a bounded wait before the replacement process starts. */
+  if (onWayland && process.env.DISPLAY &&
+      process.env.XDG_CURRENT_DESKTOP?.split(':').includes('GNOME')) {
+    x11.waitForXSettings().then(switchToX11, switchToX11);
+  } else {
+    switchToX11();
+  }
+  return;
 }
-const onWayland = ozonePlatform === 'wayland';
 if (onWayland) {
   chromiumFeatures.push('WaylandWindowDecorations');
 }
