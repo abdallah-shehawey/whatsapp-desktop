@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Dardasha
+Comment=Start Dardasha in the background at login
+Exec=@BINDIR@/dardasha --hidden
+Icon=io.github.abdallah_shehawey.dardasha
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=5

@@ -1,5 +1,30 @@
 # Fedora Electron runtime checks
 
+## Dardasha package on Electron 44, 2026-11-18
+
+After the package was renamed `dardasha` and set to install the Dardasha brand
+(see [the README](README.md#name-in-the-archives-dardasha)), `dardasha-1.10.5-3`
+was checked the same way, in the same container and against the same signed
+`nodejs-electron-44.11.3-1.fc46`:
+
+- The SRPM rebuilt with `%check`. That now includes
+  `tools/test-system-package.py` installing both brands, and every suite
+  passed. rpmlint 2.10.0 reported 0 errors and 0 warnings on the SRPM and on
+  the RPM.
+- The package installs `/usr/bin/dardasha`, `io.github.abdallah_shehawey.dardasha`'s
+  desktop entry and metadata, and `dardasha.1`, and no file whose name carries
+  the default brand. The range for 45 still fails to resolve.
+- Running as an unprivileged user, the native `WM_CLASS` was
+  `io.github.abdallah_shehawey.dardasha`. The windows were titled
+  "Dardasha Settings", "Dardasha Fonts" and "About Dardasha", their pages
+  named the default brand nowhere, and About reported the name Dardasha. The
+  logged-out page and its QR code loaded as before.
+
+The Debian `.dsc` for `dardasha` built in Debian 13 with the whole suite
+passing. Lintian 2.122.0 reported no errors and one warning,
+`newer-standards-version` (4.7.4 against Lintian's 4.7.2), which predates the
+rename.
+
 ## Electron 44, 2026-11-18
 
 Bodhi marked `nodejs-electron-44.11.3-1.fc46` stable in Rawhide on 2026-11-17.

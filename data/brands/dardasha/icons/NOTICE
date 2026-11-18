@@ -1,0 +1,17 @@
+Icon masters and where they came from:
+
+  app-master.svg   Dardasha's launcher icon: a speech bubble holding the
+                   Arabic letter dal on a warm plate
+  tray-master.svg  the same bubble as a monochrome tray silhouette, with the
+                   letter cut out of it
+
+Both masters are original artwork made for this project, drawn as plain SVG
+paths with the help of an AI assistant (Claude, Anthropic). They borrow no
+other project's or vendor's artwork. They and their generated PNGs are
+distributed under the project's licence, GPL-3.0-or-later.
+
+This project is not affiliated with WhatsApp or Meta. Their names and logos
+are trademarks of their respective owners and are not used here.
+
+Everything under the numbered size directories is generated from these two by
+tools/make-icons.py -- run `make icons BRAND=dardasha`, never hand-edit the output.

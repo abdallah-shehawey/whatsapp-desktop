@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Generate whatsapp-desktop's icon set from the two masters in data/icons.
+"""Generate a brand's icon set from its two masters.
+
+    tools/make-icons.py             the default brand, in data/icons
+    tools/make-icons.py dardasha    data/brands/dardasha/icons
 
 The launcher and the tray deliberately do not share artwork: the launcher gets
 the plated icon that suits an app grid, the tray gets the bare mark that still
@@ -12,6 +15,7 @@ Panels ask for small sizes, so the attention badge is sized as a fraction of the
 icon rather than a fixed pixel count; at 16px a fixed badge would swallow the
 whole glyph.
 """
+import json
 import pathlib
 import sys
 
@@ -21,12 +25,17 @@ from gi.repository import GdkPixbuf
 import cairo
 
 SIZES = (16, 22, 24, 32, 48, 64, 128, 256)
-APP_ID = "io.github.shehawey.whatsapp-desktop"
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ICONS = ROOT / "data" / "icons"
+BRAND = sys.argv[1] if len(sys.argv) > 1 else None
+BRAND_DIR = ROOT / "data" / "brands" / BRAND if BRAND else ROOT / "data"
+BRAND_INFO = json.loads((BRAND_DIR / "brand.json").read_text())
+APP_ID = BRAND_INFO["id"]
+ICONS = BRAND_DIR / "icons"
 APP_MASTER = ICONS / "app-master.svg"
 TRAY_MASTER = ICONS / "tray-master.svg"
+# Which corner the unread dot takes: wherever the mark leaves room for it.
+BADGE_TOP = BRAND_INFO.get("badge", "bottom-right") == "top-right"
 
 
 def render(master: pathlib.Path, size: int) -> GdkPixbuf.Pixbuf:
@@ -52,7 +61,8 @@ def with_badge(pixbuf: GdkPixbuf.Pixbuf, size: int) -> GdkPixbuf.Pixbuf:
     ctx.paint()
 
     radius = max(2.0, size * 0.19)
-    cx = cy = size - radius
+    cx = size - radius
+    cy = radius if BADGE_TOP else size - radius
 
     # A hole the badge sits in, so nothing of the mark touches it.
     ctx.set_operator(cairo.OPERATOR_CLEAR)
@@ -83,17 +93,21 @@ def main() -> int:
     for size in SIZES:
         app_icon = render(APP_MASTER, size)
         write(app_icon, size, "apps", f"{APP_ID}.png")
-        write(app_icon, size, "apps", "whatsapp-desktop.png")
-        write(app_icon, size, "apps", "WhatsApp.png")
+        # Aliases under the command's name and the window class's -- one file
+        # when the two differ only in case, which a checkout on a
+        # case-insensitive file system could not hold apart.
+        write(app_icon, size, "apps", f"{BRAND_INFO['bin']}.png")
+        if BRAND_INFO["name"].lower() != BRAND_INFO["bin"].lower():
+            write(app_icon, size, "apps", f"{BRAND_INFO['name']}.png")
 
         tray = render(TRAY_MASTER, size)
         # Both contexts: SNI hosts disagree on which one they search.
         write(tray, size, "apps", f"{APP_ID}-tray.png")
-        write(tray, size, "apps", "whatsapp-desktop-tray.png")
+        write(tray, size, "apps", f"{BRAND_INFO['bin']}-tray.png")
         write(tray, size, "status", f"{APP_ID}-tray.png")
-        write(tray, size, "status", "whatsapp-desktop-tray.png")
+        write(tray, size, "status", f"{BRAND_INFO['bin']}-tray.png")
         write(with_badge(tray, size), size, "status", f"{APP_ID}-tray-attention.png")
-        write(with_badge(tray, size), size, "status", "whatsapp-desktop-tray-attention.png")
+        write(with_badge(tray, size), size, "status", f"{BRAND_INFO['bin']}-tray-attention.png")
 
     total = sum(1 for _ in ICONS.rglob("*.png"))
     print(f"generated {total} icons across {len(SIZES)} sizes")

@@ -2,6 +2,8 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+require('./brand.js').brandDocument(document);
+
 /* The window is transparent and the page draws its corners -- only when the
    client says so, because it is only transparent on Wayland (see panelWindow
    in main.js). Marked as the <html> element arrives, before anything paints,

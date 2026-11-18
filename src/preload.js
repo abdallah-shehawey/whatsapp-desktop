@@ -67,6 +67,7 @@ if (process.argv.includes('--wa-popup')) {
   };
 
   if (location.href.split('?')[0] === pathToFileURL(path.join(__dirname, 'connection.html')).href) {
+    require('./brand.js').brandDocument(document);
     document.addEventListener('DOMContentLoaded', async () => {
       const button = document.getElementById('connection-retry');
       button.addEventListener('click', () => send('connection-retry'));

@@ -5,9 +5,36 @@ They do **not** mean it has been accepted into Fedora, Debian or Ubuntu.
 
 The normal release packages contain a downloaded Electron binary. The separate
 `make install-system` target installs our JavaScript and data under
-`/usr/share/whatsapp-desktop` and starts a distribution-owned `/usr/bin/electron`.
+`/usr/share/<command>` and starts a distribution-owned `/usr/bin/electron`.
 It preserves the existing application, settings locations, fonts and URL
 handling. It neither downloads Electron nor disables its sandbox.
+
+## Name in the archives: Dardasha
+
+The archives, like Flathub, do not take the WhatsApp name or logo on a client
+WhatsApp did not make. The Fedora and Debian packages are therefore named
+`dardasha` and install the project's Dardasha brand:
+
+- the name Dardasha (دردشة, "chat"), the command `dardasha` and the
+  application id `io.github.abdallah_shehawey.dardasha`
+- original artwork: a speech bubble holding the letter dal, in
+  `data/brands/dardasha/icons`
+- its own desktop entries, AppStream metadata, manual page and README
+
+`make install-system BRAND=dardasha` selects it, and both packagings pass that.
+Installed under it, `data/brand.json` names Dardasha, and `src/brand.js`
+gives that name to the window titles, the tray, notifications, the media card
+and the client's own pages. The default brand's icons, desktop entries and
+metadata are not installed. The project's own channels keep the default
+brand, with its name, icon and application id unchanged: the shinux-repo
+packages, the AppImage, GitHub releases, AUR and npm. The upstream source
+archive, the settings directory `~/.config/whatsapp-desktop` and the data
+directory `~/.local/share/whatsapp-desktop` keep the upstream name, so moving
+between the two builds keeps the signed-in session.
+
+The `<releases>` list is recorded once, in the default brand's metadata, and
+`make install-system` copies it into Dardasha's, so the two cannot drift.
+`tools/test-system-package.py` installs both brands and checks each.
 
 ## Runtime dependency
 
@@ -70,12 +97,17 @@ packaging/official/build-source-packages.sh
 ```
 
 Use a separate `DIST` output directory to preserve existing review snapshots.
-Fedora review sources use a release tag naming the application version and
-the Electron major in the SPEC, `packaging-review-<application version>-fedora<electron major>`
-(for example `packaging-review-1.10.5-fedora44`). The builder reads that range
-from the SPEC, checks the committed package version and the tag against the
-expanded SPEC `Source0`, and records the exact URL, tag and range in
-`build-manifest.json`. Publish every generated review
+Fedora review sources use a release tag naming the package, the application
+version and the Electron major in the SPEC,
+`packaging-review-<package>-<application version>-fedora<electron major>`
+(for example `packaging-review-dardasha-1.10.5-fedora44`; the snapshots
+before the rename used `packaging-review-1.10.5-fedora44` and earlier forms).
+The builder reads the package name from `dardasha.spec` and `debian/control`
+and refuses to build if they disagree. It reads the range from the SPEC,
+checks the committed package version and the tag against the expanded SPEC
+`Source0`, and records the exact URL, tag and range in `build-manifest.json`.
+The upstream source archive keeps its name, `whatsapp-desktop-<version>.tar.gz`;
+Debian's copy of it is `dardasha_<version>.orig.tar.gz`. Publish every generated review
 artifact together under that tag, then verify anonymous downloads against
 `SHA256SUMS` before linking the snapshot in the distribution review. A normal
 application release does not publish a new review snapshot automatically.

@@ -224,7 +224,7 @@ class ElectronTray {
      something about it. */
   aboutLabel() {
     const found = this.handlers.getUpdate && this.handlers.getUpdate();
-    return found && found.newer ? `About WhatsApp — ${found.latest} is out` : 'About WhatsApp';
+    return found && found.newer ? `About ${this.title} — ${found.latest} is out` : `About ${this.title}`;
   }
 
   /* The icon and its tooltip, which are not the menu -- and are kept apart from

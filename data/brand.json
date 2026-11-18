@@ -1,0 +1,5 @@
+{
+  "id": "io.github.shehawey.whatsapp-desktop",
+  "name": "WhatsApp",
+  "bin": "whatsapp-desktop"
+}

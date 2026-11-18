@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="22 26 84 80">
+<!--
+  The tray mark: the launcher's speech bubble as one flat white silhouette, with
+  the letter dal (the first letter of Dardasha) cut out of it rather than drawn
+  on it. Panels draw this at 16, 22 or 24 pixels beside a row of symbolic glyphs,
+  so it is a vector that lands on the pixel grid, it is the single white the
+  clock is, and the cut-out leaves the panel showing through instead of adding a
+  second colour. The viewBox crops the launcher's 128-unit canvas to the bubble.
+-->
+  <defs>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128">
+      <rect width="128" height="128" fill="#fff"/>
+      <path fill="none" stroke="#000" stroke-width="10.5" stroke-linecap="round" stroke-linejoin="round" d="M57 41.5c9.5 4.5 17 12.5 17.5 24 .2 4-1.8 6.5-6 6.5H50"/>
+    </mask>
+  </defs>
+  <path fill="#fff" mask="url(#cut)" d="M50 28h28a26 26 0 0 1 26 26v8a26 26 0 0 1-22.4 25.7L96 102 66.8 88H50a26 26 0 0 1-26-26v-8a26 26 0 0 1 26-26z"/>
+</svg>

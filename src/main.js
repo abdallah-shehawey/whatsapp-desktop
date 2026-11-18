@@ -40,9 +40,11 @@ const portal = require('./portal-keys.js');
 /* Version, licence and author, read from the one file that already says them. */
 const manifest = require('../package.json');
 
-const APP_ID = 'io.github.shehawey.whatsapp-desktop';
+/* Which name and application id this copy carries: see src/brand.js. */
+const brand = require('./brand.js');
+const APP_ID = brand.id;
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
-const TITLE = 'WhatsApp';
+const TITLE = brand.name;
 
 /* The backlog that syncs in over the first half-minute of a launch rewrites the
    whole chat list, and every row it touches has the shape of an arrival. The
@@ -102,8 +104,8 @@ Options:
    client into. */
 const dataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
 app.setPath('userData', path.join(dataHome, 'whatsapp-desktop'));
-app.setName('WhatsApp');
-process.title = 'WhatsApp';
+app.setName(TITLE);
+process.title = TITLE;
 
 /* Notifications carry the application's desktop file: without it GNOME files
    every banner under "Electron" and draws Electron's icon on it. */
@@ -1267,7 +1269,7 @@ const openSettings = () => {
     center: true,
     resizable: false,
     ...panelWindow(),
-    title: 'WhatsApp Settings',
+    title: `${TITLE} Settings`,
     icon: appIcon,
     autoHideMenuBar: true,
     webPreferences: {
@@ -1329,7 +1331,7 @@ const openFonts = () => {
     center: true,
     resizable: false,
     ...panelWindow(),
-    title: 'WhatsApp Fonts',
+    title: `${TITLE} Fonts`,
     icon: appIcon,
     autoHideMenuBar: true,
     webPreferences: {
@@ -1451,7 +1453,7 @@ const openAbout = ({ checkNow = false } = {}) => {
     center: true,
     resizable: false,
     ...panelWindow(),
-    title: 'About WhatsApp',
+    title: `About ${TITLE}`,
     icon: appIcon,
     autoHideMenuBar: true,
     webPreferences: {
@@ -2522,6 +2524,13 @@ const describeThenNotify = () => setTimeout(async () => {
   if (raised) playTone();
 }, 250);
 
+/* What the window is called: the page's title, with the client's own name where
+   the page names itself, since the taskbar and the switcher are where a name is
+   read most. Under the default brand the two names are one and the title passes
+   through untouched. */
+const windowTitle = title =>
+  (title && title.trim() ? title.replace(/WhatsApp/g, TITLE) : TITLE);
+
 /* WhatsApp Web puts "(3) WhatsApp" in the document title while chats are unread
    and drops the prefix once they are read. That is the only unread signal the
    page hands over without scraping its DOM, and it is what marks the tray. */
@@ -2561,7 +2570,7 @@ const onTitle = title => {
      from answers that disagree is how an icon ends up marked unread with
      nothing behind it. */
   if (storeLive) {
-    if (win && !win.isDestroyed()) win.setTitle(title && title.trim() ? title : TITLE);
+    if (win && !win.isDestroyed()) win.setTitle(windowTitle(title));
     return;
   }
 
@@ -2578,7 +2587,7 @@ const onTitle = title => {
      messages read "3" where the phone reads "11" -- but it is the right number
      when nothing has been counted yet. */
   setBadge(waiting);
-  if (win && !win.isDestroyed()) win.setTitle(title && title.trim() ? title : TITLE);
+  if (win && !win.isDestroyed()) win.setTitle(windowTitle(title));
 };
 
 /* Drawn by the launcher, over the application's icon. On Linux this goes out on
@@ -2785,7 +2794,7 @@ const globalKeys = () => {
   return [
     {
       id: 'toggle-window', what: 'showing the window',
-      description: 'Show WhatsApp, or put it away',
+      description: `Show ${TITLE}, or put it away`,
       accelerator: config.get('shortcuts.toggle'),
       run: () => {
         if (!win || win.isDestroyed()) return;

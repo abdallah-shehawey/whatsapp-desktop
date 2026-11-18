@@ -1,7 +1,7 @@
 /*
  * Autostart management for Linux desktops.
  *
- * Reads and writes ~/.config/autostart/io.github.shehawey.whatsapp-desktop.desktop
+ * Reads and writes ~/.config/autostart/<application id>.desktop
  * while respecting any system-wide entry in /etc/xdg/autostart/.
  */
 'use strict';
@@ -10,7 +10,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const APP_ID = 'io.github.shehawey.whatsapp-desktop';
+const brand = require('./brand.js');
+
+const APP_ID = brand.id;
 const USER_AUTOSTART_DIR = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'autostart');
 const USER_DESKTOP_PATH = path.join(USER_AUTOSTART_DIR, `${APP_ID}.desktop`);
 const SYS_DESKTOP_PATH = path.join('/etc', 'xdg', 'autostart', `${APP_ID}.desktop`);
@@ -50,10 +52,10 @@ const setEnabled = enable => {
     const desktopEntry = [
       '[Desktop Entry]',
       'Type=Application',
-      'Name=WhatsApp',
-      'Comment=Start WhatsApp in the background at login',
-      'Exec=whatsapp-desktop --hidden',
-      'Icon=io.github.shehawey.whatsapp-desktop',
+      `Name=${brand.name}`,
+      `Comment=Start ${brand.name} in the background at login`,
+      `Exec=${brand.bin} --hidden`,
+      `Icon=${APP_ID}`,
       'Terminal=false',
       'NoDisplay=true',
       'X-GNOME-Autostart-enabled=true',
@@ -73,7 +75,7 @@ const setEnabled = enable => {
       const maskEntry = [
         '[Desktop Entry]',
         'Type=Application',
-        'Name=WhatsApp',
+        `Name=${brand.name}`,
         'Hidden=true',
         'X-GNOME-Autostart-enabled=false',
         '',

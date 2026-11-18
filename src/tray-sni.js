@@ -219,7 +219,7 @@ class SniTray {
    * a question nobody asked, and it is what this item used to do.
    */
   toggleLabel() {
-    return this.inFront ? 'Minimize to Tray' : 'Open WhatsApp';
+    return this.inFront ? 'Minimize to Tray' : `Open ${this.title}`;
   }
 
   /*
@@ -233,7 +233,7 @@ class SniTray {
    */
   aboutLabel() {
     const found = this.handlers.getUpdate && this.handlers.getUpdate();
-    return found && found.newer ? `About WhatsApp — ${found.latest} is out` : 'About WhatsApp';
+    return found && found.newer ? `About ${this.title} — ${found.latest} is out` : `About ${this.title}`;
   }
 
   /* An item's properties, filtered to what the host asked for -- an empty
