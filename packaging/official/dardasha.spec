@@ -73,10 +73,6 @@ test ! -d node_modules
 %install
 %{__make} install-system BRAND=dardasha DESTDIR=%{buildroot} PREFIX=%{_prefix} \
   SYSTEM_ELECTRON=%{_bindir}/electron
-# Fedora's Electron honors the class passed by our system launcher
-# (observed on 43 and 44).
-sed -i 's/^StartupWMClass=Dardasha$/StartupWMClass=%{app_id}/' \
-  %{buildroot}%{_datadir}/applications/%{app_id}.desktop
 # These notices are installed below through %%license rather than duplicated
 # inside the application data directory.
 rm -f %{buildroot}%{_datadir}/%{name}/data/CC0-1.0.txt

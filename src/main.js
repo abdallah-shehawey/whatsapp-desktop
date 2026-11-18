@@ -1236,11 +1236,17 @@ const changeSetting = (key, value) => {
    rounded and with no shadow at all -- and a desktop that rounds its windows,
    the owner's among them, rounds this one as it is. So X11 keeps the opaque
    window it had. Shown once the page has painted either way, so an empty
-   rectangle is never put up first. */
+   rectangle is never put up first.
+
+   roundedCorners is off because the page already draws the corners. Electron
+   43 started rounding frameless windows on Linux by itself, and a second
+   rounding over the page's own would clip its edge. Electron 40 ignored the
+   option on Linux, so this keeps the shape the panels always had. */
 const panelWindow = () => onWayland
-  ? { frame: false, transparent: true, backgroundColor: '#00000000', show: false }
+  ? { frame: false, transparent: true, backgroundColor: '#00000000', show: false,
+      roundedCorners: false }
   : { frame: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#111b21' : '#f0f2f5',
-      show: false };
+      show: false, roundedCorners: false };
 const PANEL_ARGUMENTS = onWayland ? ['--rounded-panel'] : [];
 
 /* Answers with the window, so a caller that wants to look at it -- the debug
@@ -2630,6 +2636,10 @@ const openLock = () => {
     modal: true,
     x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,
     frame: false,
+    /* Square, like the window it covers: Electron 43 began rounding frameless
+       windows on Linux, which would leave the conversation showing at the
+       corners of the lock. */
+    roundedCorners: false,
     resizable: false,
     movable: false,
     alwaysOnTop: true,

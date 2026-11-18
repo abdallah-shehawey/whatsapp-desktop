@@ -11,8 +11,8 @@ handling. It neither downloads Electron nor disables its sandbox.
 
 ## Name in the archives: Dardasha
 
-The archives, like Flathub, do not take the WhatsApp name or logo on a client
-WhatsApp did not make. The Fedora and Debian packages are therefore named
+The archives do not take the WhatsApp name or logo on a client WhatsApp did
+not make. The Fedora and Debian packages are therefore named
 `dardasha` and install the project's Dardasha brand:
 
 - the name Dardasha (دردشة, "chat"), the command `dardasha` and the
@@ -49,8 +49,9 @@ runtime's observed window class. On 2026-11-17 Bodhi marked
 checks against it, the SPEC (1.10.5-2) requires Electron `>= 44, < 45`. See
 [the runtime check](fedora-runtime-check.md) for the evidence and its limits.
 Later major versions require further validation. Rawhide availability does not
-establish availability in existing stable Fedora releases. The normal bundled
-release continues to use Electron 40.
+establish availability in existing stable Fedora releases. From 1.10.6 the
+normal bundled release carries Electron 44 as well, in place of the Electron
+40 that left support on 2026-07-01.
 
 The SPEC states that range as one rich dependency,
 `(electron >= 44 with electron < 45)`, so a single installed Electron has to
@@ -62,7 +63,7 @@ against a runtime it was never run on. Reviewed on the Fedora devel thread on
 2026-10-26:
 <https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/message/U3A4APO5RW77LU6RI7G2LUIQAIJ4JYML/>.
 
-Debian expresses the same range as `electron (>= 40), electron (<< 41)`, where
+Debian expresses the same range as `electron (>= 44), electron (<< 45)`, where
 both relations name one real package and dpkg applies them to the version it
 installs, so they do not need combining.
 
@@ -112,8 +113,7 @@ artifact together under that tag, then verify anonymous downloads against
 `SHA256SUMS` before linking the snapshot in the distribution review. A normal
 application release does not publish a new review snapshot automatically.
 `RPM_DIST=.fc46` labels a source RPM intended for Rawhide; build and test its
-binary package in Rawhide before publishing it. The Debian proposal retains
-its separate Electron 40 dependency.
+binary package in Rawhide before publishing it.
 
 The script exports the application source, SVG icon masters, generated icons,
 tests and build inputs. It excludes `node_modules`, npm's downloaded runtime,

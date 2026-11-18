@@ -56,8 +56,12 @@ LOCALES = en-US ar
 all: $(ELECTRON)/electron
 	@echo "  nothing to build -- run 'make install' or 'npm start'"
 
+# Since Electron 42 the npm package no longer downloads its binary from a
+# postinstall script; the runtime is fetched by its own installer, run here, so
+# that node_modules/electron/dist is there for `make install` to copy.
 $(ELECTRON)/electron:
 	npm install --no-audit --no-fund
+	node node_modules/electron/install.js
 
 # What the app itself is: everything the runtime reads, and nothing else.
 APP_FILES = package.json src data

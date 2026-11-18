@@ -5,7 +5,8 @@ dardasha (1.10.5-1) UNRELEASED; urgency=medium
     not take the WhatsApp name or logo on an independent client, so the
     package installs Dardasha's name, application id
     (io.github.abdallah_shehawey.dardasha) and original artwork.
-  * Depend on a separately packaged Electron 40 runtime. Official archive
+  * Depend on a separately packaged Electron 44 runtime, the major the
+    upstream release bundles and Fedora's archive carries. Official archive
     inclusion is blocked by Debian Electron request #842420.
   * Install AppStream metadata and a manual page.
   * Build-depend on nodejs (>= 20): the test suite run during the build

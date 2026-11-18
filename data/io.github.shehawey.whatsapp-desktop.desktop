@@ -11,5 +11,5 @@ Keywords=whatsapp;chat;messaging;
 # see src/links.js, which then asks to be the default.
 MimeType=x-scheme-handler/whatsapp;
 StartupNotify=true
-StartupWMClass=WhatsApp
+StartupWMClass=io.github.shehawey.whatsapp-desktop
 SingleMainWindow=true
