@@ -135,10 +135,6 @@ You can set everything from **Settings** (`Ctrl+,`) and **Fonts** (in the tray m
 - [Contributing](CONTRIBUTING.md): development setup, tests, project layout
 - [Security policy](SECURITY.md)
 
-## Credits
-
-Thanks to [@coach-nooreldean](https://github.com/coach-nooreldean) for the privacy shield, passcode lock, media controls, custom stylesheet, global shortcuts, palettes, CI and AppImage packaging ([#4](https://github.com/abdallah-shehawey/whatsapp-desktop/pull/4)).
-
 ## License
 
 [GPL-3.0-or-later](LICENSE). The sources of the icons are listed in [`data/icons/NOTICE`](data/icons/NOTICE), and the website's fonts in [`docs/assets/FONTS-NOTICE.txt`](docs/assets/FONTS-NOTICE.txt).
