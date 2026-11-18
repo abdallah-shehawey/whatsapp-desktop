@@ -34,8 +34,8 @@
   <url type="bugtracker">https://github.com/abdallah-shehawey/whatsapp-desktop/issues</url>
   <url type="vcs-browser">https://github.com/abdallah-shehawey/whatsapp-desktop</url>
   <branding>
-    <color type="primary" scheme_preference="light">#ffd3a1</color>
-    <color type="primary" scheme_preference="dark">#7a2e1c</color>
+    <color type="primary" scheme_preference="light">#b7f0cb</color>
+    <color type="primary" scheme_preference="dark">#14532d</color>
   </branding>
   <screenshots>
     <screenshot type="default">

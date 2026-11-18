@@ -17,8 +17,8 @@ WhatsApp did not make. The Fedora and Debian packages are therefore named
 
 - the name Dardasha (دردشة, "chat"), the command `dardasha` and the
   application id `io.github.abdallah_shehawey.dardasha`
-- original artwork: a speech bubble holding the letter dal, in
-  `data/brands/dardasha/icons`
+- original artwork: a white speech bubble holding the letter D on a green
+  plate, in `data/brands/dardasha/icons`
 - its own desktop entries, AppStream metadata, manual page and README
 
 `make install-system BRAND=dardasha` selects it, and both packagings pass that.
