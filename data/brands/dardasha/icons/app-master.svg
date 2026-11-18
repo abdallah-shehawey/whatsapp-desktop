@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<!--
+  Dardasha's launcher icon: a white speech bubble on a green plate, its tail to
+  the right, holding the letter D. Original artwork for this project, drawn as
+  plain paths so no font is needed to render it. It shares the colour family of
+  a messaging app and none of any vendor's marks: no handset, no round bubble.
+-->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5be38d"/>
+      <stop offset="1" stop-color="#17a34a"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2fc466"/>
+      <stop offset="1" stop-color="#14903f"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#plate)"/>
+  <path fill="#fff" d="M50 28h28a26 26 0 0 1 26 26v8a26 26 0 0 1-22.4 25.7L96 102 66.8 88H50a26 26 0 0 1-26-26v-8a26 26 0 0 1 26-26z"/>
+  <path fill="url(#ink)" fill-rule="evenodd" d="M46 38h16a20 20 0 0 1 20 20a20 20 0 0 1-20 20H46z M56.5 47.5h5.5a10.5 10.5 0 0 1 10.5 10.5a10.5 10.5 0 0 1-10.5 10.5h-5.5z"/>
+</svg>

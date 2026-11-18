@@ -18,7 +18,15 @@ Comment: The launcher SVG comes from the WhiteSur icon theme. The tray SVG
  generated from the two SVG masters by tools/make-icons.py. Brand trademarks
  remain the property of their respective holders.
 
+Files: data/brands/dardasha/icons/*
+Copyright: 2026 Abdallah Shehawey and whatsapp-desktop contributors
+License: GPL-3+
+Comment: Dardasha's launcher and tray artwork, original to this project and
+ drawn with the help of an AI assistant. This is the artwork the package
+ installs; the data/icons set above is in the source but is not installed.
+
 Files: data/io.github.shehawey.whatsapp-desktop.metainfo.xml
+       data/brands/dardasha/io.github.abdallah_shehawey.dardasha.metainfo.xml
 Copyright: 2026 Abdallah Shehawey and whatsapp-desktop contributors
 License: CC0-1.0
 

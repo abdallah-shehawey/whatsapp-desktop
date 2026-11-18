@@ -13,9 +13,10 @@ override_dh_auto_test:
 	python3 tools/test-system-package.py
 
 override_dh_auto_install:
-	$(MAKE) install-system DESTDIR=$(CURDIR)/debian/whatsapp-desktop PREFIX=/usr SYSTEM_ELECTRON=/usr/bin/electron
-	desktop-file-validate debian/whatsapp-desktop/usr/share/applications/io.github.shehawey.whatsapp-desktop.desktop
-	appstreamcli validate --no-net debian/whatsapp-desktop/usr/share/metainfo/io.github.shehawey.whatsapp-desktop.metainfo.xml
+	# The archive takes the project's Dardasha brand: see data/brands/dardasha.
+	$(MAKE) install-system BRAND=dardasha DESTDIR=$(CURDIR)/debian/dardasha PREFIX=/usr SYSTEM_ELECTRON=/usr/bin/electron
+	desktop-file-validate debian/dardasha/usr/share/applications/io.github.abdallah_shehawey.dardasha.desktop
+	appstreamcli validate --no-net debian/dardasha/usr/share/metainfo/io.github.abdallah_shehawey.dardasha.metainfo.xml
 
 override_dh_auto_clean:
 	# Upstream 'make clean' removes development dependencies, not build products.

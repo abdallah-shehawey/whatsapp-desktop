@@ -14,16 +14,27 @@
 %global electron_major 44
 %global electron_next 45
 %global electron_dep (electron >= %{electron_major} with electron < %{electron_next})
-# Each review snapshot is published under a tag naming the Electron major it
-# was built and run against, so moving the range moves the tag with it.
-%global review_tag packaging-review-%{version}-fedora%{electron_major}
-Name:           whatsapp-desktop
+# Each review snapshot is published under a tag naming the package and the
+# Electron major it was built and run against, so moving the range moves the
+# tag with it.
+%global review_tag packaging-review-%{name}-%{version}-fedora%{electron_major}
+# The archive does not take the WhatsApp name or logo on a client WhatsApp did
+# not make, so this package installs the project's Dardasha brand: its own
+# name, application id and artwork (BRAND=dardasha, data/brands/dardasha).
+# The upstream project, its source archive and its settings directories keep
+# the upstream name.
+%global upstream whatsapp-desktop
+%global app_id io.github.abdallah_shehawey.dardasha
+Name:           dardasha
 Version:        1.10.5
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Independent desktop client for WhatsApp Web
-License:        GPL-3.0-or-later AND GPL-3.0-only AND CC0-1.0
+# The Dardasha artwork is GPL-3.0-or-later and the AppStream metadata CC0-1.0.
+# The upstream archive also carries other artwork that this package does not
+# install.
+License:        GPL-3.0-or-later AND CC0-1.0
 URL:            https://github.com/abdallah-shehawey/whatsapp-desktop
-Source0:        https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/%{review_tag}/%{name}-%{version}.tar.gz
+Source0:        https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/%{review_tag}/%{upstream}-%{version}.tar.gz
 BuildArch:      noarch
 
 BuildRequires:  make
@@ -46,13 +57,13 @@ Requires:       fontconfig
 Recommends:     google-noto-emoji-color-fonts
 
 %description
-Independent WhatsApp Web client with system tray integration, desktop
-notifications, themes, configurable fonts and privacy controls. Requires an
-existing WhatsApp account and an Internet connection. This project is not
-affiliated with Meta or WhatsApp.
+Dardasha is an independent desktop client for WhatsApp Web, with system tray
+integration, desktop notifications, themes, configurable fonts and privacy
+controls. It requires an existing WhatsApp account and an Internet
+connection. Dardasha is not affiliated with Meta or WhatsApp.
 
 %prep
-%autosetup
+%autosetup -n %{upstream}-%{version}
 # No compiled runtime, npm install, or network access is needed by this app.
 test ! -d node_modules
 
@@ -60,11 +71,12 @@ test ! -d node_modules
 # The application is uncompiled JavaScript; Electron is a separate dependency.
 
 %install
-%{__make} install-system DESTDIR=%{buildroot} PREFIX=%{_prefix} SYSTEM_ELECTRON=%{_bindir}/electron
+%{__make} install-system BRAND=dardasha DESTDIR=%{buildroot} PREFIX=%{_prefix} \
+  SYSTEM_ELECTRON=%{_bindir}/electron
 # Fedora's Electron honors the class passed by our system launcher
 # (observed on 43 and 44).
-sed -i 's/^StartupWMClass=WhatsApp$/StartupWMClass=io.github.shehawey.whatsapp-desktop/' \
-  %{buildroot}%{_datadir}/applications/io.github.shehawey.whatsapp-desktop.desktop
+sed -i 's/^StartupWMClass=Dardasha$/StartupWMClass=%{app_id}/' \
+  %{buildroot}%{_datadir}/applications/%{app_id}.desktop
 # These notices are installed below through %%license rather than duplicated
 # inside the application data directory.
 rm -f %{buildroot}%{_datadir}/%{name}/data/CC0-1.0.txt
@@ -76,21 +88,30 @@ hardlink --ignore-time %{buildroot}%{_datadir}
 %check
 make test
 python3 tools/test-system-package.py
-desktop-file-validate %{buildroot}%{_datadir}/applications/io.github.shehawey.whatsapp-desktop.desktop
-appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/io.github.shehawey.whatsapp-desktop.metainfo.xml
+desktop-file-validate %{buildroot}%{_datadir}/applications/%{app_id}.desktop
+appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/%{app_id}.metainfo.xml
+# The installed copy is the Dardasha brand throughout.
+grep -q '"id": "%{app_id}"' %{buildroot}%{_datadir}/%{name}/data/brand.json
 
 %files
-%license LICENSE data/icons/NOTICE data/CC0-1.0.txt
-%doc README.md
+%license LICENSE data/brands/dardasha/icons/NOTICE data/CC0-1.0.txt
+%doc data/brands/dardasha/README.md
 %{_bindir}/%{name}
 %{_datadir}/%{name}/
-%{_datadir}/applications/io.github.shehawey.whatsapp-desktop.desktop
-%{_datadir}/metainfo/io.github.shehawey.whatsapp-desktop.metainfo.xml
+%{_datadir}/applications/%{app_id}.desktop
+%{_datadir}/metainfo/%{app_id}.metainfo.xml
 %{_datadir}/icons/hicolor/*/apps/*.png
 %{_datadir}/icons/hicolor/*/status/*.png
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Wed Nov 18 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.5-3
+- Rename the package to dardasha and install the project's Dardasha brand:
+  its own name, application id (io.github.abdallah_shehawey.dardasha) and
+  original artwork, since the archive does not take the WhatsApp name or logo
+  on an independent client
+- Drop GPL-3.0-only from License: the artwork it covered is not installed
+
 * Wed Nov 18 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.5-2
 - Move to Fedora Rawhide's Electron 44 runtime, which replaced 43 there;
   the build and runtime dependency is now (electron >= 44 with electron < 45)

@@ -18,6 +18,9 @@ const desktop = require('../src/desktop.js');
    own families in it rather than an empty dropdown. */
 const fonts = require('../src/fonts.js');
 const manifest = require('../package.json');
+/* Whichever brand this tree carries -- run from an install made with
+   BRAND=dardasha, the pictures are that brand's windows. */
+const brand = require('../src/brand.js');
 
 app.commandLine.appendSwitch('no-sandbox');
 app.commandLine.appendSwitch('disable-gpu');
@@ -83,9 +86,9 @@ ipcMain.handle('lock:status', () => ({ hasPasscode: false, timeout: 15, onSystem
    "Up to date" is the state a reader should recognise -- the other one is a
    version number that would be wrong the day after it was taken. */
 ipcMain.handle('about:get', () => ({
-  name: 'WhatsApp',
+  name: brand.name,
   version: manifest.version,
-  icon: '../data/icons/128/apps/io.github.shehawey.whatsapp-desktop.png',
+  icon: `../data/icons/128/apps/${brand.id}.png`,
   license: manifest.license,
   author: String(manifest.author || '').replace(/\s*<[^>]*>/, ''),
   electron: process.versions.electron,

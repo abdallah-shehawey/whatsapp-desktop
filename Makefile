@@ -13,8 +13,22 @@ PREFIX  ?= $(HOME)/.local
 DESTDIR ?=
 VERSION ?= $(shell node -p "require('./package.json').version")
 
-APP_ID  = io.github.shehawey.whatsapp-desktop
-BIN     = whatsapp-desktop
+# Which name, application id and artwork the installed copy carries. The
+# project's own packages are the default brand: data/brand.json, data/icons and
+# the data/<id>.* desktop entries. A build for a store or a distribution archive,
+# where neither a vendor's name nor its logo may stand on a client that vendor
+# did not make, passes BRAND=dardasha and takes all of those from
+# data/brands/dardasha instead. src/brand.js reads whichever brand.json was
+# installed; nothing is decided at run time.
+BRAND ?= whatsapp
+BRAND_DIR = $(if $(filter whatsapp,$(BRAND)),data,data/brands/$(BRAND))
+brand_field = $(shell sed -n 's/^ *"$(1)": *"\([^"]*\)".*/\1/p' $(BRAND_DIR)/brand.json)
+APP_ID  := $(call brand_field,id)
+BIN     := $(call brand_field,bin)
+MANPAGE  = $(if $(filter whatsapp,$(BRAND)),packaging/official/whatsapp-desktop.1,$(BRAND_DIR)/$(BIN).1)
+ifeq ($(APP_ID),)
+$(error no brand "$(BRAND)": $(BRAND_DIR)/brand.json is missing or has no id)
+endif
 
 bindir       = $(PREFIX)/bin
 libdir       = $(PREFIX)/lib/$(BIN)
@@ -42,6 +56,20 @@ $(ELECTRON)/electron:
 # What the app itself is: everything the runtime reads, and nothing else.
 APP_FILES = package.json src data
 
+# Lays the app down in $(1). Other brands' files are not the runtime's. Under a
+# brand other than the default, that brand's brand.json and icons stand where
+# the default's would, and the default brand's desktop entries and metadata are
+# not copied at all.
+BRAND_EXCLUDES = --exclude=./brands $(if $(filter whatsapp,$(BRAND)),,--exclude=./icons \
+                 --exclude='./*.desktop' --exclude='./*.metainfo.xml')
+define install_app_files
+	@cp -a package.json src $(1)/
+	@install -d $(1)/data
+	@tar -C data $(BRAND_EXCLUDES) -cf - . | tar -C $(1)/data -xf -
+	$(if $(filter whatsapp,$(BRAND)),,@cp -a $(BRAND_DIR)/icons $(1)/data/icons)
+	$(if $(filter whatsapp,$(BRAND)),,@cp $(BRAND_DIR)/brand.json $(1)/data/brand.json)
+endef
+
 install: $(ELECTRON)/electron install-assets
 	@install -d $(DESTDIR)$(libdir)
 	@cp -a $(ELECTRON)/. $(DESTDIR)$(libdir)/
@@ -62,7 +90,7 @@ install: $(ELECTRON)/electron install-assets
 	@# in an installed tree as a stale copy that still gets required.
 	@rm -rf $(DESTDIR)$(libdir)/resources/app
 	@install -d $(DESTDIR)$(libdir)/resources/app
-	@cp -a $(APP_FILES) $(DESTDIR)$(libdir)/resources/app/
+	$(call install_app_files,$(DESTDIR)$(libdir)/resources/app)
 	@# Chromium's sandbox uses unprivileged user namespaces where they are
 	@# allowed, and falls back to this setuid helper where they are not --
 	@# Ubuntu confines the first behind AppArmor, so there it is the helper or
@@ -96,32 +124,35 @@ install: $(ELECTRON)/electron install-assets
 # This target has no dependency on npm or a downloaded Electron executable.
 install-system: install-assets
 	@install -d $(DESTDIR)$(systemappdir)
-	@cp -a $(APP_FILES) $(DESTDIR)$(systemappdir)/
+	$(call install_app_files,$(DESTDIR)$(systemappdir))
 	@install -d $(DESTDIR)$(bindir)
 	@sed -e 's|@ELECTRON_BIN@|$(SYSTEM_ELECTRON)|g' \
 	      -e 's|@APPDIR@|$(systemappdir)|g' \
 	      -e 's|@VERSION@|$(VERSION)|g' \
+	      -e 's|@APP_ID@|$(APP_ID)|g' \
+	      -e 's|@BIN@|$(BIN)|g' \
 	      packaging/official/whatsapp-desktop.in > $(DESTDIR)$(bindir)/$(BIN)
 	@chmod 755 $(DESTDIR)$(bindir)/$(BIN)
-	@install -Dm644 data/$(APP_ID).metainfo.xml \
-	      $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml
-	@install -Dm644 packaging/official/whatsapp-desktop.1 \
-	      $(DESTDIR)$(PREFIX)/share/man/man1/$(BIN).1
+	@install -d $(DESTDIR)$(PREFIX)/share/metainfo
+	@# Releases are recorded once, in the default brand's metadata; another
+	@# brand's file marks with @RELEASES@ where the same block goes.
+	@awk 'FNR == NR { if (/<releases>/) keep = 1; if (keep) block = block $$0 "\n"; if (/<\/releases>/) keep = 0; next } \
+	      /@RELEASES@/ { printf "%s", block; next } { print }' \
+	      data/io.github.shehawey.whatsapp-desktop.metainfo.xml $(BRAND_DIR)/$(APP_ID).metainfo.xml \
+	      > $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml
+	@chmod 644 $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml
+	@install -Dm644 $(MANPAGE) $(DESTDIR)$(PREFIX)/share/man/man1/$(BIN).1
 	@echo "  INSTALL  source application using $(SYSTEM_ELECTRON)"
 
 install-assets:
 	@# Tray icons land in both contexts: SNI hosts disagree on which they search.
 	@for s in $(ICON_SIZES); do \
-	  for f in apps/$(APP_ID).png apps/$(APP_ID)-tray.png \
-	           apps/whatsapp-desktop.png apps/whatsapp-desktop-tray.png \
-	           apps/WhatsApp.png \
-	           status/$(APP_ID)-tray.png status/$(APP_ID)-tray-attention.png \
-	           status/whatsapp-desktop-tray.png status/whatsapp-desktop-tray-attention.png; do \
-	    install -Dm644 data/icons/$$s/$$f $(DESTDIR)$(icontheme)/$${s}x$${s}/$$f; \
+	  for f in $$(cd $(BRAND_DIR)/icons/$$s && ls apps/*.png status/*.png); do \
+	    install -Dm644 $(BRAND_DIR)/icons/$$s/$$f $(DESTDIR)$(icontheme)/$${s}x$${s}/$$f; \
 	  done; \
 	done
 	@install -d $(DESTDIR)$(appdir)
-	@sed 's|@BINDIR@|$(bindir)|g' data/$(APP_ID).desktop > $(DESTDIR)$(appdir)/$(APP_ID).desktop
+	@sed 's|@BINDIR@|$(bindir)|g' $(BRAND_DIR)/$(APP_ID).desktop > $(DESTDIR)$(appdir)/$(APP_ID).desktop
 	@chmod 644 $(DESTDIR)$(appdir)/$(APP_ID).desktop
 	@# Skipped when staging for a package; packaging scripts run them.
 	@test -n "$(DESTDIR)" || update-desktop-database $(appdir) 2>/dev/null || true
@@ -130,7 +161,7 @@ install-assets:
 # Start hidden at login: connected and in the tray, no window on screen.
 autostart: install
 	@install -d $(autostartdir)
-	@sed 's|@BINDIR@|$(bindir)|g' data/$(APP_ID)-autostart.desktop > $(autostartdir)/$(APP_ID).desktop
+	@sed 's|@BINDIR@|$(bindir)|g' $(BRAND_DIR)/$(APP_ID)-autostart.desktop > $(autostartdir)/$(APP_ID).desktop
 	@chmod 644 $(autostartdir)/$(APP_ID).desktop
 	@echo "  AUTOSTART  $(autostartdir)/$(APP_ID).desktop"
 
@@ -141,19 +172,13 @@ uninstall: no-autostart
 	rm -rf $(DESTDIR)$(libdir)
 	rm -f $(DESTDIR)$(bindir)/$(BIN) $(DESTDIR)$(appdir)/$(APP_ID).desktop
 	@for s in $(ICON_SIZES); do \
-	  rm -f $(DESTDIR)$(icontheme)/$${s}x$${s}/apps/$(APP_ID).png \
-	        $(DESTDIR)$(icontheme)/$${s}x$${s}/apps/$(APP_ID)-tray.png \
-	        $(DESTDIR)$(icontheme)/$${s}x$${s}/apps/whatsapp-desktop.png \
-	        $(DESTDIR)$(icontheme)/$${s}x$${s}/apps/whatsapp-desktop-tray.png \
-	        $(DESTDIR)$(icontheme)/$${s}x$${s}/apps/WhatsApp.png \
-	        $(DESTDIR)$(icontheme)/$${s}x$${s}/status/$(APP_ID)-tray.png \
-	        $(DESTDIR)$(icontheme)/$${s}x$${s}/status/$(APP_ID)-tray-attention.png \
-	        $(DESTDIR)$(icontheme)/$${s}x$${s}/status/whatsapp-desktop-tray.png \
-	        $(DESTDIR)$(icontheme)/$${s}x$${s}/status/whatsapp-desktop-tray-attention.png; \
+	  for f in $$(cd $(BRAND_DIR)/icons/$$s && ls apps/*.png status/*.png); do \
+	    rm -f $(DESTDIR)$(icontheme)/$${s}x$${s}/$$f; \
+	  done; \
 	done
 
 icons:
-	python3 tools/make-icons.py
+	python3 tools/make-icons.py $(filter-out whatsapp,$(BRAND))
 
 # The link-preview card the landing page advertises. Committed under docs/, so
 # run this only when the wording or the launcher icon changes.
@@ -228,7 +253,7 @@ package-appimage:
 # with them so it stays in step with what `make install` lays down -- it builds
 # through that same target.
 package-flatpak:
-	@echo "  flatpak-builder --force-clean build-dir packaging/$(APP_ID).yml"
+	@echo "  flatpak-builder --force-clean build-dir packaging/io.github.abdallah_shehawey.dardasha.yml"
 
 package-source:
 	@mkdir -p dist

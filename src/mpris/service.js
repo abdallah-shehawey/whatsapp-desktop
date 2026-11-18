@@ -4,6 +4,7 @@
 'use strict';
 
 const { Bus } = require('../dbus.js');
+const brand = require('../brand.js');
 const {
   MPRIS_NAME,
   MPRIS_PATH,
@@ -21,7 +22,7 @@ const {
 
 /* What the card says when there is no note to name. Nothing sets a title yet --
    a voice note has none to take -- so this is what it reads whenever it is up. */
-const PLACEHOLDER_TITLE = 'WhatsApp Voice Message';
+const PLACEHOLDER_TITLE = `${brand.name} Voice Message`;
 
 class MprisService {
   constructor({ onRaise, onQuit, onPlayPause, onPlay, onPause, onStop, onSeek, onNext, onPrevious }) {
@@ -67,7 +68,7 @@ class MprisService {
      */
     this.canPlay = false;
     this.title = PLACEHOLDER_TITLE;
-    this.artist = 'WhatsApp';
+    this.artist = brand.name;
     this.durationSec = 0;
     this.positionSec = 0;
     this.rate = 1.0;
@@ -102,8 +103,8 @@ class MprisService {
       ['CanQuit', vb(true)],
       ['CanRaise', vb(true)],
       ['HasTrackList', vb(false)],
-      ['Identity', vs('WhatsApp')],
-      ['DesktopEntry', vs('io.github.shehawey.whatsapp-desktop')],
+      ['Identity', vs(brand.name)],
+      ['DesktopEntry', vs(brand.id)],
       ['SupportedUriSchemes', ['as', []]],
       ['SupportedMimeTypes', ['as', []]],
     ];
@@ -114,7 +115,7 @@ class MprisService {
       ['mpris:trackid', vo('/org/mpris/MediaPlayer2/Track/current')],
       ['xesam:title', vs(this.title)],
       ['xesam:artist', ['as', [this.artist]]],
-      ['xesam:album', vs('WhatsApp Voice Note')],
+      ['xesam:album', vs(`${brand.name} Voice Note`)],
       ['mpris:length', vx(this.durationSec * 1000000)],
     ];
   }

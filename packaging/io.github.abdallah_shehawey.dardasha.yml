@@ -1,10 +1,16 @@
-app-id: io.github.shehawey.whatsapp-desktop
+# A local development build of the Dardasha brand, from this checkout and the
+# Electron that `npm install` put in node_modules -- `make package-flatpak`.
+#
+# This is NOT the Flathub submission and must not be copied into one. Flathub
+# requires its manifest to be written without AI assistance, and this file was
+# not; its sources are also a local directory, which Flathub does not build.
+app-id: io.github.abdallah_shehawey.dardasha
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
 base: org.electronjs.Electron2.BaseApp
 base-version: '24.08'
-command: whatsapp-desktop
+command: dardasha
 
 finish-args:
   # Display & Windowing
@@ -41,7 +47,7 @@ modules:
   - name: whatsapp-desktop
     buildsystem: simple
     build-commands:
-      - make install PREFIX=/app
+      - make install PREFIX=/app BRAND=dardasha
     sources:
       - type: dir
         path: ..

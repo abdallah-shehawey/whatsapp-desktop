@@ -13,44 +13,58 @@ mkdir -p "$task_dist"
 task_dist=$(cd "$task_dist" && pwd)
 export SOURCE_DATE_EPOCH=$(git -C "$task_root" show -s --format=%ct HEAD)
 
+# The archives package the Dardasha brand under its own name; the upstream
+# source archive keeps the project's. Both names are read from the packaging
+# itself rather than restated here.
+task_upstream=whatsapp-desktop
+task_deb_source=$(git -C "$task_root" show HEAD:debian/control | sed -n 's/^Source:[[:space:]]*//p')
+task_spec_file=$(cd "$task_root" && git ls-files 'packaging/official/*.spec')
+task_spec=$(basename "$task_spec_file")
+
 # Web-site fonts, screenshots and the third-party packaging helpers are not
 # inputs to this application build. Their omission is recorded in the manifest.
 git -C "$task_root" archive --format=tar.gz \
-  --prefix="whatsapp-desktop-$task_version/" \
-  -o "$task_dist/whatsapp-desktop-$task_version.tar.gz" HEAD \
+  --prefix="$task_upstream-$task_version/" \
+  -o "$task_dist/$task_upstream-$task_version.tar.gz" HEAD \
   LICENSE README.md Makefile package.json src data tools packaging/official
-cp "$task_dist/whatsapp-desktop-$task_version.tar.gz" \
-   "$task_dist/whatsapp-desktop_$task_version.orig.tar.gz"
+cp "$task_dist/$task_upstream-$task_version.tar.gz" \
+   "$task_dist/${task_deb_source}_$task_version.orig.tar.gz"
 
-tar -xzf "$task_dist/whatsapp-desktop_$task_version.orig.tar.gz" -C "$task_build"
+tar -xzf "$task_dist/${task_deb_source}_$task_version.orig.tar.gz" -C "$task_build"
+mv "$task_build/$task_upstream-$task_version" "$task_build/$task_deb_source-$task_version"
 git -C "$task_root" archive HEAD debian | \
-  tar -x -C "$task_build/whatsapp-desktop-$task_version"
-cp "$task_dist/whatsapp-desktop_$task_version.orig.tar.gz" "$task_build/"
-(cd "$task_build" && dpkg-source -b "whatsapp-desktop-$task_version")
+  tar -x -C "$task_build/$task_deb_source-$task_version"
+cp "$task_dist/${task_deb_source}_$task_version.orig.tar.gz" "$task_build/"
+(cd "$task_build" && dpkg-source -b "$task_deb_source-$task_version")
 cp "$task_build"/*.dsc "$task_build"/*.debian.tar.* "$task_dist/"
 
 mkdir -p "$task_build/rpm"/{SOURCES,SPECS,SRPMS}
-cp "$task_dist/whatsapp-desktop-$task_version.tar.gz" "$task_build/rpm/SOURCES/"
-cp "$task_build/whatsapp-desktop-$task_version/packaging/official/whatsapp-desktop.spec" \
-   "$task_build/rpm/SPECS/"
-cp "$task_build/rpm/SPECS/whatsapp-desktop.spec" "$task_dist/"
-task_rpm_version=$(rpmspec -q --srpm --qf '%{VERSION}' "$task_dist/whatsapp-desktop.spec")
-task_source_url=$(rpmspec --parse "$task_dist/whatsapp-desktop.spec" | \
+cp "$task_dist/$task_upstream-$task_version.tar.gz" "$task_build/rpm/SOURCES/"
+cp "$task_build/$task_deb_source-$task_version/$task_spec_file" "$task_build/rpm/SPECS/"
+cp "$task_build/rpm/SPECS/$task_spec" "$task_dist/"
+task_rpm_name=$(rpmspec -q --srpm --qf '%{NAME}' "$task_dist/$task_spec")
+task_rpm_version=$(rpmspec -q --srpm --qf '%{VERSION}' "$task_dist/$task_spec")
+task_source_url=$(rpmspec --parse "$task_dist/$task_spec" | \
   sed -n 's/^Source0:[[:space:]]*//p')
 task_review_tag=${task_source_url#*/releases/download/}
 task_review_tag=${task_review_tag%%/*}
 # The Fedora range is read from the SPEC, the one place it is written, so the
 # tag and the manifest below follow it rather than restating it.
-task_electron_major=$(sed -n 's/^%global electron_major[[:space:]]*//p' "$task_dist/whatsapp-desktop.spec")
-task_electron_next=$(sed -n 's/^%global electron_next[[:space:]]*//p' "$task_dist/whatsapp-desktop.spec")
+task_electron_major=$(sed -n 's/^%global electron_major[[:space:]]*//p' "$task_dist/$task_spec")
+task_electron_next=$(sed -n 's/^%global electron_next[[:space:]]*//p' "$task_dist/$task_spec")
 if [[ ! "$task_electron_major" =~ ^[0-9]+$ || "$task_electron_next" != "$((task_electron_major + 1))" ]]; then
   printf 'Review SPEC Electron range %s..%s is not one major version\n' \
     "$task_electron_major" "$task_electron_next" >&2
   exit 1
 fi
+if [[ "$task_spec" != "$task_rpm_name.spec" || "$task_rpm_name" != "$task_deb_source" ]]; then
+  printf 'Review SPEC %s, RPM name %s and Debian source %s disagree\n' \
+    "$task_spec" "$task_rpm_name" "$task_deb_source" >&2
+  exit 1
+fi
 if [[ "$task_rpm_version" != "$task_version" || \
-      "$task_review_tag" != "packaging-review-$task_version-fedora$task_electron_major" || \
-      "$task_source_url" != "https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/$task_review_tag/whatsapp-desktop-$task_version.tar.gz" ]]; then
+      "$task_review_tag" != "packaging-review-$task_rpm_name-$task_version-fedora$task_electron_major" || \
+      "$task_source_url" != "https://github.com/abdallah-shehawey/whatsapp-desktop/releases/download/$task_review_tag/$task_upstream-$task_version.tar.gz" ]]; then
   printf 'Review SPEC version/Source0 does not match committed application %s\n' "$task_version" >&2
   exit 1
 fi
@@ -59,18 +73,20 @@ if [[ -n "${RPM_DIST:-}" ]]; then
   task_rpm_options+=(--define "dist $RPM_DIST")
 fi
 rpmbuild -bs "${task_rpm_options[@]}" \
-  "$task_build/rpm/SPECS/whatsapp-desktop.spec"
+  "$task_build/rpm/SPECS/$task_spec"
 cp "$task_build"/rpm/SRPMS/*.src.rpm "$task_dist/"
 
 node - "$task_root" "$task_dist" "$task_source_url" "$task_review_tag" \
-  "$task_electron_major" "$task_electron_next" <<'NODE'
+  "$task_electron_major" "$task_electron_next" "$task_rpm_name" <<'NODE'
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const [root, dist, sourceUrl, reviewTag, electronMajor, electronNext] = process.argv.slice(2);
+const [root, dist, sourceUrl, reviewTag, electronMajor, electronNext, packageName] = process.argv.slice(2);
 const manifest = JSON.parse(execFileSync('git', ['-C', root, 'show', 'HEAD:package.json'], {encoding:'utf8'}));
 const audit = {
   project: manifest.name,
+  package: packageName,
+  brand: 'dardasha',
   version: manifest.version,
   git_commit: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], {encoding:'utf8'}).trim(),
   included_paths: ['LICENSE', 'README.md', 'Makefile', 'package.json', 'src', 'data', 'tools', 'packaging/official'],

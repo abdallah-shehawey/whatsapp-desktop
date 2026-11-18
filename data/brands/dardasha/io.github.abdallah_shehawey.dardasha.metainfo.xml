@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.abdallah_shehawey.dardasha</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Dardasha</name>
+  <summary>Chat on WhatsApp Web with a system tray and desktop notifications</summary>
+  <description>
+    <p>Dardasha is an independent desktop client for WhatsApp Web. It adds what
+    a browser tab cannot: a system tray icon that shows unread messages, native
+    desktop notifications, global shortcuts, media controls for voice notes,
+    and starting hidden at login.</p>
+    <p>It also follows the desktop: its fonts and theme, correct direction for
+    Arabic and other right-to-left text, a passcode lock and a privacy shield
+    that keeps message text out of notifications.</p>
+    <p>It requires an existing WhatsApp account and an Internet connection.
+    Dardasha is not affiliated with, endorsed by or sponsored by WhatsApp or
+    Meta.</p>
+  </description>
+  <developer id="io.github.abdallah_shehawey">
+    <name>Abdallah Shehawey</name>
+  </developer>
+  <launchable type="desktop-id">io.github.abdallah_shehawey.dardasha.desktop</launchable>
+  <categories>
+    <category>Network</category>
+    <category>InstantMessaging</category>
+  </categories>
+  <keywords>
+    <keyword>WhatsApp</keyword>
+    <keyword>chat</keyword>
+    <keyword>messaging</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/abdallah-shehawey/whatsapp-desktop</url>
+  <url type="bugtracker">https://github.com/abdallah-shehawey/whatsapp-desktop/issues</url>
+  <url type="vcs-browser">https://github.com/abdallah-shehawey/whatsapp-desktop</url>
+  <branding>
+    <color type="primary" scheme_preference="light">#b7f0cb</color>
+    <color type="primary" scheme_preference="dark">#14532d</color>
+  </branding>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Desktop integration, theme and privacy settings</caption>
+      <image>https://raw.githubusercontent.com/abdallah-shehawey/whatsapp-desktop/main/data/brands/dardasha/screenshots/settings.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>About Dardasha, with its version and update check</caption>
+      <image>https://raw.githubusercontent.com/abdallah-shehawey/whatsapp-desktop/main/data/brands/dardasha/screenshots/about.png</image>
+    </screenshot>
+  </screenshots>
+  <!-- @RELEASES@ the default brand's <releases>, copied in by `make install` -->
+  <requires>
+    <internet>always</internet>
+  </requires>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+    <content_attribute id="social-contacts">intense</content_attribute>
+  </content_rating>
+</component>
