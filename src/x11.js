@@ -245,11 +245,18 @@ const connect = async (display = process.env.DISPLAY, signal) => {
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /* Connecting starts XWayland if it is still dormant. Wait until GNOME's
-   selection owner has actually written the initial XSettings property. */
-const waitForXSettings = async ({ display, within = 2000, every = 40 } = {}) => {
+   selection owner has actually written the initial XSettings property.
+   Resolves true once it has, false if `within` runs out first. The bound is
+   generous because a first login starts XWayland, gsd-xsettings and every
+   other autostart entry at once. When the settings are there it returns
+   straight away, so the bound only costs anything when they never come.
+   The deadline may land while connecting or mid-read, where it cuts the
+   socket; that is still running out of time, and says false all the same. */
+const waitForXSettings = async ({ display, within = 5000, every = 40 } = {}) => {
   const signal = AbortSignal.timeout(within);
-  const connection = await connect(display, signal);
+  let connection = null;
   try {
+    connection = await connect(display, signal);
     const atom = async name => (await connection.ask(internAtom(name))).readUInt32LE(8);
     while (!signal.aborted) {
       const [selection, settings] = await Promise.all(['_XSETTINGS_S0', '_XSETTINGS_SETTINGS'].map(atom));
@@ -258,13 +265,17 @@ const waitForXSettings = async ({ display, within = 2000, every = 40 } = {}) => 
         if (owner) {
           const reply = await connection.ask(request(OP.GET_PROPERTY, 0, [owner, settings, settings, 0, 0]));
           /* A zero-length read leaves the property size in bytesAfter. */
-          if (reply[1] === 8 && reply.readUInt32LE(12) > 0) return;
+          if (reply[1] === 8 && reply.readUInt32LE(12) > 0) return true;
         }
       }
       await sleep(every);
     }
+    return false;
+  } catch (error) {
+    if (signal.aborted) return false;
+    throw error;
   } finally {
-    connection.close();
+    if (connection) connection.close();
   }
 };
 

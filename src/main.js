@@ -226,7 +226,13 @@ if (forceX11 && ozonePlatform !== 'x11') {
      unset. Give GNOME a bounded wait before the replacement process starts. */
   if (onWayland && process.env.DISPLAY &&
       process.env.XDG_CURRENT_DESKTOP?.split(':').includes('GNOME')) {
-    x11.waitForXSettings().then(switchToX11, switchToX11);
+    x11.waitForXSettings().then(ready => {
+      if (!ready) console.log('GNOME published no XSettings in time; the cursor theme may fall back to Adwaita');
+      switchToX11();
+    }, error => {
+      console.log('could not wait for GNOME XSettings: %s', error.message);
+      switchToX11();
+    });
   } else {
     switchToX11();
   }

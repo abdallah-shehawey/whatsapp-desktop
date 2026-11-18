@@ -21,10 +21,11 @@ const run = ({ platform = 'wayland', forceX11 = false, args = [], env = {}, wait
   const switches = new Map([['ozone-platform', platform]]);
   const appended = [];
   const relaunched = [];
+  const logs = [];
   const context = {
     process: { argv: ['/electron', '/app', ...args], env },
     config: { get: key => key === 'system.force-x11' && forceX11 },
-    console: { log() {} },
+    console: { log: (...words) => logs.push(words.join(' ')) },
     x11: { waitForXSettings },
     app: {
       commandLine: {
@@ -37,7 +38,7 @@ const run = ({ platform = 'wayland', forceX11 = false, args = [], env = {}, wait
   };
   context.relaunch = options => context.app.relaunch(options);
   const result = vm.runInNewContext(`(() => { ${startup}\nreturn { onWayland, forceX11 }; })()`, context);
-  return { result, switches, appended, relaunched };
+  return { result, switches, appended, relaunched, logs };
 };
 
 const originalArgs = ['--hidden', '--user-data-dir=/isolated/profile'];
@@ -83,15 +84,24 @@ assert.deepStrictEqual(x11.switches.get('enable-features').split(','),
 
 const checkXSettings = async () => {
   const env = { XDG_CURRENT_DESKTOP: 'fedora:GNOME', DISPLAY: ':0' };
-  for (const startService of [true, false]) {
+  const outcomes = [
+    { name: 'published', settle: (resolve) => resolve(true), said: null },
+    { name: 'timed out', settle: (resolve) => resolve(false), said: /no XSettings in time/ },
+    { name: 'failed', settle: (resolve, reject) => reject(new Error('not a local X display')), said: /could not wait.*not a local X display/ },
+  ];
+  for (const outcome of outcomes) {
     let finishWait;
-    const ready = new Promise((resolve, reject) => { finishWait = startService ? resolve : reject; });
+    const ready = new Promise((resolve, reject) => { finishWait = () => outcome.settle(resolve, reject); });
     const delayed = run({ forceX11: true, args: originalArgs, env, waitForXSettings: () => ready });
     assert.deepStrictEqual(delayed.relaunched, [], 'GNOME XWayland starts after the settings wait');
     assert.strictEqual(delayed.result, undefined, 'the waiting process does not create the window');
     finishWait();
     await Promise.resolve();
-    assert.deepStrictEqual(delayed.relaunched, requested.relaunched, 'the restart proceeds after the wait settles');
+    assert.deepStrictEqual(delayed.relaunched, requested.relaunched,
+      `the restart proceeds once the wait has ${outcome.name}`);
+    const warned = delayed.logs.filter(line => /XSettings/.test(line));
+    if (outcome.said) assert(warned.some(line => outcome.said.test(line)), `a wait that ${outcome.name} says so`);
+    else assert.deepStrictEqual(warned, [], 'a wait that succeeded says nothing about XSettings');
   }
 };
 

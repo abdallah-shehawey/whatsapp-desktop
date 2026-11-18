@@ -73,6 +73,8 @@ const ATOMS = { _NET_WM_STATE: 300, _NET_WM_STATE_MAXIMIZED_VERT: 301, _NET_WM_S
 const serve = (script, { cookie = COOKIE, settingsAfter = Infinity, stallSettings = false } = {}) => new Promise(resolve => {
   const seen = { configures: [], polls: 0, settingsReads: 0, setup: null };
   const server = net.createServer(socket => {
+    /* A client that gives up at its deadline hangs up mid-reply. */
+    socket.on('error', () => {});
     let buffer = Buffer.alloc(0);
     let ready = false;
     let sequence = 0;
@@ -222,8 +224,18 @@ const run = async () => {
   {
     const { server, seen } = await serve([], { settingsAfter: 3 });
     try {
-      await waitForXSettings({ display, within: 300, every: 10 });
-      check('XSettings waits for the property even after GNOME owns the selection', seen.settingsReads, 3);
+      const ready = await waitForXSettings({ display, within: 300, every: 10 });
+      check('XSettings waits for the property even after GNOME owns the selection',
+            [ready, seen.settingsReads], [true, 3]);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  }
+  {
+    const { server, seen } = await serve([]);
+    try {
+      const ready = await waitForXSettings({ display, within: 100, every: 10 });
+      check('settings that never arrive end the wait with false', [ready, seen.settingsReads > 1], [false, true]);
     } finally {
       await new Promise(resolve => server.close(resolve));
     }
@@ -231,10 +243,10 @@ const run = async () => {
   {
     const { server, seen } = await serve([], { stallSettings: true });
     try {
-      await waitForXSettings({ display, within: 100, every: 10 });
-      check('a stalled settings read should time out', 'resolved', 'AbortError');
+      const ready = await waitForXSettings({ display, within: 100, every: 10 });
+      check('a stalled settings read is cut off at the deadline', [ready, seen.settingsReads], [false, 1]);
     } catch (error) {
-      check('a stalled settings read is cancelled at the deadline', [seen.settingsReads, error.name], [1, 'AbortError']);
+      check('a stalled settings read is cut off at the deadline', error.name, 'false, not an error');
     } finally {
       await new Promise(resolve => server.close(resolve));
     }
