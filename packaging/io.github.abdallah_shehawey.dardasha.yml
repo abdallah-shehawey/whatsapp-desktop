@@ -47,7 +47,7 @@ modules:
   - name: whatsapp-desktop
     buildsystem: simple
     build-commands:
-      - make install PREFIX=/app BRAND=dardasha
+      - make install PREFIX=/app BRAND=dardasha SANDBOX_WRAPPER=zypak-wrapper
     sources:
       - type: dir
         path: ..
