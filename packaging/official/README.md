@@ -16,14 +16,17 @@ bundled application's major version. On 2026-10-09, Fedora devel feedback
 identified the official Rawhide runtime as `nodejs-electron` 43.2.0-1.fc46:
 <https://packages.fedoraproject.org/pkgs/nodejs-electron/nodejs-electron/>.
 It provides `electron` and `/usr/bin/electron`. After basic runtime checks,
-the current Fedora SPEC revision 2 requires Electron `>= 43, < 44` and matches
-the runtime's observed window class. See [the runtime check](fedora-runtime-check.md)
-for the evidence and its limits. Later major versions require further validation.
-Rawhide availability does not establish availability in existing stable Fedora
-releases. The normal bundled release continues to use Electron 40.
+Fedora SPEC revision 2 required Electron `>= 43, < 44` and matched the
+runtime's observed window class. On 2026-11-17 Bodhi marked
+`nodejs-electron-44.11.3-1.fc46` stable in Rawhide, replacing 43. After the same
+checks against it, the SPEC (1.10.5-2) requires Electron `>= 44, < 45`. See
+[the runtime check](fedora-runtime-check.md) for the evidence and its limits.
+Later major versions require further validation. Rawhide availability does not
+establish availability in existing stable Fedora releases. The normal bundled
+release continues to use Electron 40.
 
 The SPEC states that range as one rich dependency,
-`(electron >= 43 with electron < 44)`, so a single installed Electron has to
+`(electron >= 44 with electron < 45)`, so a single installed Electron has to
 satisfy both bounds. Written as two separate `Requires` lines each bound was
 satisfied on its own and the range never held. The same dependency is also a
 `BuildRequires`: once Fedora's runtime leaves the range this package stops
@@ -67,10 +70,12 @@ packaging/official/build-source-packages.sh
 ```
 
 Use a separate `DIST` output directory to preserve existing review snapshots.
-Fedora review sources use a version-specific release tag,
-`packaging-review-<application version>-fedora43`. The builder checks the
-committed package version against the expanded SPEC `Source0` and records the
-exact URL and tag in `build-manifest.json`. Publish every generated review
+Fedora review sources use a release tag naming the application version and
+the Electron major in the SPEC, `packaging-review-<application version>-fedora<electron major>`
+(for example `packaging-review-1.10.5-fedora44`). The builder reads that range
+from the SPEC, checks the committed package version and the tag against the
+expanded SPEC `Source0`, and records the exact URL, tag and range in
+`build-manifest.json`. Publish every generated review
 artifact together under that tag, then verify anonymous downloads against
 `SHA256SUMS` before linking the snapshot in the distribution review. A normal
 application release does not publish a new review snapshot automatically.
