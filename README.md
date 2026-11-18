@@ -5,409 +5,82 @@
 <h1 align="center">whatsapp-desktop</h1>
 
 <p align="center">
-  WhatsApp for Linux — the web client in a <b>desktop window of its own</b>, on Chromium.<br>
-  Lives in the tray, notifies like a native application, and reads Arabic the way Arabic reads.
+  An unofficial WhatsApp desktop client for Linux, built on Electron.<br>
+  Tray icon, native notifications, themes, and right-to-left text that reads correctly.
 </p>
 
 <p align="center">
-  <a href="https://abdallah-shehawey.github.io/whatsapp-desktop/"><img alt="website" src="https://img.shields.io/badge/site-abdallah--shehawey.github.io%2Fwhatsapp--desktop-38bdf8"></a>
-  <a href="https://abdallah-shehawey.github.io/shinux-repo/"><img alt="packages" src="https://img.shields.io/badge/packages-rpm%20%7C%20deb%20%7C%20arch-f59e0b"></a>
-  <img alt="built on" src="https://img.shields.io/badge/built%20on-Electron%2040-22c55e">
-  <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0--or--later-64748b">
+  <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/abdallah-shehawey/whatsapp-desktop"></a>
+  <a href="https://github.com/abdallah-shehawey/whatsapp-desktop/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/abdallah-shehawey/whatsapp-desktop/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
+  <a href="https://abdallah-shehawey.github.io/whatsapp-desktop/"><img alt="Website" src="https://img.shields.io/badge/website-online-38bdf8"></a>
 </p>
 
 ---
 
-It loads `web.whatsapp.com`, so it is the same client WhatsApp serves to a
-browser — no reverse-engineered protocol, and nothing that puts an account at
-risk.
-
-It is the second attempt. The first, [`whatsapp`](https://github.com/abdallah-shehawey/whatsapp),
-is 120 KB of C against GTK4 and WebKitGTK; this one starts from an engine that
-does not need most of its workarounds. They install side by side and share
-nothing, not even a state directory.
-
-**[abdallah-shehawey.github.io/whatsapp-desktop](https://abdallah-shehawey.github.io/whatsapp-desktop/)**
-— every install command spelled out, and the newest packages read straight off
-the latest release.
-
-## What it does
-
-- **Lives in the tray.** Closing the window keeps the client connected;
-  `Ctrl+Q` and the tray's Quit are the two ways out, and it can start hidden at
-  login. GNOME has no tray of its own: the icon needs the AppIndicator
-  extension, and the client waits for it rather than giving up when it starts
-  first at login.
-- **A palette of its own.** WhatsApp Web has two looks and neither is the
-  desktop's. OLED Black, Nord, Catppuccin, Dracula and Tokyo Night repaint the
-  page through WhatsApp's own design-system properties — the whole window, not
-  just the chat list: the nav rail, the right-hand pane, the settings panels,
-  the bubbles and the tooltips. Three rules, nothing matched per element on a
-  scrolling list. The chat wallpaper is left to WhatsApp, doodles or an image,
-  with the doodle colour derived from the palette so it stays visible over a
-  ground WhatsApp never chose it for. A desktop themed from its wallpaper with
-  pywal or Hyprland lends its accent, and *Default* in the palette row puts
-  WhatsApp's own colours back.
-- **The chat list as cards**, optionally: WhatsApp already rounds a box behind
-  every row and already leaves the gap, and paints it the very colour of the
-  panel behind it. One switch raises it off.
-- **Covered when somebody walks up.** `Ctrl+Alt+P` blurs the messages, the
-  media and — if you want — the names and pictures in the chat list, with the
-  line under the pointer still readable so it can be left on. A passcode can
-  cover the window outright, after a quiet interval or with the desktop's own
-  lock; while it is on, a banner says a message arrived and not a word of it.
-  None of it encrypts the session on disk.
-- **A font for English and a font for Arabic** — family, size, bold and italic
-  for each, chosen from what is installed, each with its own "use the system
-  font" switch, in a window of their own on the tray's *Fonts…*. It costs
-  nothing per element: the two scripts are two `@font-face` faces of one
-  family, split by `unicode-range`, so there is no rule matching every element
-  on a scrolling page.
-- **Draws everything in the desktop's font**, applied live when you change it,
-  down to the client's own windows.
-- **One notification per message**, with the sender, the text and the sender's
-  picture, a click that opens that conversation, and a withdrawal the moment you
-  open the chat or read it on your phone. Each message is its own entry rather
-  than a replacement for the last, media says what kind it is (`📷 Photo`,
-  `🏷 Sticker`, `🎤 Voice message`) so it cannot be mistaken for somebody typing
-  the word, and every line of a banner reads the way its own words do rather
-  than taking its direction from the Latin name in front of it. Nothing is announced for a message you sent
-  yourself, a muted group is silent unless you were mentioned in it, and
-  do-not-disturb silences the tone as well as the banner.
-- **Arabic reads like Arabic.** Every line of a message takes its direction
-  from its own first strong character, so Arabic sits against the right margin
-  and English against the left in the same message — whichever of them the
-  message happens to open with, and whatever emoji or punctuation comes first.
-  In a bubble and in the replies to a community post alike; the panel behind
-  “6 replies” is built nothing like a bubble and had to be taught separately.
-  Descenders get the room WhatsApp's line boxes do not leave them, and the
-  timestamp is kept off the last line of the text instead of landing on top of
-  it. The chat list is the exception, on purpose: it is a column of rows rather
-  than words to be read, so an Arabic name sits exactly where an English one
-  does and only the letters inside it run the other way. None of this is a
-  switch: it is how the client draws a conversation.
-- **Banners come down on the client's own clock.** GNOME shows one at a time,
-  queues three behind it and drops the rest, so each banner is closed after
-  twelve seconds and refiled silently in the notification centre.
-- **Voice and video calls, with nothing to allow first.** The camera and the
-  microphone are granted to WhatsApp's own origin and to no other, so a call
-  rings or is answered without a permission prompt in the way. Each one opens in
-  a window of its own, drawn in this client's font like every other page it
-  shows. WebGPU is turned off deliberately: on Linux and Wayland its external
-  texture path hands video frames back black, and a call camera that renders a
-  black 1280×720 rectangle is what that looks like.
-- **Two windows of switches, and no text editor.** Settings (`Ctrl+,`, or the
-  tray) has the theme — system, dark or light, or one of the palettes, with
-  *Default* to put WhatsApp's own colours back — the chat list as cards,
-  start-at-login, what closing the window does, the privacy and passcode rows,
-  the spell checker and the languages it has dictionaries for, which sounds you
-  want and the zoom; *Fonts…* has the two scripts. Everything lands the moment
-  you set it. The tray menu itself is four items and stays that way.
-- **Says when a new version is out.** *About WhatsApp* in the tray menu has the
-  version running, a check against the latest release and a link to the site;
-  the client also looks once a day by itself, and the tray item names the
-  version when there is one to name. It never installs anything — your package
-  manager does that, and the site has the command for your distribution.
-- **It moves better than the browser it is.** All of it measured rather than
-  guessed. The conversation scrolls on the GPU: Chromium's Linux driver
-  blocklist is years out of date and decides against compositing on hardware
-  that is fine, which turns every wheel tick into a software raster of the whole
-  viewport — that is overridden, the messages list is put on a layer of its own,
-  and a wheel notch is animated instead of jumped. The right-hand drawer slides
-  in and out rather than appearing, and every page behind the nav rail and in
-  You — Profile and its siblings, Calls, Status, Channels, Communities — rises
-  into place the same way, once per page, entirely on the compositor: WhatsApp's
-  own fades and slides on those panels are let through with no duration, so the
-  two never share a panel and push it back onto the main thread, and a section
-  that swaps its loading page for its list keeps the reveal it already has
-  instead of fading in twice. A first visit no longer looks like one: WhatsApp
-  fetches a section's code the first time it is opened, a round trip to its
-  server behind a spinner, so the sections are loaded ahead, at idle, a few
-  seconds after the client starts, and a chat's history starts loading the
-  moment the pointer rests on its row. The chat wallpaper's doodles are drawn
-  once, into a bitmap at the screen's own scale, rather than from 360 stroked
-  paths in every chat — that alone was 75ms of GPU raster landing in the middle
-  of each chat's entrance. And the reply bar and the conversation above it move
-  as one: WhatsApp grows and shrinks the bar's height on every frame and hands
-  the conversation its room only once that is over, so the bar was dismissed and
-  the conversation then dropped 72px in a single frame. Its animation now
-  finishes on the spot and the bar's card slides out from behind the composer
-  with the messages rising beside it, and back down with them when it is
-  dismissed; send the reply and the card fades as the message comes up in its
-  place, the conversation moving once, by the difference between the two. That
-  animation is WhatsApp's own `max-height`, written inline frame by frame — a
-  layout property, so the footer and the whole conversation above it are laid
-  out again on every one of its frames: measured, twelve of them over an open,
-  in frames of 5 to 26ms against a display that draws one every 6. It is
-  pinned by this client's stylesheet, where a user-origin declaration outranks
-  the inline one without touching the style attribute React owns, so the bar
-  takes its height in a single layout and the motion is the compositor's.
-  Dismissing it runs the same tween backwards over 292ms before WhatsApp
-  unmounts the bar, so the dismissal is answered on that tween's first frame
-  rather than its last — the card starts falling 12ms after the X instead of
-  292. And a
-  message landing in the conversation on screen no longer arrives by teleport:
-  WhatsApp appends the row and scrolls by exactly its height in the same frame,
-  so the whole conversation used to step up 55px at once — it now glides that
-  distance while the new bubble grows out of its own bottom corner, the corner
-  measured from the box so an Arabic conversation pops from the other side. And
-  jumping to a message — the pinned one at the top of a chat, a quoted reply, a
-  search result — now ends on the message rather than a screenful past it.
-  WhatsApp scrolls twice: once instantly, to bring the message onto the screen,
-  and then a 400ms settle that centres it. The settle works out where it is
-  going the moment it starts, while the rows above the message are still being
-  rendered, so it scrolls faithfully to a measurement of a conversation that no
-  longer exists: the message went from 35px below the top of the room to 1304px
-  above it. It is run again here instead, on WhatsApp's own curve and to
-  WhatsApp's own destination, but against a measurement taken every frame — so
-  the second and third pinned messages of a chat land as squarely as the first.
-  None of it is a setting: it is how the client draws a page.
-  There are deliberately **no** custom scrollbars — one `::-webkit-scrollbar`
-  rule takes a scroller off Chromium's composited path and puts it back on the
-  main thread, and that is a cosmetic gain paid for in frames.
-- **A right-click menu where the page has none.** WhatsApp answers a right-click
-  over a message with its own menu, and this stays out of its way; everywhere it
-  does not — the composer, the search boxes, a page a link opened in a window of
-  its own — there is now a native one, with the spell checker's suggestions at
-  the top of it. Copy, paste and paste-without-formatting, a link's address, an
-  image, and *Inspect* for the devtools that are already a `Ctrl+Shift+I` away.
-- **Screen sharing in a call**, over PipeWire on Wayland, offering windows as
-  well as whole screens.
-- Dark or light follows the desktop, links open in your browser, every download
-  asks where to put it, `Ctrl` `+`/`-`/`0` zoom and the window size is
-  remembered. `Esc` closes the emoji panel whether or not you picked one.
-
-## What it looks like
-
-Three windows of its own, and no text editor anywhere. Widths differ so the
-heights match; every one of them is a real window, photographed by
-`make screenshots`.
+whatsapp-desktop opens `web.whatsapp.com` in its own window. You get the same
+client WhatsApp gives a browser, so it doesn't reverse-engineer the protocol or
+put your account at risk. On top of the web client it adds what a browser tab
+can't do: a tray icon, a notification for each message, desktop-wide shortcuts,
+a passcode lock and proper Arabic text.
 
 <p align="center">
-  <img src="screenshots/settings.png" alt="The Settings window: theme, start at login, close and minimise to tray, notifications and their sounds, and the zoom level." height="430" />
-  <img src="screenshots/fonts.png" alt="The Fonts window: a family, a size and a weight for Latin and for Arabic, each with its own switch, and a preview line in each script." height="430" />
-  <img src="screenshots/about.png" alt="The About window: the version running, an update check that says it is up to date, and links to the site and the source." height="430" />
+  <img src="screenshots/settings.png" alt="Settings window" height="360">
+  <img src="screenshots/fonts.png" alt="Fonts window" height="360">
+  <img src="screenshots/about.png" alt="About window" height="360">
 </p>
 
-<p align="center">
-  <sub><b>Settings</b> — theme, tray, notifications, zoom &nbsp;·&nbsp;
-  <b>Fonts</b> — one for Latin, one for Arabic &nbsp;·&nbsp;
-  <b>About</b> — the version, and whether a newer one is out</sub>
-</p>
+## Features
+
+- **Runs in the tray.** Closing the window doesn't disconnect you, and it can start hidden at login. GNOME needs the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) to show the icon.
+- **Notifications.** One per message, with the sender, the text and their picture. Clicking one opens the chat, and it disappears once you read the message on any device. Muted chats stay silent unless someone mentions you.
+- **Arabic and RTL text.** Each line follows the direction of its own text, so Arabic and English can share one message. Line spacing and timestamps are fixed too.
+- **Themes.** System, dark, light, OLED Black, Nord, Catppuccin, Dracula or Tokyo Night. It can also take its accent color from pywal or Hyprland.
+- **Fonts.** You can pick a family, size and style for Latin and another for Arabic. By default both follow the desktop font.
+- **Privacy.** `Ctrl+Alt+P` blurs messages and contacts. An optional passcode locks the window when it's idle or when the desktop locks, and notifications can hide message text.
+- **Calls and screen sharing.** The camera and microphone are allowed for WhatsApp only. On Wayland, you can share a window or the whole screen over PipeWire.
+- **Global shortcuts.** Show or hide the window and mute yourself in a call from anywhere. On Wayland these go through the desktop portal.
+- **Media keys.** Voice notes show up as a media player (MPRIS), so headset buttons control them.
+- **Smooth.** Scrolling runs on the GPU and animations run on the compositor, so it moves more smoothly than a browser tab.
+- **Update notices.** It checks GitHub once a day and tells you when a new version is out. Your package manager does the actual update.
+- **No config file needed.** Every option is in the Settings and Fonts windows, and changes take effect right away.
 
 ## Install
 
-From the [shinux repository](https://abdallah-shehawey.github.io/shinux-repo/):
+### Package repository (recommended)
+
+Add the [shinux repository](https://abdallah-shehawey.github.io/shinux-repo/), then install with your package manager. After that, updates come with the rest of your system.
 
 ```sh
 curl -fsSL https://abdallah-shehawey.github.io/shinux-repo/install.sh | sudo sh
-sudo dnf install whatsapp-desktop     # Fedora and friends
-sudo apt install whatsapp-desktop     # Debian, Ubuntu 24.04+
-sudo pacman -S whatsapp-desktop       # Arch
 ```
-
-Packages are also on every [release](../../releases), and the
-[website](https://abdallah-shehawey.github.io/whatsapp-desktop/#download) links
-whichever one is newest. It ships its own copy of Electron, so it needs no
-browser installed — 245 MB on disk, 76 MB as a `.deb`.
-
-The package installs a system-wide autostart entry, so the client starts hidden
-in the tray at login. To stop that: Settings → Applications → Startup, or delete
-`/etc/xdg/autostart/io.github.shehawey.whatsapp-desktop.desktop`.
-
-## Build
-
-Needs Node and nothing else.
 
 ```sh
-make            # fetches Electron
-make install    # ~/.local, plus a desktop entry and icons
-make autostart  # also start hidden at login
-make test       # replays a chat list past the watcher, no browser needed
-make screenshots # re-photographs the three windows, for the README and the site
+sudo dnf install --refresh whatsapp-desktop                # Fedora
+sudo apt update && sudo apt install whatsapp-desktop       # Debian, Ubuntu 24.04+
+sudo pacman -Syu whatsapp-desktop                          # Arch
 ```
 
-## Keys
+If you'd rather add the repository by hand, the [website](https://abdallah-shehawey.github.io/whatsapp-desktop/#download) has the steps for each distribution.
 
-| | |
-|---|---|
-| `Ctrl` `+` / `-` / `0` | zoom in, out, reset |
-| `Ctrl+,` | settings |
-| `Ctrl+F` | search: the open chat's messages, the media hub while it is open, or the list on screen — chats, Calls, Channels |
-| `Ctrl+Alt+P` | blur the conversation, and reveal it again |
-| `Ctrl+Alt+L` | lock it now, if a passcode is set |
-| `Ctrl+Shift+I` | devtools |
-| `Ctrl+Q` | quit for real |
-| window close | hides to the tray, stays connected |
+### Release downloads
 
-Two more are registered with the desktop rather than with the window, so they
-reach a client that is behind something else or in the tray. A combination the
-desktop has already given away cannot be taken twice; the client says so on
-startup and carries on without it.
+Every [release](https://github.com/abdallah-shehawey/whatsapp-desktop/releases/latest) has these files:
 
-On a Wayland session (GNOME 48 or later, KDE, Hyprland) they go through the
-desktop's global shortcuts portal, through XWayland or not. The first start
-opens the desktop's own dialog to confirm them. After that the desktop owns
-the binding: change it in the desktop's settings, or change it here and the
-client opens that dialog again. Where there is no such portal, the keys are
-grabbed from X11 as before.
-
-| | |
-|---|---|
-| `Super+Alt+W` | show the window, or put it away |
-| `Super+Alt+M` | the microphone in a call |
-
-## Configuration
-
-`~/.config/whatsapp-desktop/whatsapp-desktop.conf`, every key optional:
-
-| Key | Default | What it does |
+| Distribution | File | Install |
 |---|---|---|
-| `[view] theme` | `system` | `system` follows the desktop, or force `dark` / `light`. Or a palette for the page: `oled`, `nord`, `catppuccin`, `dracula`, `tokyonight` — each picks dark or light underneath it from its own background |
-| `[view] font` | the GNOME interface font | family for everything the client draws |
-| `[view] font-size` | `16` | root font size in pixels — WhatsApp sizes in rem |
-| `[view] zoom` | `1.0` | also set with `Ctrl` `+`/`-` |
-| `[view] force-font` | `true` | draw the page in one family |
-| `[view] follow-desktop-accent` | `true` | take the accent from pywal/wallust or Hyprland, if either has written one |
-| `[view] custom-css` | `false` | read `custom.css` from the same directory into the page, last, so it wins over everything the client draws. Saving the file redraws it |
-| `[view] chat-cards` | `false` | draw each chat in the list as a card raised off the panel behind it. WhatsApp already rounds the box and leaves the gap; this is the colour it never gave it |
-| `[fonts] latin-inherit` | `true` | Latin follows the desktop font; off to choose one |
-| `[fonts] latin-family` | the desktop font | family for Latin letters, digits and punctuation |
-| `[fonts] latin-size` | `100` | its size, as a percentage of the family's own |
-| `[fonts] latin-bold`, `latin-italic` | `false` | draw Latin in the family's bold or italic **face** — nothing is synthesised, so a family without one cannot be made to have it |
-| `[fonts] arabic-inherit` | `true` | the same switch for Arabic, separately |
-| `[fonts] arabic-family` | whatever the system draws Arabic in | family for Arabic, even in the middle of an English line |
-| `[fonts] arabic-size` | `100` | Arabic on its own, beside the Latin in the same line |
-| `[fonts] arabic-bold`, `arabic-italic` | `false` | as above |
-| `[window] remember-size` | `true` | write the window's size and whether it is maximised back as they change, so it opens the way it was left -- after a shutdown too, which never closes it. Off for a tiling window manager, or a config kept in git: the window opens as the keys below say and nothing changes them |
-| `[window] maximized` | `false` | open maximised; remembered as it changes while `remember-size` is on |
-| `[window] width`, `height` | `1200x800` | remembered as it changes while `remember-size` is on -- the size it un-maximises to, even when it was left maximised |
-| `[behaviour] close-to-tray` | `true` | closing the window leaves the client running |
-| `[behaviour] minimize-to-tray` | `false` | minimise is not close |
-| `[behaviour] spellcheck` | `true` | Chromium's own, in the box you type in |
-| `[behaviour] spellcheck-languages` | `en-US` | comma separated, in Chromium's naming. Only languages it ships a dictionary for can be asked for; the rest are dropped with a line saying so. Arabic is not one of them |
-| `[behaviour] mpris` | `true` | a media card on the desktop while a voice note plays, so the headset button reaches the note rather than a music player |
-| `[behaviour] raise` | `auto` | how the window is brought to the front when a banner is clicked. `auto` picks one and corrects itself once from what the window actually did; `activate` (ask the compositor) and `remap` (take it down and open it again) are taken as given |
-| `[shortcuts] global` | `true` | off leaves both desktop-wide keys alone |
-| `[shortcuts] toggle` | `Super+Alt+W` | show the window or put it away, from anywhere |
-| `[shortcuts] mute-call` | `Super+Alt+M` | the microphone in a call, from anywhere |
-| `[privacy] stealth` | `false` | the conversation covered, which is what `Ctrl+Alt+P` holds; remembered across a restart |
-| `[privacy] auto-blur` | `false` | cover it whenever the window is not the one in front |
-| `[privacy] hover-reveal` | `true` | while covered, the line under the pointer stays readable |
-| `[privacy] blur-contacts` | `true` | the chat list and the header too, not just the messages |
-| `[lock] enabled` | `false` | written by the client when a passcode is set or cleared; it means nothing without one |
-| `[lock] timeout` | `15` | minutes of a quiet window before it locks itself, `0` to never |
-| `[lock] on-system-lock` | `true` | lock with the desktop's own lock and on suspend |
-| `[system] force-x11` | `false` | go through XWayland, for a compositor where a screen share comes out black. Needs a restart |
-| `[system] hardware-acceleration` | `true` | off draws in software, for a driver the GPU override hangs. Needs a restart |
-| `[notifications] enabled` | `true` | off hands notifications back to Chromium |
-| `[notifications] sound` | `true` | a tone for the banners this client raises |
-| `[notifications] outgoing-sound` | `false` | WhatsApp's own tone for a message *you* send |
-| `[notifications] whatsapp-sound` | `false` | let WhatsApp play its own tone for a message arriving, instead of the desktop tone this client plays either way |
-| `[notifications] banner-seconds` | `12` | before a banner is refiled silently |
-| `[notifications] hide-preview` | `false` | on, a banner names the chat and the kind of message and never the words |
-| `[media] ask-where-to-save` | `true` | every download asks; off, they land in `~/Downloads` |
-| `[media] download-dir` | — | where the last one went, so the chooser opens there; written by the client |
-| `[media] download-stickers` | `true` | fetch stickers whether or not photos are — the phone has no sticker switch either |
-| `[media] hide-controls-when-paused` | `true` | take the desktop's media card down when a voice note is paused, rather than when it ends |
-| `[links] claim-scheme` | `true` | open `whatsapp:` links here rather than in a browser tab |
-| `[updates] check` | `true` | the daily look for a newer release; off, nothing asks by itself and *Check* in About still does |
+| Fedora | `whatsapp-desktop-<version>-1.x86_64.rpm` | `sudo dnf install ./whatsapp-desktop-*.rpm` |
+| Debian, Ubuntu | `whatsapp-desktop_<version>_amd64.deb` | `sudo apt install ./whatsapp-desktop_*.deb` |
+| Arch | `whatsapp-desktop-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U ./whatsapp-desktop-*.pkg.tar.zst` |
+| Any (AppImage) | `WhatsApp-Desktop-<version>-x86_64.AppImage` | `chmod +x` the file and run it |
 
-The passcode lives beside the config file in `security.json`, mode 0600, as a
-PBKDF2 hash over a random salt — never the passcode itself. It covers the window
-and stops banners carrying the message; it does **not** encrypt the session, and
-anybody with the machine can read the chats out of `~/.local/share`.
+To check a download, run `sha256sum -c SHA256SUMS --ignore-missing`. Every package ships its own Electron, so you don't need a browser installed.
 
-State lives in `~/.local/share/whatsapp-desktop`.
+The rpm, deb and Arch packages also install an autostart entry that starts the client hidden in the tray. To turn it off, use your desktop's startup settings or delete `/etc/xdg/autostart/io.github.shehawey.whatsapp-desktop.desktop`.
 
-## Layout
+### npm (GitHub Packages)
 
-| | |
-|---|---|
-| `src/main.js` | window, session, tray, notifications, switches |
-| `src/preload.js` | the bridge — the page's world on one side, IPC on the other |
-| `src/page/inject.js` | the chat-list watcher and the notification shim, in WhatsApp's own world |
-| `src/notify.js` | the banner policy |
-| `src/style.js` | the user stylesheet — the font, and the room Arabic needs |
-| `src/settings.html`, `src/fonts.html` | the two windows of switches, and `src/window.css`, which is the look of both |
-| `src/about.html` | the About window, and the update check it shows |
-| `src/update.js` | asks GitHub for the latest release, and compares |
-| `src/themes.js`, `src/themes/` | the palettes, and the accent pywal or Hyprland wrote |
-| `src/privacy.js` | the blur, and which of the two switches is holding it |
-| `src/lock.js`, `src/lock/` | the passcode — PBKDF2 over a salt, and the file it lives in |
-| `src/lock.html` | the window that covers the conversation until it is typed |
-| `src/mpris.js`, `src/mpris/` | the desktop's media card, over the same D-Bus the tray uses |
-| `src/fonts.js`, `src/tray.js`, `src/config.js`, `src/desktop.js`, `src/sound.js`, `src/debug.js` | |
-| `tools/make-icons.py` | regenerates `data/icons` — `make icons`, never hand-edit the PNGs |
-| `tools/make-og.py` | redraws the site's link-preview card — `make og` |
-| `tools/capture-windows.js` | photographs the three windows above — `make screenshots`, which also copies them to `docs/assets` |
-| `docs/` | the landing page, served by GitHub Pages from `main` |
-| `tools/test-inject.js`, `tools/test-style.js`, `tools/test-settings.js`, `tools/test-privacy.js`, `tools/test-lock.js`, `tools/test-mpris.js` | `make test` — plain node, no browser, no account, and nothing written outside a temporary directory |
-
-## Notifications, when they do not appear
-
-A notification carries the id of a `.desktop` file and GNOME reads its name and
-icon from there, so running from a source tree with nothing installed gives a
-banner titled `io.github.shehawey.whatsapp-desktop` with a blank icon.
-`make install` is the fix, not a code change.
-
-If a banner reaches the notification centre but never floats, check that a plain
-`notify-send hello world` floats. If that does not either, it is the desktop —
-GNOME suppresses banners while a window is fullscreen, while presence is BUSY,
-and while `show-banners` is off.
-
-## Chat links, when they open in a browser tab
-
-A "Chat on WhatsApp" link — `wa.me`, `api.whatsapp.com` — lands on WhatsApp's
-own page, and that page asks the browser to open `whatsapp://send?phone=…`
-once, as it loads. This client holds that scheme, so the chat opens here — if
-the browser lets it through. Firefox and Zen ask first, every time, with a box
-over the page: *Allow this site to open the whatsapp link with WhatsApp?*
-Cancel it and the page's own *Open app* button is no way back: it points at
-web.whatsapp.com, and the chat opens in a browser tab. Tick *Always allow
-https://api.whatsapp.com to open whatsapp links* and press *Open Link* once;
-every link after that comes straight here. Chromium-based browsers ask the same
-question with an always-allow box of their own.
-
-A site that links to web.whatsapp.com itself never offers the scheme at all,
-and nothing outside the browser can catch that one.
-
-## Diagnosing it
-
-```sh
-WHATSAPP_DEBUG_EVAL=/tmp/eval.js whatsapp-desktop
-```
-
-Whatever lands in that file is evaluated in the live page. Some words are
-commands to the app instead: `#snapshot`, `#hide`, `#show`, `#state`, `#gpu`,
-`#tone`, `#about`, `#settings`, `#fonts`, and `#scroll <selector>` — sixty real
-wheel events with the page's long tasks sampled around them. Give `#scroll` the
-selector; left to pick a scroller itself it can measure one element while the
-wheel turns over another. `#snapshot about`, `#snapshot settings` and
-`#snapshot fonts` photograph the client's own windows rather than the page, and
-`#update 1.0.0` asks GitHub as though this were an older release, which is the
-only way to see what a client with a version waiting for it looks like —
-`#update off` puts the real one back.
-
-Unset by default — it is a way into a live WhatsApp session, not a feature.
-
-## Thanks
-
-- **[@coach-nooreldean](https://github.com/coach-nooreldean)** — the privacy
-  shield, the passcode, the media card, the custom stylesheet, the desktop-wide
-  keys, the spellcheck languages, the palettes and pywal accent, the cache
-  controls, the X11 and software-rendering switches, CI, and the AppImage and
-  flatpak packaging, from
-  [#4](https://github.com/abdallah-shehawey/whatsapp-desktop/pull/4).
-
-## Licence
-
-GPL-3.0-or-later. Icon origins are recorded in `data/icons/NOTICE`, and the
-two web fonts the site is drawn in are in `docs/assets/FONTS-NOTICE.txt`.
-
-## GitHub Packages (npm)
-
-The Linux application is also published as `@abdallah-shehawey/whatsapp-desktop` on [GitHub Packages](https://github.com/abdallah-shehawey/whatsapp-desktop/packages). Authenticate to GitHub's npm registry with a personal access token (classic) containing `read:packages`, then install:
+You need a GitHub personal access token (classic) with the `read:packages` scope:
 
 ```sh
 npm login --scope=@abdallah-shehawey --auth-type=legacy --registry=https://npm.pkg.github.com
@@ -415,6 +88,59 @@ npm install --global @abdallah-shehawey/whatsapp-desktop
 whatsapp-desktop
 ```
 
-The package includes the application and installs the pinned Electron runtime as a dependency. It needs a Linux desktop and Electron's normal system libraries. `--help`, `--version` and `--hidden` are supported. Native release packages remain the option for desktop menu integration.
+The npm package doesn't add a menu entry. If you want one, use a native package.
 
-`Publish GitHub npm Package` publishes each GitHub release and supports manual dispatch for the current version. Packaging stages a scoped manifest separately, preserving the native application's existing package identity.
+### From source
+
+You need Node.js 22 or newer and npm.
+
+```sh
+git clone https://github.com/abdallah-shehawey/whatsapp-desktop
+cd whatsapp-desktop
+make install      # installs to ~/.local, with a desktop entry and icons
+make autostart    # optional: start hidden at login
+```
+
+To remove it, run `make uninstall`.
+
+> [!NOTE]
+> Official Fedora and Debian packages are under review with the name **Dardasha**, because distribution archives don't accept the WhatsApp name or logo on a third-party client. See [`packaging/official`](packaging/official/README.md).
+
+## Keyboard shortcuts
+
+| Keys | Action |
+|---|---|
+| `Ctrl+,` | Settings |
+| `Ctrl+F` | Search the open chat, or the list on screen |
+| `Ctrl+Alt+P` | Blur or reveal the conversation |
+| `Ctrl+Alt+L` | Lock now (needs a passcode) |
+| `Ctrl` `+` / `-` / `0` | Zoom in, zoom out, reset zoom |
+| `Ctrl+R` | Reload |
+| `Ctrl+W` | Close the window (the client stays in the tray) |
+| `Ctrl+Q` | Quit |
+| `Ctrl+Shift+I` | Developer tools |
+| `Super+Alt+W` | Show or hide the window (global) |
+| `Super+Alt+M` | Mute or unmute your microphone in a call (global) |
+
+The first time you start the client on Wayland, the desktop asks you to confirm the global shortcuts. You can change them in the `[shortcuts]` section of the config file.
+
+## Configuration
+
+You can set everything from **Settings** (`Ctrl+,`) and **Fonts** (in the tray menu). Your choices are saved in `~/.config/whatsapp-desktop/whatsapp-desktop.conf`, and [docs/configuration.md](docs/configuration.md) lists every key. Your WhatsApp session is stored in `~/.local/share/whatsapp-desktop`.
+
+## Documentation
+
+- [Configuration reference](docs/configuration.md)
+- [Troubleshooting](docs/troubleshooting.md): notifications, chat links, screen sharing, the GNOME tray
+- [Contributing](CONTRIBUTING.md): development setup, tests, project layout
+- [Security policy](SECURITY.md)
+
+## Credits
+
+Thanks to [@coach-nooreldean](https://github.com/coach-nooreldean) for the privacy shield, passcode lock, media controls, custom stylesheet, global shortcuts, palettes, CI and AppImage packaging ([#4](https://github.com/abdallah-shehawey/whatsapp-desktop/pull/4)).
+
+## License
+
+[GPL-3.0-or-later](LICENSE). The sources of the icons are listed in [`data/icons/NOTICE`](data/icons/NOTICE), and the website's fonts in [`docs/assets/FONTS-NOTICE.txt`](docs/assets/FONTS-NOTICE.txt).
+
+This project is not affiliated with, endorsed or sponsored by WhatsApp or Meta. WhatsApp is a trademark of its owner.

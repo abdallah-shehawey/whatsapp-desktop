@@ -1,19 +1,13 @@
-## Summary
+## What and why
 
-Describe the problem and the user-visible change.
+<!-- What problem this fixes, and what users will notice. -->
 
 ## Testing
 
-- [ ] `make test`
-- [ ] JavaScript syntax checks
-- [ ] Tested the affected Linux behavior, if applicable
+- [ ] `make test` and `node --check` pass
+- [ ] Tried on a Linux desktop, if it changes behavior (which desktop, and Wayland or X11?)
 
-## Documentation and packaging
+## Checklist
 
-- [ ] README or configuration documentation updated, if needed
-- [ ] Packaging or release workflow updated, if needed
-- [ ] No generated `node_modules`, build artifacts, or private account data included
-
-## Notes
-
-Mention compatibility concerns, migration steps, or follow-up work.
+- [ ] Docs updated (`README.md`, `docs/configuration.md`) if keys, shortcuts or packaging changed
+- [ ] No account data, session files or private screenshots
