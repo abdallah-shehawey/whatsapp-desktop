@@ -45,6 +45,7 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
     isMaximized: () => state.maximized,
     isFullScreen: () => false,
     getBounds: () => ({ x: 0, y: 0, width: 958, height: 1047 }),
+    getNormalBounds: () => ({ x: 0, y: 0, width: 958, height: 1047 }),
     hide() {
       calls.push('hide');
       state.visible = false;
@@ -92,7 +93,8 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
     debug: { trace() {} },
     console: { log() {} },
     electronScreen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }),
-                      getDisplayMatching: () => ({ scaleFactor: 1 }) },
+                      getDisplayMatching: () => ({ id: 1, scaleFactor: 1,
+                                                   workArea: { x: 0, y: 0, width: 1920, height: 1080 } }) },
     /* The size told to mutter from a connection of its own, which the window
        itself never hears about. */
     x11: { sizeToUnmaximiseTo(xid, width, height) {
@@ -109,7 +111,8 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
   });
   vm.runInContext(controller + '\ntraceWindowState();\n' +
     'globalThis.controls = { show: showWindow, click: showWindowForClick, hide: hideWindow,\n' +
-    '  leftMaximized: () => { openMaximized = true; }, keepSoon, note: noteNormalSize };',
+    '  leftMaximized: () => { openMaximized = true; }, keepSoon, note: noteNormalBounds,\n' +
+    '  made: () => { normalBounds = win.getBounds(); } };',
   context, { filename: 'main.js (window controller)' });
 
   const tick = duration => {
@@ -382,8 +385,11 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
    so most of these calls find the file already right. The zoom is the one the
    keys chose, never the page's: a page not yet given its zoom answers 1. */
 {
+  /* Two monitors side by side: the primary on the left, a larger one right of it. */
+  const left = { id: 1, scaleFactor: 1, workArea: { x: 0, y: 0, width: 1920, height: 1080 } };
+  const right = { id: 2, scaleFactor: 1, workArea: { x: 1920, y: 0, width: 2560, height: 1373 } };
   const close = ({ remember = true, maximized = false, noted = true, visible = true,
-                   was = {}, chosen = null, page = 1 } = {}) => {
+                   was = {}, chosen = null, page = 1, wayland = true, normalAt = [2100, 100] } = {}) => {
     const values = Object.assign({ 'window.remember-size': remember, 'window.maximized': false,
                                    'window.width': 1200, 'window.height': 800, 'view.zoom': 1 }, was);
     let saves = 0;
@@ -396,14 +402,16 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
         isMaximized: () => maximized,
         isMinimized: () => false,
         isFullScreen: () => false,
-        getBounds: () => maximized ? { x: 0, y: 0, width: 2560, height: 1373 }
-                                   : { x: 0, y: 0, width: 958, height: 1047 },
+        getBounds: () => maximized ? { x: 1920, y: 0, width: 2560, height: 1373 }
+                                   : { x: normalAt[0], y: normalAt[1], width: 958, height: 1047 },
         /* What X11 answers: the maximised size, not the one it goes back to. */
-        getNormalBounds: () => ({ x: 0, y: 0, width: 2560, height: 1373 }),
+        getNormalBounds: () => ({ x: 1920, y: 0, width: 2560, height: 1373 }),
         webContents: { getZoomFactor: () => page },
       },
+      onWayland: wayland,
+      openMaximized: false,
       electronScreen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1920, height: 1080 } }),
-                      getDisplayMatching: () => ({ scaleFactor: 1 }) },
+                        getDisplayMatching: bounds => bounds.x >= 1920 ? right : left },
     /* The size told to mutter from a connection of its own, which the window
        itself never hears about. */
     x11: { sizeToUnmaximiseTo(xid, width, height) {
@@ -412,7 +420,7 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
     } },
     });
     vm.runInContext(controller + '\nglobalThis.keep = keepWindowState;' +
-                    '\nglobalThis.note = noteNormalSize;' +
+                    '\nglobalThis.note = noteNormalBounds;' +
                     '\nglobalThis.choose = zoom => { zoomChosen = zoom; };', context,
                     { filename: 'main.js (window controller)' });
     if (chosen !== null) context.choose(chosen);
@@ -424,8 +432,12 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
       maximized = was; context.note();
     }
     context.keep();
-    return { size: [values['window.width'], values['window.height']],
-             maximized: values['window.maximized'], zoom: values['view.zoom'], saves };
+    const result = { size: [values['window.width'], values['window.height']],
+                     maximized: values['window.maximized'], zoom: values['view.zoom'], saves };
+    if (values['window.x'] !== undefined || !wayland) {
+      result.at = [values['window.x'], values['window.y'], values['window.display-id']];
+    }
+    return result;
   };
   check('a close writes the size the window manager gave it, by default',
         close({ chosen: 1.1 }), { size: [958, 1047], maximized: false, zoom: 1.1, saves: 1 });
@@ -454,6 +466,79 @@ const build = ({ wayland = true, strategy = 'auto', values = {} } = {}) => {
   check('and a window with nothing else to write writes nothing for it',
         close({ page: 1, was: { 'view.zoom': 1.4, 'window.width': 958, 'window.height': 1047 } }),
         { size: [958, 1047], maximized: false, zoom: 1.4, saves: 0 });
+  /* Where it was, on X11 only: a Wayland client is not told where it is and
+     cannot ask to be put anywhere. */
+  check('X11: a close also writes where the window was and on which monitor',
+        close({ wayland: false, chosen: 1.1 }),
+        { size: [958, 1047], maximized: false, zoom: 1.1, saves: 1, at: ['2100', '100', '2'] });
+  check('X11: a maximised window is written down where it un-maximises to',
+        close({ wayland: false, maximized: true, chosen: 1.1 }),
+        { size: [958, 1047], maximized: true, zoom: 1.1, saves: 1, at: ['2100', '100', '2'] });
+  /* Moved to the other monitor while maximised -- Super+Shift+arrow -- it
+     un-maximises on the monitor it is on now, at the same place on it. */
+  check('X11: a window maximised onto another monitor keeps its place on that one',
+        close({ wayland: false, maximized: true, chosen: 1.1, normalAt: [100, 50] }),
+        { size: [958, 1047], maximized: true, zoom: 1.1, saves: 1, at: ['2020', '50', '2'] });
+  check('X11: with remember-size off, no position is written either',
+        close({ wayland: false, remember: false, chosen: 1.1 }),
+        { size: [1200, 800], maximized: false, zoom: 1.1, saves: 1, at: [undefined, undefined, undefined] });
+  check('X11: a window already written down where it is writes nothing',
+        close({ wayland: false, chosen: 1.1,
+                was: { 'window.width': 958, 'window.height': 1047, 'view.zoom': 1.1,
+                       'window.x': '2100', 'window.y': '100', 'window.display-id': '2' } }),
+        { size: [958, 1047], maximized: false, zoom: 1.1, saves: 0, at: ['2100', '100', '2'] });
+}
+
+/* And where it opens: back on the monitor it was left on, inside that monitor
+   even if it was left half off it, and in the middle of the primary when that
+   monitor is gone. Made, when it was left maximised on X11, at the whole work
+   area of the monitor it will be maximised on. */
+{
+  const left = { id: 1, workArea: { x: 0, y: 0, width: 1920, height: 1080 } };
+  const right = { id: 2, workArea: { x: 1920, y: 0, width: 2560, height: 1373 } };
+  const placement = ({ wayland = false, remember = true, saved = {} } = {}) => {
+    const values = Object.assign({ 'window.remember-size': remember }, saved);
+    const context = vm.createContext({
+      config: { get: key => values[key] === undefined ? '' : values[key] },
+      onWayland: wayland,
+      electronScreen: {
+        getPrimaryDisplay: () => ({ ...left, workAreaSize: { width: 1920, height: 1080 } }),
+        getAllDisplays: () => [left, right],
+        getDisplayMatching: bounds => bounds.x >= 1920 ? right : left,
+        getDisplayNearestPoint: point => point.x >= 1920 ? right : left,
+      },
+    });
+    vm.runInContext(controller + '\nglobalThis.restore = (w, h) => restoredPlacement("window", w, h, fitMainWindow);' +
+                    '\nglobalThis.made = madeBounds;', context, { filename: 'main.js (window controller)' });
+    return context;
+  };
+  const at = (x, y, id) => ({ 'window.x': String(x), 'window.y': String(y), 'window.display-id': String(id) });
+  check('X11: a window left on the right-hand monitor opens there',
+        placement({ saved: at(2200, 100, 2) }).restore(1200, 800), { width: 1200, height: 800, x: 2200, y: 100 });
+  check('X11: a window left half off its monitor opens inside it',
+        placement({ saved: at(4000, -50, 2) }).restore(1200, 800), { width: 1200, height: 800, x: 3280, y: 0 });
+  check('X11: a window bigger than its monitor is cut down to it',
+        placement({ saved: at(0, 0, 1) }).restore(3000, 2000), { width: 1920, height: 1080, x: 0, y: 0 });
+  check('X11: a window whose monitor is gone opens in the middle of the primary',
+        placement({ saved: at(2200, 100, 9) }).restore(1200, 800), { width: 1200, height: 800, x: 360, y: 140 });
+  check('X11: a position without a monitor goes on the monitor nearest it',
+        placement({ saved: { 'window.x': '2200', 'window.y': '100' } }).restore(1200, 800),
+        { width: 1200, height: 800, x: 2200, y: 100 });
+  check('X11: no position, or one that is not a number, is left to the desktop',
+        [placement().restore(1200, 800),
+         placement({ saved: { 'window.x': 'left', 'window.y': '100', 'window.display-id': '1' } }).restore(1200, 800)],
+        [null, null]);
+  check('Wayland, or remember-size off: a saved position is not used',
+        [placement({ wayland: true, saved: at(2200, 100, 2) }).restore(1200, 800),
+         placement({ remember: false, saved: at(2200, 100, 2) }).restore(1200, 800)], [null, null]);
+  const restored = { x: 2200, y: 100, width: 1200, height: 800 };
+  check('X11: a window left maximised is made at the whole work area of its monitor',
+        placement().made(true, restored, restored), { x: 1920, y: 0, width: 2560, height: 1373 });
+  check('X11: with no monitor remembered, at the primary\'s, as before',
+        placement().made(true, { width: 1200, height: 800 }, null), { width: 1920, height: 1080 });
+  check('a window not left maximised, or on Wayland, is made at its own size',
+        [placement().made(false, restored, restored), placement({ wayland: true }).made(true, restored, restored)],
+        [restored, restored]);
 }
 
 /* Kept as it changes, not only on close: the session going down stops the
@@ -525,7 +610,7 @@ for (const wayland of [false, true]) {
 for (const wayland of [false, true]) {
   const t = build({ wayland });
   /* The size it was made with, from the config. */
-  t.note();
+  t.made();
   t.leftMaximized();
   t.show('the client started');
   t.focus();

@@ -50,9 +50,14 @@ auto-blur = true
 
 | Key | Default | Description |
 |---|---|---|
-| `remember-size` | `true` | Save the window's size and whether it's maximized. Turn it off for tiling window managers, or if you keep this file in git. |
+| `remember-size` | `true` | Save the window's size and whether it's maximized, and on X11 also its position and monitor. Turn it off for tiling window managers, or if you keep this file in git. |
 | `maximized` | `false` | Open the window maximized. |
 | `width`, `height` | `1200`, `800` | Window size, which is also the size it goes back to when you un-maximize it. |
+| `x`, `y`, `display-id` | empty | Where the window was on X11, and on which monitor. Empty leaves it to the desktop. If that monitor is gone, the window opens in the middle of the primary one. Wayland doesn't let apps place their own windows, so these stay empty there. |
+
+`[settings-window]`, `[fonts-window]` and `[about-window]` take the same `x`,
+`y` and `display-id` keys for those three windows, also only on X11 and only
+while `remember-size` is on.
 
 ## `[behaviour]`
 

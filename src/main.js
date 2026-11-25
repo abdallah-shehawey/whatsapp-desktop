@@ -397,6 +397,21 @@ const centeredBounds = (width, height, area) => ({
   y: area.y + Math.floor((area.height - height) / 2),
 });
 
+/* What the main window is made at. Left maximised on X11, that is the whole
+   work area it will be maximised on: the page is laid out and painted while
+   the window is still down, and that is what its first frames up show. Made
+   at its own size it came up as a small copy of itself in the corner of a
+   black, screen-sized window -- see giveNormalSize, which tells mutter the
+   window's own size once it is up. The work area is the remembered display's
+   when there is one, so the window maps maximised there and not on the
+   primary. */
+const madeBounds = (maximized, normal, restored) => {
+  if (!maximized || onWayland) return normal;
+  if (!restored) return electronScreen.getPrimaryDisplay().workAreaSize;
+  const { x, y, width, height } = electronScreen.getDisplayMatching(restored).workArea;
+  return { x, y, width, height };
+};
+
 const restoredPlacement = (section, width, height, fit) => {
   if (!canRememberPlacement()) return null;
   const coordinates = [config.get(`${section}.x`), config.get(`${section}.y`)];
@@ -1845,11 +1860,7 @@ const createWindow = () => {
   openMaximized = config.get('window.maximized') === true;
   normalBounds = restored || clampToScreen(width, height);
   const family = uiFont();
-  /* Place the normal window before asking X11 to maximise it on that display.
-     Without saved placement, keep the existing full-size prepaint path. */
-  const made = openMaximized && !onWayland && !restored
-    ? electronScreen.getPrimaryDisplay().workAreaSize
-    : normalBounds;
+  const made = madeBounds(openMaximized, normalBounds, restored);
 
   win = new BrowserWindow({
     ...made,
