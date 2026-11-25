@@ -371,22 +371,68 @@ const clampToScreen = (width, height) => {
   };
 };
 
+/* Fit a normal window into a display's usable desktop area, in Electron DIP.
+   The same minimum dimensions are passed to BrowserWindow. */
+const MAIN_MIN_WIDTH = 500;
+const MAIN_MIN_HEIGHT = 400;
+const fitWindow = (bounds, area, minWidth = 1, minHeight = 1) => {
+  const width = Math.max(minWidth, Math.min(Math.round(bounds.width), area.width));
+  const height = Math.max(minHeight, Math.min(Math.round(bounds.height), area.height));
+  return {
+    width,
+    height,
+    x: Math.max(area.x, Math.min(bounds.x, area.x + area.width - width)),
+    y: Math.max(area.y, Math.min(bounds.y, area.y + area.height - height)),
+  };
+};
+
+const fitMainWindow = (bounds, area) => fitWindow(bounds, area, MAIN_MIN_WIDTH, MAIN_MIN_HEIGHT);
+
+const canRememberPlacement = () => !onWayland && config.get('window.remember-size') !== false;
+
+const centeredBounds = (width, height, area) => ({
+  width,
+  height,
+  x: area.x + Math.floor((area.width - width) / 2),
+  y: area.y + Math.floor((area.height - height) / 2),
+});
+
+const restoredPlacement = (section, width, height, fit) => {
+  if (!canRememberPlacement()) return null;
+  const coordinates = [config.get(`${section}.x`), config.get(`${section}.y`)];
+  const validCoordinate = value => /^-?\d+$/.test(value) && Math.abs(Number(value)) <= 0x7fffffff;
+  if (!coordinates.every(validCoordinate)) return null;
+  const [x, y] = coordinates.map(Number);
+  const savedId = config.get(`${section}.display-id`);
+  const bounds = { x, y, width, height };
+  if (savedId === '') {
+    const display = electronScreen.getDisplayNearestPoint({ x, y });
+    return fit(bounds, display.workArea);
+  }
+
+  const display = electronScreen.getAllDisplays().find(display => String(display.id) === savedId);
+  if (display) return fit(bounds, display.workArea);
+
+  const area = electronScreen.getPrimaryDisplay().workArea;
+  return fit(centeredBounds(width, height, area), area);
+};
+
 /* The window was left maximised, and has not been put up since. Set when it is
    made, spent on its first show. */
 let openMaximized = false;
 
-/* The size a maximised window goes back to, kept by hand. Electron has
+/* The bounds a maximised window goes back to, kept by hand. Electron has
    getNormalBounds() for it, and on Wayland it answers; on X11, measured in a
    nested GNOME 50 shell, it answered the maximised size whenever the window
    manager had done the maximising -- which is every time, from a double click
    on the title or Super+Up -- so un-maximising a window opened that way went
-   back to the whole screen. Every size the window has while it is not
-   maximised is its own, so the last of those is the answer. */
-let normalSize = null;
-const noteNormalSize = () => {
-  if (!win || win.isDestroyed() || win.isMaximized() || win.isMinimized() || win.isFullScreen()) return;
-  const { width, height } = win.getBounds();
-  normalSize = { width, height };
+   back to the whole screen. Cache the window's bounds while it is visible
+   in its normal state. */
+let normalBounds = null;
+const noteNormalBounds = () => {
+  if (!win || win.isDestroyed() || !win.isVisible() || openMaximized ||
+      win.isMaximized() || win.isMinimized() || win.isFullScreen()) return;
+  normalBounds = win.getBounds();
 };
 
 /* Whether the window went down maximised, on X11 -- where the window manager
@@ -422,11 +468,11 @@ const takeDown = () => {
  * whole screen.
  */
 const giveNormalSize = () => {
-  if (!normalSize) return;
+  if (!normalBounds) return;
   const { scaleFactor } = electronScreen.getDisplayMatching(win.getBounds());
   const xid = win.getNativeWindowHandle().readUInt32LE(0);
-  const width = Math.round(normalSize.width * scaleFactor);
-  const height = Math.round(normalSize.height * scaleFactor);
+  const width = Math.round(normalBounds.width * scaleFactor);
+  const height = Math.round(normalBounds.height * scaleFactor);
   x11.sizeToUnmaximiseTo(xid, width, height).then(
     result => debug.trace('window: %dx%d to un-maximise to: %s', width, height, result),
     error => console.log('window: could not tell the window manager the size to un-maximise to (%s)',
@@ -536,10 +582,35 @@ const keepWindowState = () => {
   const up = win.isVisible() && !win.isMinimized() && !win.isFullScreen();
   if (config.get('window.remember-size') !== false && up) {
     const maximized = win.isMaximized();
-    const bounds = maximized ? normalSize || win.getNormalBounds() : win.getBounds();
+    const visibleBounds = win.getBounds();
+    const bounds = maximized ? normalBounds || win.getNormalBounds() : visibleBounds;
     state['window.maximized'] = maximized;
     state['window.width'] = bounds.width;
     state['window.height'] = bounds.height;
+    if (!onWayland) {
+      const display = electronScreen.getDisplayMatching(visibleBounds);
+      let position = bounds;
+      if (maximized) {
+        const area = display.workArea;
+        if (bounds.x === undefined || bounds.y === undefined) {
+          position = fitMainWindow({
+            ...bounds,
+            x: area.x + Math.floor((area.width - bounds.width) / 2),
+            y: area.y + Math.floor((area.height - bounds.height) / 2),
+          }, area);
+        } else {
+          const source = electronScreen.getDisplayMatching(bounds).workArea;
+          position = fitMainWindow({
+            ...bounds,
+            x: bounds.x + area.x - source.x,
+            y: bounds.y + area.y - source.y,
+          }, area);
+        }
+      }
+      state['window.x'] = String(position.x);
+      state['window.y'] = String(position.y);
+      state['window.display-id'] = String(display.id);
+    }
   }
   const changed = Object.keys(state).filter(key => config.get(key) !== state[key]);
   if (!changed.length) return;
@@ -1093,6 +1164,7 @@ const hideWindow = () => {
   raising.gen++;
   putAwayAt = Date.now();
   cancelShellRaise();
+  keepWindowState();
   /* At the size it is. A maximised window put away on X11 comes back as one
      mutter has never met, and is told what size it un-maximises to once it is
      up -- see giveNormalSize. */
@@ -1269,6 +1341,30 @@ const panelWindow = () => onWayland
       show: false, roundedCorners: false };
 const PANEL_ARGUMENTS = onWayland ? ['--rounded-panel'] : [];
 
+const panelPlacement = (section, width, height) => {
+  if (onWayland) return { ...clampToScreen(width, height), center: true };
+  const area = electronScreen.getPrimaryDisplay().workArea;
+  return restoredPlacement(section, width, height, fitWindow) ||
+    fitWindow(centeredBounds(width, height, area), area);
+};
+
+const rememberPanelPlacement = (panel, section) => {
+  panel.on('close', () => {
+    if (!canRememberPlacement() || !panel.isVisible() || panel.isMinimized()) return;
+    const bounds = panel.getBounds();
+    const display = electronScreen.getDisplayMatching(bounds);
+    const position = {
+      [`${section}.x`]: String(bounds.x),
+      [`${section}.y`]: String(bounds.y),
+      [`${section}.display-id`]: String(display.id),
+    };
+    const changed = Object.entries(position).filter(([key, value]) => config.get(key) !== value);
+    if (!changed.length) return;
+    for (const [key, value] of changed) config.set(key, value);
+    config.save();
+  });
+};
+
 /* Answers with the window, so a caller that wants to look at it -- the debug
    rig, which cannot press Ctrl+, -- has something to look at. */
 const openSettings = () => {
@@ -1284,15 +1380,9 @@ const openSettings = () => {
      bottom of it for a handful of switches. The panel scrolls; a window this
      size is what the owner asked for, and it is what the settings window of
      anything else on the desktop looks like. */
-  const panel = clampToScreen(560, 660);
   const settingsFont = uiFont();
   settingsWin = new BrowserWindow({
-    width: panel.width,
-    height: panel.height,
-    /* Asked for the middle of the screen. Honoured on X11; on Wayland a client
-       does not place its own windows and getBounds answers 0,0 whatever is
-       asked -- GNOME centres a new window there of its own accord. */
-    center: true,
+    ...panelPlacement('settings-window', 560, 660),
     resizable: false,
     ...panelWindow(),
     title: `${TITLE} Settings`,
@@ -1322,6 +1412,8 @@ const openSettings = () => {
     settingsWin.focus();
   });
 
+  rememberPanelPlacement(settingsWin, 'settings-window');
+
   settingsWin.on('closed', () => {
     settingsWin = null;
   });
@@ -1349,12 +1441,9 @@ const openFonts = () => {
     return fontsWin;
   }
 
-  const panel = clampToScreen(560, 720);
   const settingsFont = uiFont();
   fontsWin = new BrowserWindow({
-    width: panel.width,
-    height: panel.height,
-    center: true,
+    ...panelPlacement('fonts-window', 560, 720),
     resizable: false,
     ...panelWindow(),
     title: `${TITLE} Fonts`,
@@ -1379,6 +1468,8 @@ const openFonts = () => {
     fontsWin.show();
     fontsWin.focus();
   });
+
+  rememberPanelPlacement(fontsWin, 'fonts-window');
 
   fontsWin.on('closed', () => {
     fontsWin = null;
@@ -1471,12 +1562,9 @@ const openAbout = ({ checkNow = false } = {}) => {
   }
 
   aboutShouldCheck = checkNow;
-  const panel = clampToScreen(430, 610);
   const aboutFont = uiFont();
   aboutWin = new BrowserWindow({
-    width: panel.width,
-    height: panel.height,
-    center: true,
+    ...panelPlacement('about-window', 430, 610),
     resizable: false,
     ...panelWindow(),
     title: `About ${TITLE}`,
@@ -1501,6 +1589,8 @@ const openAbout = ({ checkNow = false } = {}) => {
     aboutWin.show();
     aboutWin.focus();
   });
+
+  rememberPanelPlacement(aboutWin, 'about-window');
 
   aboutWin.on('closed', () => {
     aboutWin = null;
@@ -1749,22 +1839,22 @@ const applyStyle = () => {
 };
 
 const createWindow = () => {
-  const { width, height } = clampToScreen(config.get('window.width'), config.get('window.height'));
+  const width = config.get('window.width');
+  const height = config.get('window.height');
+  const restored = restoredPlacement('window', width, height, fitMainWindow);
   openMaximized = config.get('window.maximized') === true;
-  normalSize = { width, height };
+  normalBounds = restored || clampToScreen(width, height);
   const family = uiFont();
-  /* Made at the size it will open at, when that is maximised on X11: the page
-     is laid out and painted while the window is still down, and that is what
-     its first frames up show. Its own size is told to mutter once it is up --
-     see giveNormalSize. */
-  const made = openMaximized && !onWayland ? electronScreen.getPrimaryDisplay().workAreaSize
-                                           : { width, height };
+  /* Place the normal window before asking X11 to maximise it on that display.
+     Without saved placement, keep the existing full-size prepaint path. */
+  const made = openMaximized && !onWayland && !restored
+    ? electronScreen.getPrimaryDisplay().workAreaSize
+    : normalBounds;
 
   win = new BrowserWindow({
-    width: made.width,
-    height: made.height,
-    minWidth: 500,
-    minHeight: 400,
+    ...made,
+    minWidth: MAIN_MIN_WIDTH,
+    minHeight: MAIN_MIN_HEIGHT,
     title: TITLE,
     icon: appIcon,
     show: false,
@@ -1868,8 +1958,10 @@ const createWindow = () => {
     }
   });
 
-  win.on('resize', () => { noteNormalSize(); keepSoon(); });
-  for (const event of ['maximize', 'unmaximize']) win.on(event, keepSoon);
+  for (const event of ['move', 'resize', 'unmaximize']) {
+    win.on(event, () => { noteNormalBounds(); keepSoon(); });
+  }
+  win.on('maximize', keepSoon);
 
   win.on('minimize', event => {
     if (config.get('behaviour.minimize-to-tray')) {

@@ -66,8 +66,8 @@ const DEFAULTS = {
   /* Write the window's size back each time it closes, and whether it was
      maximised, so it opens the way it was left. Off for a tiling window
      manager, which picks the size itself, or for a config kept in git, where
-     that write is a change on every close: the window then opens at the three
-     keys below as they stand, and nothing in the client writes them -- see
+     that write is a change on every close: the window then uses the configured
+     size and maximised state, and leaves placement to the desktop -- see
      keepWindowState in src/main.js. The size is the window's own even while it
      is maximised, so un-maximising it goes back to something smaller than the
      screen. */
@@ -75,6 +75,18 @@ const DEFAULTS = {
   'window.maximized': false,
   'window.width': 1200,
   'window.height': 800,
+  'window.x': '',
+  'window.y': '',
+  'window.display-id': '',
+  'settings-window.x': '',
+  'settings-window.y': '',
+  'settings-window.display-id': '',
+  'fonts-window.x': '',
+  'fonts-window.y': '',
+  'fonts-window.display-id': '',
+  'about-window.x': '',
+  'about-window.y': '',
+  'about-window.display-id': '',
   'behaviour.close-to-tray': true,
   'behaviour.minimize-to-tray': false,
   'behaviour.spellcheck': true,
@@ -281,14 +293,33 @@ class Config {
       '',
       '[window]',
       '# Write the keys below as the window changes, and open the way it was',
-      '# left -- maximised, or at that size -- however the client ended, a',
-      '# shutdown included. Off: open as written here and never change them --',
-      '# for a tiling window manager, or a config in git.',
+      '# left, including its position and monitor on X11.',
+      '# Off: use the configured size and maximised state without saving geometry.',
       `remember-size = ${v['window.remember-size']}`,
       '# Open maximised. width and height are still the size it is un-maximised to.',
       `maximized = ${v['window.maximized']}`,
       `width = ${Math.round(v['window.width'])}`,
       `height = ${Math.round(v['window.height'])}`,
+      '# Optional X11 coordinates and display ID. Negative coordinates are valid.',
+      `x = ${v['window.x']}`,
+      `y = ${v['window.y']}`,
+      `display-id = ${v['window.display-id']}`,
+      '',
+      '[settings-window]',
+      '# Settings panel placement on X11, when window.remember-size is on.',
+      `x = ${v['settings-window.x']}`,
+      `y = ${v['settings-window.y']}`,
+      `display-id = ${v['settings-window.display-id']}`,
+      '',
+      '[fonts-window]',
+      `x = ${v['fonts-window.x']}`,
+      `y = ${v['fonts-window.y']}`,
+      `display-id = ${v['fonts-window.display-id']}`,
+      '',
+      '[about-window]',
+      `x = ${v['about-window.x']}`,
+      `y = ${v['about-window.y']}`,
+      `display-id = ${v['about-window.display-id']}`,
       '',
       '[behaviour]',
       '# Closing the window leaves the client running in the tray.',
