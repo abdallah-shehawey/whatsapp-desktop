@@ -26,7 +26,7 @@
 %global upstream whatsapp-desktop
 %global app_id io.github.abdallah_shehawey.dardasha
 Name:           dardasha
-Version:        1.10.8
+Version:        1.10.9
 Release:        1%{?dist}
 Summary:        Independent desktop client for WhatsApp Web
 # The Dardasha artwork is GPL-3.0-or-later and the AppStream metadata CC0-1.0.
@@ -101,6 +101,10 @@ grep -q '"id": "%{app_id}"' %{buildroot}%{_datadir}/%{name}/data/brand.json
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Wed Nov 25 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.9-1
+- Recover by itself when WhatsApp does not load at startup without a network
+- Remember the window position and monitor on X11 (Dany)
+
 * Wed Nov 18 2026 Abdallah Shehawey <shehawey9@gmail.com> - 1.10.8-1
 - Wait longer for GNOME's XSettings at login, and log when the wait runs out
 

@@ -29,7 +29,7 @@ body:
     attributes:
       label: Version
       description: Shown in About, in the tray menu.
-      placeholder: "1.10.8"
+      placeholder: "1.10.9"
     validations:
       required: true
   - type: dropdown
