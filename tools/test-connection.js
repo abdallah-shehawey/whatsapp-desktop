@@ -35,7 +35,10 @@ const build = () => {
   const probes = [];
   const calls = [];
   const throttling = [];
+  let loading = true;
   Object.assign(contents, {
+    isLoading: () => loading,
+    stop: () => { calls.push(['stop']); loading = false; },
     getURL: () => current,
     isDestroyed: () => destroyed,
     send: (channel, value) => calls.push(['send', channel, value]),
@@ -56,6 +59,17 @@ const build = () => {
   return {
     controller, calls, timers, contents, ipcMain, throttling, probes,
     setProbe: value => { probe = value; },
+    setLoading: value => { loading = value; },
+    start: (url, inPlace = false, mainFrame = true) => {
+      loading = true; contents.emit('did-start-navigation', {}, url, inPlace, mainFrame);
+    },
+    runTimer: async ms => {
+      const entry = [...timers.entries()].find(([, timer]) => timer.ms === ms);
+      if (!entry) throw new Error('no timer of ' + ms + 'ms; have ' + JSON.stringify([...timers.values()].map(t => t.ms)));
+      timers.delete(entry[0]);
+      await entry[1].fn();
+      await flush();
+    },
     advance: ms => { clock += ms; },
     remotes: () => calls.filter(call => call[0] === 'remote').length,
     locals: () => calls.filter(call => call[0] === 'local').length,
@@ -257,6 +271,76 @@ const build = () => {
     });
     t.destroy();
     check('closing leaves no timers', () => assert.strictEqual(t.timers.size, 0));
+  }
+  {
+    const t = build();
+    t.start(remote + 'send?phone=1', true);
+    t.start('https://faq.whatsapp.com/');
+    t.start(remote, false, false);
+    check('in-page moves, other sites and subframes are not watched for a stall', () => {
+      assert.strictEqual(t.timers.size, 0);
+    });
+    t.start(remote);
+    check('a WhatsApp navigation is given eight seconds to commit', () => assert.deepStrictEqual(t.delays(), [8000]));
+    t.navigate(remote);
+    check('and committing calls the watch off', () => assert.deepStrictEqual(t.delays(), [30000]));
+    t.destroy();
+  }
+  {
+    const t = build();
+    t.start(remote + 'send?phone=1');
+    t.setProbe(async () => true);
+    await t.runTimer(8000);
+    check('stuck while the network answers: it is stopped and the same page asked for again', () => {
+      assert.deepStrictEqual(t.calls, [['stop'], ['remote', remote + 'send?phone=1']]);
+    });
+    t.start(remote + 'send?phone=1');
+    check('a second stall in a row is given twice as long', () => assert.deepStrictEqual(t.delays(), [16000]));
+    t.navigate(remote);
+    t.start(remote);
+    check('and once one commits the wait is back to eight seconds', () => assert.ok(t.delays().includes(8000)));
+    t.destroy();
+  }
+  {
+    const t = build();
+    t.start(remote);
+    t.setProbe(async () => false);
+    await t.runTimer(8000);
+    check('stuck with no network: it is stopped and the connection page goes up and retries', () => {
+      assert.deepStrictEqual(t.calls.map(call => call[0]), ['stop', 'local']);
+      assert.deepStrictEqual(t.delays(), [2000]);
+    });
+    t.destroy();
+  }
+  {
+    const t = build();
+    t.start(remote);
+    t.setLoading(false);
+    let count = 0;
+    t.setProbe(async () => { count++; return true; });
+    await t.runTimer(8000);
+    check('a navigation that is no longer loading is left alone', () => {
+      assert.strictEqual(count, 0); assert.strictEqual(t.calls.length, 0);
+    });
+    t.start(remote);
+    t.advance(1000);
+    t.controller.retryNow();
+    await flush();
+    check('opening the window onto a navigation a second old does not cut it short', () => assert.strictEqual(count, 0));
+    t.advance(2500);
+    t.controller.retryNow();
+    await flush();
+    check('one three seconds old is checked at once', () => {
+      assert.strictEqual(count, 1);
+      assert.deepStrictEqual(t.calls.map(call => call[0]), ['stop', 'remote']);
+    });
+    t.start(remote);
+    t.fail();
+    check('a navigation that fails is handed to the connection page, not watched', () => {
+      assert.deepStrictEqual(t.delays(), [2000]);
+    });
+    t.destroy();
+    check('and closing leaves no watch behind', () => assert.strictEqual(t.timers.size, 0));
   }
   console.log('\nconnection checks pass');
 })().catch(err => { console.error(err); process.exitCode = 1; });

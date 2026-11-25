@@ -31,7 +31,20 @@
  * itself, or its store has said it is up. Reloads in a row are spaced 2s, 4s,
  * 8s apart and so on up to a minute, for a network that answers the check and
  * still drops the page. Only the network failing WhatsApp's own scripts asks
- * for any of this: a WhatsApp broken in some other way is left alone. */
+ * for any of this: a WhatsApp broken in some other way is left alone.
+ *
+ * And a load can do neither. On the owner's own profile -- signed in, with
+ * WhatsApp's service worker registered -- the first navigation after an
+ * unclean exit (a shutdown, a logout, a kill) started offline and then simply
+ * waited: no commit, no failure, no document at all, so the window showed
+ * nothing but its own background colour. Measured: the network answered every
+ * check from 18 s on, and the navigation was still waiting at 81 s. Nothing
+ * else ever asked again, because nothing had failed. Stopping it and asking
+ * once more committed in 0.7 s -- the Ctrl+R that put it right by hand. So a
+ * WhatsApp navigation that has not committed after 8 s is checked: if the
+ * network answers, it is stuck and is asked for again; if not, this page goes
+ * up and the retries above take over. The wait doubles for each stall in a
+ * row, so a network that is merely slow gets more time. */
 'use strict';
 
 const { pathToFileURL } = require('url');
@@ -45,7 +58,7 @@ const BOOT_HOSTS = new Set(['web.whatsapp.com', 'static.whatsapp.net']);
 const BOOT_TYPES = new Set(['script', 'stylesheet']);
 
 const attach = (win, { url, file, ipcMain, probe, retryMs = 2000, bootMs = 30000,
-                       gapMs = 2000, maxGapMs = 60000, now = Date.now }) => {
+                       gapMs = 2000, maxGapMs = 60000, stallMs = 8000, now = Date.now }) => {
   const contents = win.webContents;
   const localURL = pathToFileURL(file).href;
   const origin = new URL(url).origin;
@@ -71,6 +84,12 @@ const attach = (win, { url, file, ipcMain, probe, retryMs = 2000, bootMs = 30000
   let rescueTimer = null;
   let rescuing = null;
   let rescues = 0;
+  /* A WhatsApp navigation that has neither committed nor failed yet. */
+  let pending = null;
+  let pendingAt = 0;
+  let stallTimer = null;
+  let stallCheck = null;
+  let stalls = 0;
 
   const alive = () => !win.isDestroyed() && !contents.isDestroyed();
   const showLocal = () => win.loadFile(file).catch(() => {}); // settles with the error page's load too
@@ -152,19 +171,60 @@ const attach = (win, { url, file, ipcMain, probe, retryMs = 2000, bootMs = 30000
     win.loadURL(url).catch(() => {}); // did-fail-load brings up the local page
   };
 
-  const failed = (event, code, description, failedURL, isMainFrame) => {
-    if (!isMainFrame || code === -3 || !isRemote(failedURL)) return;
-    console.warn('load failed (%d %s); showing the connection page', code, description);
+  const goOffline = () => {
     stop();
     forget();
-    holding = 'error';
     offline = true;
     reasserts = 0;
     contents.setBackgroundThrottling(true);
     showLocal();
     schedule();
   };
+  const settle = () => {
+    clearTimeout(stallTimer);
+    stallTimer = null;
+    if (stallCheck) stallCheck.abort();
+    stallCheck = null;
+    pending = null;
+  };
+  const stalled = async () => {
+    stallTimer = null;
+    if (!pending || !alive() || !contents.isLoading() || stallCheck) return;
+    const target = pending;
+    const controller = new AbortController();
+    stallCheck = controller;
+    let reachable = false;
+    try { reachable = await probe(controller.signal); } catch (err) { /* offline */ }
+    if (stallCheck !== controller || pending !== target || !alive()) return;
+    settle();
+    stalls++;
+    contents.stop();
+    if (reachable) {
+      console.warn('WhatsApp\'s page neither loaded nor failed while the network answers; asking again (%d)', stalls);
+      win.loadURL(target).catch(() => {}); // did-fail-load brings up the local page
+    } else {
+      console.warn('WhatsApp\'s page neither loaded nor failed, and the network does not answer; showing the connection page');
+      goOffline();
+    }
+  };
+  const started = (event, startedURL, isInPlace, isMainFrame) => {
+    if (!isMainFrame || isInPlace) return;
+    settle();
+    if (!isRemote(startedURL)) return;
+    pending = startedURL;
+    pendingAt = now();
+    stallTimer = setTimeout(stalled, Math.min(stallMs * 2 ** stalls, maxGapMs));
+  };
+
+  const failed = (event, code, description, failedURL, isMainFrame) => {
+    if (!isMainFrame || code === -3 || !isRemote(failedURL)) return;
+    console.warn('load failed (%d %s); showing the connection page', code, description);
+    settle();
+    holding = 'error';
+    goOffline();
+  };
   const navigated = (event, destination) => {
+    settle();
     if (isLocal(destination)) {
       holding = 'local';
       return;
@@ -173,6 +233,7 @@ const attach = (win, { url, file, ipcMain, probe, retryMs = 2000, bootMs = 30000
     forget();
     holding = isRemote(destination) ? 'remote' : 'other';
     if (holding !== 'remote') return;
+    stalls = 0;
     booting = true;
     bootTimer = setTimeout(() => {
       endBoot();
@@ -189,6 +250,7 @@ const attach = (win, { url, file, ipcMain, probe, retryMs = 2000, bootMs = 30000
   const requested = event => {
     if (event.sender === contents && event.senderFrame?.url && isLocal(event.senderFrame.url) && isLocal()) retry();
   };
+  contents.on('did-start-navigation', started);
   contents.on('did-fail-load', failed);
   contents.on('did-navigate', navigated);
   contents.on('did-stop-loading', settled);
@@ -196,6 +258,7 @@ const attach = (win, { url, file, ipcMain, probe, retryMs = 2000, bootMs = 30000
   contents.once('destroyed', () => {
     stop();
     forget();
+    settle();
     ipcMain.removeListener('wa:connection-retry', requested);
   });
 
@@ -208,6 +271,8 @@ const attach = (win, { url, file, ipcMain, probe, retryMs = 2000, bootMs = 30000
     retryNow: () => {
       if (offline) retry();
       else if (lost.size && !rescuing) rescueSoon(0);
+      /* Opened onto an empty window: a navigation already this old is checked now. */
+      else if (pending && stallTimer && now() - pendingAt >= 3000) { clearTimeout(stallTimer); stalled(); }
     },
     /* A request of the window's own that failed (session.webRequest's details). */
     resourceFailed: ({ url: failedURL, resourceType, error }) => {
