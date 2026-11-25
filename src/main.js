@@ -298,6 +298,8 @@ if (!app.requestSingleInstanceLock()) {
 /* ----------------------------------------------------------------- state */
 
 let win = null;
+/* The window's way back from a failed or half-finished load: see connection.js. */
+let connection = null;
 let settingsWin = null;
 /* The fonts have a window of their own -- see openFonts. */
 let fontsWin = null;
@@ -1796,18 +1798,37 @@ const createWindow = () => {
   });
 
   Menu.setApplicationMenu(null);
-  const connection = connectionPage.attach(win, {
+  connection = connectionPage.attach(win, {
     url: WHATSAPP_URL,
     file: path.join(__dirname, 'connection.html'),
     ipcMain,
-    probe: async signal => {
-      const response = await session.defaultSession.fetch(WHATSAPP_URL, {
+    /* Whether the network reaches WhatsApp -- or the one file of it a broken
+       start lost -- which any answer from it says. A 4xx is still WhatsApp
+       answering: a HEAD without a browser's headers gets a 400. Only a server
+       in trouble is worth waiting out. */
+    probe: async (signal, target = WHATSAPP_URL) => {
+      const response = await session.defaultSession.fetch(target, {
         method: 'HEAD', cache: 'no-store',
         signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
       });
-      return response.ok;
+      return response.status < 500;
     },
   });
+  /* What the boot watch in connection.js reads: requests of this window's own
+     that never got an answer, and the ones that later did. Electron keeps one
+     listener per event per session, and these are the only ones. */
+  const pageId = win.webContents.id;
+  const ownHosts = { urls: ['https://web.whatsapp.com/*', 'https://static.whatsapp.net/*'] };
+  session.defaultSession.webRequest.onErrorOccurred(ownHosts, details => {
+    if (details.webContentsId === pageId) connection.resourceFailed(details);
+  });
+  session.defaultSession.webRequest.onCompleted(ownHosts, details => {
+    if (details.webContentsId === pageId && details.statusCode < 400) connection.resourceLoaded(details);
+  });
+  /* Waking from suspend and opening the window are both moments the owner is
+     about to look: whatever is waiting for the network is tried now. */
+  powerMonitor.on('resume', () => connection.retryNow());
+  win.on('show', () => connection.retryNow());
 
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown') lock.recordActivity();
@@ -1871,7 +1892,10 @@ const createWindow = () => {
   /* ------------------------------------------------------------- the page */
 
   win.webContents.on('did-finish-load', async () => {
-    if (connection.isLocal()) return; // preserve pending chats/invites until WhatsApp loads
+    /* Not the local page, and not Chromium's error page either: that one finishes
+       loading too, under WhatsApp's address. Pending chats and invites wait for
+       WhatsApp, and so do the styles, the zoom and background throttling. */
+    if (!connection.isWhatsApp()) return;
     win.webContents.setBackgroundThrottling(false);
     loadedAt = Date.now();
     if (pendingChat) {
@@ -3391,6 +3415,9 @@ const wireIpc = () => {
 
   ipcMain.on('wa:store-ready', (event, state) => {
     const ready = !!(state && state.ready);
+    /* Before the early return: storeLive outlives a reload, and the boot watch
+       needs to hear from every WhatsApp that comes up. */
+    if (ready && connection) connection.ready();
     if (ready === storeLive) return;
     storeLive = ready;
     if (!ready) {

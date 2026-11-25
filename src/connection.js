@@ -6,20 +6,74 @@
  * for most of a second (measured, 0.8s cold) before WhatsApp's own loading
  * screen, which says the same thing in WhatsApp's own way. A failed load
  * still lands here: did-fail-load is what brings it up, from startup as from
- * anywhere else. */
+ * anywhere else. From here WhatsApp is asked for again the moment the page
+ * hears the desktop come online, and every two seconds besides.
+ *
+ * And a load that did not fail is not the same as a WhatsApp that came up.
+ * The client starts with the session, and on a laptop whose Wi-Fi joins only
+ * once the keyring is open that is always before the network: the page fails,
+ * this page waits, and the network then arrives in pieces -- an address, a
+ * route, DNS, IPv6 a moment later, each one a network change that Chromium
+ * answers by dropping what is in flight. The retry lands in the middle of
+ * that. WhatsApp's own document loads, its scripts and sheets from
+ * static.whatsapp.net fail with ERR_NETWORK_CHANGED or ERR_NAME_NOT_RESOLVED,
+ * and its loader gives up after two quick retries. What is left is a page
+ * with no app in it, which nothing reloads: did-fail-load never fired, so as
+ * far as this file knew WhatsApp was up. Reproduced by failing those requests
+ * for the first eight seconds of a load: still the bare startup shell 75s
+ * later, with the network long back. The owner saw it as an empty window
+ * after every boot, put right only by Ctrl+R.
+ *
+ * So the boot of each WhatsApp document is watched. A script or sheet of its
+ * own lost to the network while it boots marks it broken. The request that
+ * failed is then tried again every two seconds, and the moment it gets an
+ * answer WhatsApp is loaded afresh -- unless WhatsApp has meanwhile fetched it
+ * itself, or its store has said it is up. Reloads in a row are spaced 2s, 4s,
+ * 8s apart and so on up to a minute, for a network that answers the check and
+ * still drops the page. Only the network failing WhatsApp's own scripts asks
+ * for any of this: a WhatsApp broken in some other way is left alone. */
 'use strict';
 
 const { pathToFileURL } = require('url');
 
-const attach = (win, { url, file, ipcMain, probe, retryMs = 5000 }) => {
+/* The network letting a request down, as opposed to the page, a policy or the
+ * client turning it away. Only these say a second try could go differently. */
+const NETWORK_ERROR = /^net::ERR_(INTERNET_DISCONNECTED|NETWORK_|NAME_|CONNECTION_|TIMED_OUT|ADDRESS_|EMPTY_RESPONSE|SOCKET_|PROXY_|TUNNEL_|QUIC_|HTTP2_)/;
+/* What WhatsApp is made of: the scripts and sheets of its own two hosts. A
+ * blocked tracker elsewhere is not a WhatsApp that failed to come up. */
+const BOOT_HOSTS = new Set(['web.whatsapp.com', 'static.whatsapp.net']);
+const BOOT_TYPES = new Set(['script', 'stylesheet']);
+
+const attach = (win, { url, file, ipcMain, probe, retryMs = 2000, bootMs = 30000,
+                       gapMs = 2000, maxGapMs = 60000, now = Date.now }) => {
   const contents = win.webContents;
   const localURL = pathToFileURL(file).href;
+  const origin = new URL(url).origin;
   const isLocal = value => String(value || contents.getURL()).split('?')[0] === localURL;
+  const isRemote = value => { try { return new URL(value).origin === origin; } catch (err) { return false; } };
+  /* What the main frame holds. Chromium commits its own error page in place of
+   * a failed load, under the failed URL -- so getURL() answers WhatsApp's
+   * address for an empty page -- and that page finishes loading like any
+   * other. Measured on the owner's display: its did-finish-load arrives before
+   * this page commits, and main.js took it for WhatsApp and set about styling
+   * it. 'remote' is a WhatsApp document, 'local' this page, 'error' Chromium's. */
+  let holding = null;
   let offline = false;
   let timer = null;
   let checking = null;
+  /* Asks for this page again, should the failed load's own page outlast it. */
+  let reasserts = 0;
+  /* The boot of the WhatsApp document in the window, and what it lost. */
+  let booting = false;
+  let bootTimer = null;
+  const lost = new Set();
+  let lostAt = 0;
+  let rescueTimer = null;
+  let rescuing = null;
+  let rescues = 0;
 
   const alive = () => !win.isDestroyed() && !contents.isDestroyed();
+  const showLocal = () => win.loadFile(file).catch(() => {}); // settles with the error page's load too
   const stop = () => {
     clearTimeout(timer);
     timer = null;
@@ -57,35 +111,129 @@ const attach = (win, { url, file, ipcMain, probe, retryMs = 5000 }) => {
       }
     }
   };
+
+  const endBoot = () => {
+    clearTimeout(bootTimer);
+    bootTimer = null;
+    booting = false;
+  };
+  const recovered = () => {
+    clearTimeout(rescueTimer);
+    rescueTimer = null;
+    if (rescuing) rescuing.abort();
+    rescuing = null;
+    lost.clear();
+  };
+  const forget = () => {
+    endBoot();
+    recovered();
+  };
+  /* The earliest the next reload may go, counted from the first loss. */
+  const due = () => lostAt + Math.min(gapMs * 2 ** rescues, maxGapMs);
+  const rescueSoon = delay => {
+    clearTimeout(rescueTimer);
+    rescueTimer = setTimeout(rescue, Math.max(0, delay));
+  };
+  const rescue = async () => {
+    rescueTimer = null;
+    if (!lost.size || holding !== 'remote' || !alive() || rescuing) return;
+    if (now() < due()) { rescueSoon(due() - now()); return; }
+    const controller = new AbortController();
+    rescuing = controller;
+    let reachable = false;
+    try { reachable = await probe(controller.signal, lost.values().next().value); } catch (err) { /* not yet */ }
+    if (rescuing !== controller) return; // the page moved on, or WhatsApp came up
+    rescuing = null;
+    if (!lost.size || holding !== 'remote' || !alive()) return;
+    if (!reachable) { rescueSoon(retryMs); return; }
+    rescues++;
+    console.warn('WhatsApp lost part of itself to the network while it started; loading it again (%d)', rescues);
+    forget();
+    win.loadURL(url).catch(() => {}); // did-fail-load brings up the local page
+  };
+
   const failed = (event, code, description, failedURL, isMainFrame) => {
-    if (!isMainFrame || code === -3) return;
-    try { if (new URL(failedURL).origin !== new URL(url).origin) return; }
-    catch (err) { return; }
+    if (!isMainFrame || code === -3 || !isRemote(failedURL)) return;
     console.warn('load failed (%d %s); showing the connection page', code, description);
     stop();
+    forget();
+    holding = 'error';
     offline = true;
+    reasserts = 0;
     contents.setBackgroundThrottling(true);
-    win.loadFile(file).catch(err => console.warn('connection page: %s', err.message));
+    showLocal();
     schedule();
   };
   const navigated = (event, destination) => {
-    if (!isLocal(destination)) stop();
+    if (isLocal(destination)) {
+      holding = 'local';
+      return;
+    }
+    stop();
+    forget();
+    holding = isRemote(destination) ? 'remote' : 'other';
+    if (holding !== 'remote') return;
+    booting = true;
+    bootTimer = setTimeout(() => {
+      endBoot();
+      if (!lost.size) rescues = 0; // a clean start: the count is for reloads in a row
+    }, bootMs);
+  };
+  const settled = () => {
+    if (offline && holding !== 'local' && alive() && reasserts < 2) {
+      reasserts++;
+      console.warn('the connection page did not stay up; asking for it again');
+      showLocal();
+    }
   };
   const requested = event => {
     if (event.sender === contents && event.senderFrame?.url && isLocal(event.senderFrame.url) && isLocal()) retry();
   };
   contents.on('did-fail-load', failed);
   contents.on('did-navigate', navigated);
+  contents.on('did-stop-loading', settled);
   ipcMain.on('wa:connection-retry', requested);
   contents.once('destroyed', () => {
     stop();
+    forget();
     ipcMain.removeListener('wa:connection-retry', requested);
   });
 
   return {
     isLocal: () => isLocal(),
+    /* A WhatsApp document, as opposed to this page or Chromium's error page. */
+    isWhatsApp: () => holding === 'remote',
     start: () => win.loadURL(url).catch(() => {}), // did-fail-load brings up the local page
+    /* Something worth trying again for at once -- the machine woke, the window opened. */
+    retryNow: () => {
+      if (offline) retry();
+      else if (lost.size && !rescuing) rescueSoon(0);
+    },
+    /* A request of the window's own that failed (session.webRequest's details). */
+    resourceFailed: ({ url: failedURL, resourceType, error }) => {
+      if (!booting || holding !== 'remote' || !BOOT_TYPES.has(resourceType) || !NETWORK_ERROR.test(error || '')) return;
+      let host = '';
+      try { host = new URL(failedURL).hostname; } catch (err) { return; }
+      if (!BOOT_HOSTS.has(host)) return;
+      if (!lost.size) {
+        console.warn('WhatsApp could not load %s (%s) while starting', resourceType, error);
+        lostAt = now();
+        rescueSoon(due() - lostAt);
+      }
+      lost.add(failedURL);
+    },
+    /* One that arrived after all: WhatsApp's own retry got it. */
+    resourceLoaded: ({ url: loadedURL }) => {
+      if (!lost.delete(loadedURL) || lost.size) return;
+      console.warn('WhatsApp fetched what it had lost by itself');
+      recovered();
+    },
+    /* WhatsApp's store answered: whatever it lost on the way, it is up. */
+    ready: () => {
+      forget();
+      rescues = 0;
+    },
   };
 };
 
-module.exports = { attach };
+module.exports = { attach, NETWORK_ERROR };
